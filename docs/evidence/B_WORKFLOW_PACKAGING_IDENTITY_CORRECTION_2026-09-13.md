@@ -6,7 +6,8 @@ candidate notes. Original reports, commits, archives, tool manifests and Human e
 retained. This correction changes no Mod, recording, component source or historical verifier.
 
 The earlier value `6cf7b407ab44a48baefae0d866ebd54f159a11fe97de769a31874af59d96474e`
-was reported as a BOM digest without a verified byte derivation. It is not the SHA256 of
+is the BOM field `components.evidence.component_source_digest_sha256`. It was incorrectly
+reported as the whole BOM file digest; those are different identities. It is not the SHA256 of
 `platform-bom.json` at Platform source `693336d7438cb24ecbbf0e90863966db89c40043`.
 Direct hashing of that exact Git blob and the identical current file gives:
 
@@ -15,8 +16,8 @@ platform-bom.json bytes: 67304
 file SHA256: 6eb029ba4c7172f44b71d53ac280d8f1251f35fbaa7ae57a67a46ff27f07f042
 ```
 
-Use the file-byte digest above for distribution verification, not the older unsupported
-metadata. Component source/contract digests inside the BOM are separate fields. The BOM's
+Use the file-byte digest above for distribution verification; retain the Evidence component
+source digest under its actual component field. Component source/contract digests inside the BOM are separate fields. The BOM's
 normal validator passes; no BOM content is changed to fit the old report.
 
 A second private-kit label called `d09552130d5aad0639b5d5358bc3acfed49ba493` the collection
