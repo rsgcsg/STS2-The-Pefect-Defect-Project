@@ -966,7 +966,7 @@ async function load(manual = false) {
       ? `?limit=${state.limit}&offset=${state.offset}`
       : "";
   try {
-    await window.SpireIdentity.refresh(manual);
+    const identity = await window.SpireIdentity.refresh(manual);
     if (serial !== state.serial) return;
     const identityContext = window.SpireIdentity.context();
     context = `${view}:${id || ""}:${state.offset}:${state.limit}:${identityContext}`;
@@ -975,7 +975,19 @@ async function load(manual = false) {
     if (view === "devices" || view === "connect") {
       const content = view === "devices" ? window.SpireIdentity.renderDevices() :
         await window.SpireIdentity.renderConnect();
-      if (serial === state.serial) $("content").replaceChildren(content);
+      if (serial !== state.serial || identityContext !== window.SpireIdentity.context()) return;
+      $("content").replaceChildren(content);
+      renderedContext = context;
+      $("updated").textContent = identity?.observed_at
+        ? `账号更新于 ${date(identity.observed_at)}`
+        : "账号观测时间未提供";
+      $("connection").textContent = identity?.status === "signed_in"
+        ? "已通过身份验证"
+        : identity?.status === "signed_out"
+          ? "未登录项目账号"
+          : identity?.status === "reconnect_required"
+            ? "需要重新登录"
+            : "账号状态暂不可用";
       return;
     }
     const response = await fetch(window.SpireIdentity.api(route, query), {

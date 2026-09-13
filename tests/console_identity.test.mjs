@@ -54,3 +54,63 @@ test('device selection changes request scope and invalidates prior response cont
   assert.equal(ui.isLocal(), false);
   assert.equal(ui.api('collections', '?limit=25'), '/api/project/collections?limit=25&device=pc');
 });
+
+function pageSetup(view, identity, connectContent = async () => 'connection facts') {
+  const nodes = new Map();
+  const element = () => Object.assign(new Element('div'), {
+    textContent: '', attributes: {}, addEventListener() {},
+    setAttribute(name, value) { this.attributes[name] = value; },
+  });
+  const get = key => {
+    if (!nodes.has(key)) nodes.set(key, element());
+    return nodes.get(key);
+  };
+  get('connection').textContent = '正在读取状态…';
+  let scope = 'owner';
+  const context = vm.createContext({
+    document: {body: {dataset: {mode: 'cloud'}}, getElementById: get,
+      createElement: element, querySelectorAll: () => [], addEventListener() {}},
+    window: {addEventListener() {}, SpireIdentity: {
+      context: () => scope, isLocal: () => false, refresh: async () => identity,
+      renderDevices: () => 'account facts', renderConnect: connectContent, connect() {},
+    }},
+    location: {search: '?view=' + view}, history: {}, Date, URLSearchParams,
+    setInterval() {},
+  });
+  vm.runInContext(readFileSync(new URL('../stpd/console/console.js', import.meta.url), 'utf8'), context);
+  return {get, context, changeScope: () => {scope = 'other';}};
+}
+const settled = () => new Promise(resolve => setImmediate(resolve));
+
+test('account and connection pages finish status from observed identity', async () => {
+  for (const view of ['devices', 'connect']) {
+    const {get, context} = pageSetup(view, {status: 'signed_in', observed_at: '2026-09-13T11:00:00Z'});
+    await settled();
+    assert.equal(get('connection').textContent, '已通过身份验证');
+    assert.match(get('updated').textContent, /^账号更新于 /);
+    assert.doesNotMatch(get('updated').textContent, /未观测|尚未/);
+    assert.equal(get('content').attributes['aria-busy'], 'false');
+    assert.notEqual(vm.runInContext('renderedContext', context), null);
+  }
+});
+
+test('account state does not invent authentication or an observation timestamp', async () => {
+  for (const [status, label] of [['signed_out', '未登录项目账号'],
+    ['reconnect_required', '需要重新登录'], ['unavailable', '账号状态暂不可用']]) {
+    const {get} = pageSetup('devices', {status});
+    await settled();
+    assert.equal(get('connection').textContent, label);
+    assert.equal(get('updated').textContent, '账号观测时间未提供');
+  }
+});
+
+test('connection response cannot repaint a changed identity scope', async () => {
+  let finish;
+  const pending = new Promise(resolve => {finish = resolve;});
+  const {get, changeScope} = pageSetup('connect', {status: 'signed_in'}, () => pending);
+  await settled();
+  changeScope(); finish('previous account private connection');
+  await settled();
+  assert.equal(get('content').children.includes('previous account private connection'), false);
+  assert.notEqual(get('connection').textContent, '已通过身份验证');
+});
