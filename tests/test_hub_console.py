@@ -462,12 +462,20 @@ def test_job_list_is_bounded_and_redacts_worker_private_result(tmp_path: Path) -
     )
 
 
-def test_public_landing_has_no_private_scope_or_identity(tmp_path: Path) -> None:
+def test_public_landing_links_public_source_without_private_scope(tmp_path: Path) -> None:
     owner = service(tmp_path)
     app = HubApplication(owner, "admin" * 16)
     status, html = call(app, "/")
     assert status == "200 OK" and b"/app/" in html
-    assert owner.producer.source_revision.encode() not in html
+    guide = (
+        "https://github.com/rsgcsg/STS2-The-Perfect-Defect/blob/"
+        + owner.producer.source_revision
+        + "/docs/PROJECT_CONSOLE.md"
+    )
+    assert guide.encode() in html
+    assert b"admin" * 16 not in html
+    status, css = call(app, "/assets/console.css")
+    assert status == "200 OK" and b".landing" in css
     assert b"device_ids" not in html and b"verified" not in html
 
 

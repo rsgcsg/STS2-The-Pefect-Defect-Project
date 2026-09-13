@@ -41,7 +41,9 @@ into localhost or remotely controls the game. It can show received records while
 computer is off, but it does not know that computer's unuploaded queue. The device page shows an explicit last
 contact timestamp when reported; that timestamp is not a current-online promise.
 
-The public Hub landing page contains a login link. Protected routes are unavailable until
+The public Hub landing page contains login and developer-guide links. The guide is bound to
+the deployed public source revision (also public in health); no account/device/collection
+data appears there. Only its packaged stylesheet is served anonymously. Protected routes are unavailable until
 browser authentication is configured. Activation and role configuration are documented in
 the [Hub runbook](../deploy/hub/RUNBOOK.md). A running API does not prove a successful browser login.
 

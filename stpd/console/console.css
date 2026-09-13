@@ -841,3 +841,7 @@ select, .onboarding input { font: inherit; color: inherit; background: transpare
 .device-row { display: flex; flex-direction: column; gap: .6rem; overflow-wrap: anywhere; }
 .pair-code { display: block; font-size: 1.8rem; letter-spacing: .15em; margin: 1rem 0; }
 @media(max-width: 760px) { .topbar, .topbar-actions { flex-wrap: wrap; } .scope-label { align-items: start; flex-direction: column; } }
+
+.landing { max-width: 950px; margin: 6vh auto; padding: 1.5rem; }
+.landing .brand { margin-bottom: 2rem; }
+.landing li { padding: .4rem 0; line-height: 1.6; }

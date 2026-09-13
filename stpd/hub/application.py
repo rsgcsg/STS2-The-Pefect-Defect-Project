@@ -201,20 +201,19 @@ class HubApplication:
         method, path = env["REQUEST_METHOD"], env.get("PATH_INFO", "")
         ops = self.service.operations
         if method == "GET" and path == "/":
+            from ..console.page import render_landing
+
             return (
                 "200 OK",
                 "text/html; charset=utf-8",
-                (
-                    "<!doctype html><html lang='zh-CN'><meta charset='utf-8'>"
-                    "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-                    "<title>SpireAgent 项目控制台</title><main>"
-                    "<h1>SpireAgent 项目控制台</h1>"
-                    "<p><a href='/app/'>登录查看云端数据</a></p>"
-                    "<p>本机设备连接与网页登录分开；网页登录或退出不影响后台上传。</p>"
-                    "<p>云端只显示已收到的数据。本机待上传队列请在本机控制台查看。</p>"
-                    "</main></html>"
-                ).encode(),
+                render_landing(self.service.producer.source_revision).encode(),
             )
+        if method == "GET" and path == "/assets/console.css":
+            from ..console.page import asset
+
+            found = asset("console.css")
+            assert found is not None
+            return "200 OK", found[0], found[1]
         if method == "GET" and path == "/health":
             return self.response(
                 {

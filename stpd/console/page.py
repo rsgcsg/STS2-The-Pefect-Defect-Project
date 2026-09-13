@@ -94,3 +94,30 @@ type="button">刷新</button></div></header>
 <span id="lifecycle-note"></span></footer></div>
 <noscript>此控制台需要启用 JavaScript。CLI 的 project status 仍可独立使用。</noscript>
 </body></html>'''
+
+
+def render_landing(source_revision: str) -> str:
+    import re
+
+    if re.fullmatch(r"[a-f0-9]{40}", source_revision) is None:
+        raise ValueError("invalid_console_source_revision")
+    guide = (
+        "https://github.com/rsgcsg/STS2-The-Perfect-Defect/blob/"
+        + source_revision
+        + "/docs/PROJECT_CONSOLE.md#download-sign-in-bind-once"
+    )
+    return f'''<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SpireAgent · 项目工作台</title><link rel="stylesheet" href="/assets/console.css"></head>
+<body><main class="landing"><a class="brand" href="/"><span class="brand-mark">S</span>
+<span>SpireAgent<small>同一个账号，连接你的电脑与项目数据</small></span></a>
+<section class="panel onboarding"><p class="eyebrow">项目工作台</p>
+<h1>采集在本机，进展随时查看。</h1>
+<p>登录后查看获授权电脑的云端记录、验收结果、数据集与研究进展。</p>
+<p><a class="button" href="/app/">登录项目账号 →</a>
+<a class="button secondary" href="{guide}" rel="noreferrer">获取开发者工作台 ↗</a></p>
+<ol><li>在采集电脑打开工作台。</li><li>用受邀请的项目邮箱登录，核对并绑定电脑。</li>
+<li>配置获同意的采集活动；Recorder Close 后在工作台跟踪上传。</li></ol>
+<p>本机队列在工作台查看。云端只显示已收到的数据；账号登录不代表同意上传。</p>
+<p class="small muted">当前供项目开发者使用，按邀请接入。无需单独注册密码。</p>
+</section></main></body></html>'''
