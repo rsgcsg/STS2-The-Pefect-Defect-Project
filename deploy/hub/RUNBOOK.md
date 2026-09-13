@@ -103,7 +103,7 @@ never preserve the entire user environment. Do not distribute the Hub admin toke
 
 The local project console uses its existing private device token for `/v1/console/*`; it
 never needs the Hub admin token or a browser login to upload. Its cloud record link opens
-`https://YOUR-HUB/app/#collections/UPLOAD_ID`. Cloud login is separate from device delivery,
+`https://YOUR-HUB/app/?view=collections&id=UPLOAD_ID`. Cloud login is separate from device delivery,
 so logging out of the website does not stop uploads. The cloud cannot observe an offline
 terminal's unuploaded queue. There is no cloud-to-local game control or browser localhost fetch.
 
@@ -129,7 +129,8 @@ by uid 10001 and mode 0600, using this format with real explicitly allowed devic
 The optional `subject` pins the exact validated Access subject in addition to email. Roles:
 `collector` sees only listed devices' collections and shared result metadata;
 `reviewer` additionally sees project Dataset metadata; `operator` also sees private operational
-status. No role gets raw/Dataset payload download or write operations through the console.
+status. No role gets raw/Dataset payload download or research/job writes through the console.
+Identity approval/denial is the separately guarded exception; see the account protocol guide.
 Research metadata roles are project-wide permissions, independent of the explicit device list.
 Use `STPD_ACCESS_ISSUER`, `STPD_ACCESS_AUDIENCE`, `STPD_ACCESS_ALLOWLIST` from the runtime env
 example, run preflight, then replace only the exact Hub candidate. Missing configuration keeps

@@ -271,3 +271,8 @@ legacy golden path. Until then there is no owner live gate to execute. Do not
 interpret future live parity as Core/B6 or open Gold-test. See the
 [AgenticSTS audit](evidence/AGENTICSTS_DATA_ADMISSION_AUDIT_2026-08-22.md),
 [Data and Provenance](DATA_AND_PROVENANCE.md), and [Roadmap](ROADMAP.md).
+
+The unified account candidate implements invited login, browser-approved computer binding,
+private local personal sessions, matching local/cloud project scope and typed same-device
+upload recovery. Identity operations use Hub schema3; deployment requires a paired predecessor
+backup/image and a fresh browser gate. This source does not itself establish production login.

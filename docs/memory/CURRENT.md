@@ -27,7 +27,16 @@ First dedicated Human Close-to-R2 and 412-record V2 projection passed at histori
 a Dataset. Preserve existing tool/outbox/receipts during Python diagnostic upgrades.
 
 The shared [project console](../PROJECT_CONSOLE.md) implements local/cloud read-only
-visibility. Platform rc.6 supplies safe owner summaries and bounded outbox queries;
+visibility. Platform Evidence rc.7 supplies safe owner summaries and bounded outbox queries;
 Cloudflare Access application JWTs gate browser pages with explicit role/device scopes.
 Missing browser configuration fails closed; source tests do not qualify actual login.
 Device uploads keep their existing independent authentication and consent boundary.
+
+
+The unified account candidate adds invited email login, explicit browser-approved device
+binding and personal read sessions in the local BFF. Persistent device delivery remains
+independent. Public project views are shared across local/cloud scope; the local queue is
+separately labelled. See PROJECT_CONSOLE and ADR-0005. Browser auth, new Hub DB migration,
+exact deployment and Human usability must be qualified at the new candidate; historical
+9566b11 service receipts are not current login proof. New accounts/devices do not grant
+campaign consent or reassign old uploads. Compute launch budget remains zero.

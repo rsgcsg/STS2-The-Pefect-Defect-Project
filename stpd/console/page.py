@@ -6,7 +6,11 @@ import html
 from pathlib import Path
 from urllib.parse import urlsplit
 
-ASSETS = {"console.css": "text/css", "console.js": "text/javascript"}
+ASSETS = {
+    "console.css": "text/css",
+    "console.js": "text/javascript",
+    "identity.js": "text/javascript",
+}
 CSP = (
     "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; "
     "img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
@@ -51,6 +55,7 @@ def render_shell(mode: str, api_base: str, cloud_url: str = "") -> str:
             ("datasets", "数据集", "▦"),
             ("jobs", "作业", "◷"),
             ("models", "模型与评估", "◇"),
+            ("devices", "账号与电脑", "▣"),
             ("system", "系统", "⚙"),
         )
     )
@@ -64,6 +69,7 @@ def render_shell(mode: str, api_base: str, cloud_url: str = "") -> str:
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SpireAgent · {label}</title><link rel="stylesheet" href="{assets}/console.css">
+<script src="{assets}/identity.js" defer></script>
 <script src="{assets}/console.js" defer></script></head>
 <body data-mode="{mode}" data-api="{api_base}" data-cloud-url="{cloud}">
 <a class="skip-link" href="#main">跳到内容</a>
@@ -74,9 +80,12 @@ def render_shell(mode: str, api_base: str, cloud_url: str = "") -> str:
 <p>采集有据可查<br>数据各有去向</p></div></aside>
 <div class="workspace"><header class="topbar"><div><span class="mode-pill">{label}</span>
 <span id="connection" class="connection">正在读取状态…</span></div>
-<div class="topbar-actions">{cloud_link}<button id="refresh" class="button secondary"
+<div class="topbar-actions"><span id="account-actions"></span>{cloud_link}
+<button id="refresh" class="button secondary"
 type="button">刷新</button></div></header>
-<main id="main" tabindex="-1"><div class="page-heading"><div><p class="eyebrow">SPIREAGENT / B</p>
+<main id="main" tabindex="-1"><label class="scope-label">查看范围
+<select id="device-scope" aria-label="电脑范围"></select></label>
+<div class="page-heading"><div><p class="eyebrow">SPIREAGENT / B</p>
 <h1 id="title">概览</h1><p id="subtitle" class="subtitle">采集、上传与研究进展，一处查看。</p></div>
 <span id="updated" class="updated"></span></div>
 <div id="notice" role="status" aria-live="polite"></div>

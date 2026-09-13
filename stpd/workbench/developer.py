@@ -171,7 +171,7 @@ def setup(
     if install:
         log = config.state_dir / "logs" / "setup.log"
         with log.open("ab") as output:
-            for command in (["uv", "sync", "--locked", "--all-extras"], ["npm", "ci"]):
+            for command in (["uv", "sync", "--locked", "--extra", "cloud"], ["npm", "ci"]):
                 executable = shutil.which(command[0])
                 if executable is None:
                     raise BoundaryError("setup", "bootstrap_tool_missing")
@@ -357,6 +357,11 @@ def doctor(config: ProjectConfig) -> dict[str, Any]:
             # Isolated invocation retains the installed public package boundary;
             # it neither imports sibling source nor initializes/enrolls an outbox.
             environment = dict(os.environ)
+            from .identity import LocalIdentity
+
+            device_token = LocalIdentity(config).device_token()
+            if device_token:
+                environment["STPD_HUB_TOKEN"] = device_token
             for name in ("STPD_HUB_ADMIN_TOKEN", "PYTHONPATH", "PYTHONHOME"):
                 environment.pop(name, None)
             try:

@@ -28,6 +28,7 @@ from .console import LocalConsole
 from .dashboard import _safe_value
 from .developer import ROOT, ProjectConfig, atomic_json, doctor, tool_identity
 from .hub_client import HubClient
+from .identity import LocalIdentity
 
 
 @contextlib.contextmanager
@@ -67,9 +68,7 @@ def configuration_id(config: ProjectConfig) -> str:
     return hashlib.sha256(json.dumps(config.to_dict(), sort_keys=True).encode()).hexdigest()
 
 
-def _local_request(
-    url: str, *, token: str | None = None, timeout: float = 2
-) -> dict[str, Any]:
+def _local_request(url: str, *, token: str | None = None, timeout: float = 2) -> dict[str, Any]:
     request = Request(
         url,
         data=b"" if token else None,
@@ -169,9 +168,15 @@ class Application:
         self.instance_id = secrets.token_hex(16)
         self.control_token = secrets.token_hex(32)
         self.identity = tool_identity()
+        self.account = LocalIdentity(config)
         self.delivery: subprocess.Popen[bytes] | None = None
         self.delivery_log: Any = None
-        self.hub = HubClient(config.hub_url, timeout=2) if config.hub_url else None
+        self.operation_lock = threading.Lock()
+        self.hub = (
+            HubClient(config.hub_url, timeout=2, token=self.account.device_token)
+            if config.hub_url
+            else None
+        )
         self.console = LocalConsole(
             config, self.hub, self.delivery_environment, self.delivery_process, self.identity
         )
@@ -181,15 +186,17 @@ class Application:
             return "not_configured"
         return "running" if self.delivery.poll() is None else "stopped"
 
-    @staticmethod
-    def delivery_environment() -> dict[str, str]:
+    def delivery_environment(self) -> dict[str, str]:
         environment = dict(os.environ)
         for name in ("STPD_HUB_ADMIN_TOKEN", "PYTHONPATH", "PYTHONHOME"):
             environment.pop(name, None)
+        token = self.account.device_token()
+        if token:
+            environment["STPD_HUB_TOKEN"] = token
         return environment
 
     def start_delivery(self) -> None:
-        if self.config.delivery_config is None:
+        if self.config.delivery_config is None or not self.account.device_token():
             return
         self.delivery_log = (self.config.state_dir / "logs" / "delivery.log").open("ab")
         self.delivery = subprocess.Popen(
@@ -208,6 +215,46 @@ class Application:
             cwd=self.config.state_dir,
             env=self.delivery_environment(),
         )
+
+    def resume_auth(self) -> dict[str, Any]:
+        with self.operation_lock:
+            device = self.account.device()
+            if not device or self.config.delivery_config is None:
+                raise BoundaryError("project", "bound_device_and_delivery_required")
+            observed = self.account.request(
+                "/v1/identity/device", token=self.account.device_token()
+            )
+            if observed.get("device_id") != device["device_id"]:
+                raise BoundaryError("project", "device_identity_changed")
+            self.close()
+            self.delivery, self.delivery_log = None, None
+            try:
+                result = subprocess.run(
+                    [
+                        sys.executable,
+                        "-I",
+                        "-m",
+                        "sts2_platform_evidence.delivery_cli",
+                        "resume-auth",
+                        "--config",
+                        str(self.config.delivery_config),
+                    ],
+                    cwd=self.config.state_dir,
+                    env=self.delivery_environment(),
+                    capture_output=True,
+                    timeout=30,
+                    check=False,
+                )
+                value = json.loads(result.stdout)
+                if (
+                    result.returncode
+                    or not isinstance(value, dict)
+                    or value.get("schema") != "sts2.evidence/delivery-auth-recovery-1"
+                ):
+                    raise BoundaryError("project", "owner_recovery_failed")
+                return value
+            finally:
+                self.start_delivery()
 
     def delivery_status(self) -> dict[str, Any]:
         if self.delivery is None:
@@ -272,6 +319,14 @@ def create_server(app: Application) -> ThreadingHTTPServer:
             expected = "127.0.0.1:" + str(cast(ThreadingHTTPServer, self.server).server_port)
             return self.headers.get("Host") == expected
 
+        def authenticated_browser(self) -> bool:
+            from http.cookies import SimpleCookie
+
+            cookie = SimpleCookie()
+            cookie.load(self.headers.get("Cookie", ""))
+            value = cookie.get("spireagent_local")
+            return bool(value and hmac.compare_digest(value.value, app.account.cookie))
+
         def respond(self, code: int, value: bytes, content_type: str = "application/json") -> None:
             self.send_response(code)
             self.send_header("Content-Type", content_type + "; charset=utf-8")
@@ -282,6 +337,14 @@ def create_server(app: Application) -> ThreadingHTTPServer:
                 "Content-Security-Policy",
                 CSP,
             )
+            if content_type == "text/html":
+                self.send_header(
+                    "Set-Cookie",
+                    "spireagent_local="
+                    + app.account.cookie
+                    + "; HttpOnly; SameSite=Strict; Path=/",
+                )
+            self.send_header("Referrer-Policy", "no-referrer")
             self.end_headers()
             self.wfile.write(value)
 
@@ -294,9 +357,29 @@ def create_server(app: Application) -> ThreadingHTTPServer:
                 self.respond(200, json.dumps({"instance_id": app.instance_id}).encode())
             elif parsed.path == "/api/status":
                 self.respond(200, json.dumps(_safe_value(app.snapshot())).encode())
+            elif parsed.path == "/api/identity" or parsed.path.startswith("/api/project/"):
+                if not self.authenticated_browser():
+                    self.respond(401, b'{"error":"browser_session_required"}')
+                    return
+                try:
+                    if parsed.path == "/api/identity":
+                        value = app.account.status()
+                    else:
+                        route = parsed.path.removeprefix("/api/project/")
+                        if parsed.query:
+                            route += "?" + parsed.query
+                        value = app.account.read(route)
+                    self.respond(200, json.dumps(value, ensure_ascii=False).encode())
+                except BoundaryError as error:
+                    self.respond(
+                        401 if error.code in {"sign_in_required", "http_401"} else 503,
+                        json.dumps({"error": error.code}).encode(),
+                    )
+                except (OSError, ValueError, KeyError):
+                    self.respond(503, b'{"error":"identity_unavailable"}')
             elif parsed.path.startswith("/api/console/"):
                 try:
-                    value = app.console.route(parsed.path[len("/api/console/"):], parsed.query)
+                    value = app.console.route(parsed.path[len("/api/console/") :], parsed.query)
                     self.respond(200, json.dumps(_safe_value(value), ensure_ascii=False).encode())
                 except BoundaryError as error:
                     status = 404 if error.code in {"route_not_found", "record_not_found"} else 409
@@ -304,7 +387,7 @@ def create_server(app: Application) -> ThreadingHTTPServer:
                 except (OSError, ValueError, subprocess.SubprocessError):
                     self.respond(503, b'{"error":"observation_unavailable"}')
             elif parsed.path.startswith("/assets/"):
-                found = asset(parsed.path[len("/assets/"):])
+                found = asset(parsed.path[len("/assets/") :])
                 if found is None:
                     self.respond(404, b"{}")
                 else:
@@ -312,13 +395,60 @@ def create_server(app: Application) -> ThreadingHTTPServer:
                     self.respond(200, data, kind)
             elif parsed.path == "/":
                 self.respond(
-                    200, render_shell("local", "/api/console", app.config.hub_url).encode(),
+                    200,
+                    render_shell("local", "/api/console", app.config.hub_url).encode(),
                     "text/html",
                 )
             else:
                 self.respond(404, b"{}")
 
         def do_POST(self) -> None:
+            if self.path.startswith("/api/identity/"):
+                origin = "http://127.0.0.1:" + str(
+                    cast(ThreadingHTTPServer, self.server).server_port
+                )
+                if (
+                    not self.local_host()
+                    or not self.authenticated_browser()
+                    or self.headers.get("Origin") != origin
+                    or not hmac.compare_digest(
+                        self.headers.get("X-CSRF-Token", ""), app.account.csrf
+                    )
+                ):
+                    self.respond(403, b'{"error":"browser_action_denied"}')
+                    return
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                    if (
+                        not 0 < length <= 4096
+                        or self.headers.get("Content-Type") != "application/json"
+                    ):
+                        raise ValueError
+                    raw = self.rfile.read(length)
+                    if len(raw) != length:
+                        raise ValueError
+                    body = json.loads(raw)
+                    if not isinstance(body, dict):
+                        raise ValueError
+                    action = self.path.removeprefix("/api/identity/")
+                    if action == "login" and set(body) == {"device_name"}:
+                        value = app.account.begin(body["device_name"])
+                    elif action == "poll" and not body:
+                        value = app.account.poll()
+                    elif action == "resume-uploads" and not body:
+                        value = app.resume_auth()
+                    elif action == "logout" and not body:
+                        value = app.account.logout()
+                        with app.console.cloud_cache.lock:
+                            app.console.cloud_cache.values.clear()
+                    else:
+                        raise ValueError
+                    self.respond(200, json.dumps(value, ensure_ascii=False).encode())
+                except BoundaryError as error:
+                    self.respond(409, json.dumps({"error": error.code}).encode())
+                except (OSError, ValueError, KeyError):
+                    self.respond(400, b'{"error":"invalid_identity_action"}')
+                return
             if (
                 not self.local_host()
                 or self.path != "/stop"

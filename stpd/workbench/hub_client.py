@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import os
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -19,7 +20,6 @@ from .developer import atomic_json, endpoint
 JSON_LIMIT = 8 * 1024 * 1024
 
 
-
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(
         self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str
@@ -29,15 +29,16 @@ class NoRedirect(HTTPRedirectHandler):
 
 
 class HubClient:
-    def __init__(self, url: str, *, timeout: float = 10) -> None:
+    def __init__(
+        self, url: str, *, timeout: float = 10, token: Callable[[], str] | None = None
+    ) -> None:
         self.url = endpoint(url)
         self.timeout = timeout
+        self.token = token or (lambda: os.environ.get("STPD_HUB_TOKEN", ""))
         self.opener = build_opener(NoRedirect())
 
-    def _request(
-        self, route: str, *, limit: int | None = None, offset: int | None = None
-    ) -> Any:
-        token = os.environ.get("STPD_HUB_TOKEN")
+    def _request(self, route: str, *, limit: int | None = None, offset: int | None = None) -> Any:
+        token = self.token()
         if not token:
             raise BoundaryError("hub", "credential_not_configured")
         if not route.startswith("/v1/") or any(c in route for c in ("?", "#", "\\")):
@@ -52,9 +53,7 @@ class HubClient:
                 raise BoundaryError("hub", "invalid_pagination")
             query["offset"] = offset
         suffix = "?" + urlencode(query) if query else ""
-        request = Request(
-            self.url + route + suffix, headers={"Authorization": "Bearer " + token}
-        )
+        request = Request(self.url + route + suffix, headers={"Authorization": "Bearer " + token})
         try:
             return self.opener.open(request, timeout=self.timeout)
         except HTTPError as error:

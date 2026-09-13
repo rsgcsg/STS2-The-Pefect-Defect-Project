@@ -11,8 +11,9 @@ from typing import Any
 
 from ..json_boundary import BoundaryError, decode_json, digest, text
 from .developer import DEFAULT_CONFIG, ROOT, ProjectConfig, doctor, setup
-from .developer_server import open_project, serve, status_project, stop_project
+from .developer_server import instance_lock, open_project, serve, status_project, stop_project
 from .hub_client import HubClient
+from .identity import LocalIdentity
 
 
 def inspect_policy(path: Path) -> dict[str, Any]:
@@ -48,7 +49,17 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "command",
-        choices=("setup", "doctor", "open", "status", "stop", "serve", "download", "policy"),
+        choices=(
+            "setup",
+            "doctor",
+            "open",
+            "status",
+            "stop",
+            "serve",
+            "download",
+            "policy",
+            "credential",
+        ),
     )
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--state-dir", type=Path, default=ROOT / ".local/developer")
@@ -71,6 +82,7 @@ def main(argv: list[str] | None = None) -> int:
         "--role", action="append", help="own payload role, repeat for multiple roles"
     )
     parser.add_argument("--manifest", type=Path)
+    parser.add_argument("--credential-file", type=Path)
     args = parser.parse_args(argv)
     try:
         result: Any
@@ -95,7 +107,12 @@ def main(argv: list[str] | None = None) -> int:
             config = ProjectConfig.load(
                 args.config, require_current_combination=args.command not in {"status", "stop"}
             )
-            if args.command == "doctor":
+            if args.command == "credential":
+                if args.credential_file is None:
+                    raise BoundaryError("identity", "private_credential_file_required")
+                with instance_lock(config.state_dir / "instance.lock"):
+                    result = LocalIdentity(config).replace_credential(args.credential_file)
+            elif args.command == "doctor":
                 result = doctor(config)
             elif args.command == "open":
                 result = open_project(args.config.resolve(), browser=not args.no_browser)
@@ -108,7 +125,9 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 if not args.artifact or not config.hub_url:
                     raise BoundaryError("download", "artifact_and_hub_required")
-                result = HubClient(config.hub_url).download(
+                result = HubClient(
+                    config.hub_url, token=LocalIdentity(config).device_token
+                ).download(
                     args.artifact,
                     config.state_dir / "downloads",
                     tuple(args.role) if args.role is not None else None,

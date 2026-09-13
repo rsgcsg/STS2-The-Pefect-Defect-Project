@@ -35,7 +35,9 @@ immutable records remain intact. A previously signed R2 PUT grant retains its bo
 
 All times below are UTC RFC3339 strings. Flow IDs are 32 lowercase hexadecimal characters.
 The local process generates at least 32 random URL-safe characters as `client_secret`, stores
-it privately before starting, and never places it in a URL, browser storage or a log.
+it with the pending flow before opening the approval page, and never places it in a URL,
+browser storage or a log. A lost creation response can leave an unapproved flow that expires;
+no device or personal session exists until explicit browser approval.
 
 1. `POST /v1/identity/flows` with `{client_secret, device_name}`. To connect a legacy/current
    device, also supply both `device_id` and its existing `device_token`. An invalid token,

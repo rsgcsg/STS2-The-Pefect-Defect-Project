@@ -58,7 +58,10 @@ Modal execution using existing research workers. Start with [release, terminal h
 then [B pipeline operations](docs/CLOUD_PIPELINE_B.md).
 The [shared project console](docs/PROJECT_CONSOLE.md) connects local delivery status with
 scoped cloud records, immutable Dataset/job/model lineage and operational evidence.
-Browser login is independent from the device credential; the cloud UI is read-only.
+One invited account can view the same authorized project data in both shells and explicitly
+bind its computers. Personal sessions remain separate from background device uploads. Project
+data views are read-only; identity approval and local recovery are deliberate actions. The
+lightweight collector launcher is `python tools/open_workbench.py --hub-url https://YOUR-HUB`.
 Real corpus sufficiency, actual storage/GPU qualification, Human Gold and STS2 live evaluation
 remain separately gated; source/test success is not service or scientific qualification.
 

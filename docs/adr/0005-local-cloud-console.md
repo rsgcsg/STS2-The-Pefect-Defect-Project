@@ -33,7 +33,8 @@ upload; offline queues remain local and cloud device presence is unobserved.
 
 Cloudflare Access authenticates browser users. Hub verifies signed application JWTs against
 the configured issuer/audience and a private principal-to-role/device allowlist. Device Bearer
-API remains independent. Browser access is read-only. Authentication does not imply permission
+API remains independent. Project data access is read-only; the bounded identity approval flow described below is a
+separate authenticated mutation. Authentication does not imply permission
 to view every Dataset, raw payload or device; sealed research results remain restricted.
 Without complete browser configuration, protected routes fail closed. Anonymous landing and
 health routes expose no collection data.
@@ -62,3 +63,25 @@ origin bypass and cross-device scope. Exercise packaged assets in the real brows
 Human bytes/old receipts during controlled summary refresh. Exact source/CI/image and deployed
 service qualification are required independently. Browser login and final Human usability are
 explicit gates; the runbook documents the shortest operator steps.
+
+## Account and device extension
+
+One invited project account now serves both shells. Cloudflare authenticates the person;
+Hub owns project membership, explicit device ownership and expiring personal read sessions.
+The local workbench uses a private BFF session for the same scoped cloud projections, while
+its delivery process retains a separate revocable device grant. An approved short-lived
+pairing flow uses a public display code plus a private polling proof; no personal or device
+token crosses a browser URL or JavaScript storage. Native/recording/research authorities do
+not change. Human account identity is not an attestation that gameplay was Human.
+
+Existing device claims require both device proof and explicit account scope. Device ownership
+and immutable upload ownership cannot be transferred by logging into another account. The
+membership allowlist remains authoritative for role; SQLite stores identity lifecycle beside
+existing operations, without copying an upload ledger. Browser approval uses exact Origin and
+CSRF checks. Personal tokens cannot authorize upload, jobs or administrative writes. Anonymous
+flow creation is bounded, expiring and rate-limited. A restart never invents a successful login.
+
+Local state uses private files, an HttpOnly SameSite cookie and exact loopback Host/Origin/CSRF
+checks. Private project pages are cleared when authentication cannot be confirmed; offline
+local records remain available. Logout and device revocation are separate actions. Credential
+recovery preserves the same device and delegates outbox state to Platform's typed recovery API.

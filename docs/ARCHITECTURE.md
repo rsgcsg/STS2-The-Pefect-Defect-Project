@@ -192,3 +192,9 @@ composes the public Platform delivery projection and device-authenticated Hub re
 indexes. Browser GET never verifies raw evidence, runs admission or launches compute.
 Existing immutable artifacts and durable operations remain the authorities. See
 [ADR-0005](adr/0005-local-cloud-console.md) and the [console guide](PROJECT_CONSOLE.md).
+
+The shared console's account extension keeps personal read sessions in the local BFF and
+persistent upload grants in the delivery child. Hub owns invited membership and explicit
+computer ownership. Cloud project pages and local project scope consume the same APIs;
+local queue state is separately labelled. Pairing and credential recovery do not grant
+Human origin, campaign consent, Dataset admission or gameplay authority.

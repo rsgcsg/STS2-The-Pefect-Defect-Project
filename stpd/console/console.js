@@ -2,8 +2,11 @@
 
 // Presentation only. All statuses and counts originate in the owning APIs.
 const config = document.body.dataset;
-const local = config.mode === "local";
+const localShell = config.mode === "local";
+let local = localShell;
 const views = {
+  devices: ["账号与电脑", "一个项目账号，管理获授权的电脑。"],
+  connect: ["确认电脑接入", "核对名称与配对码，批准刚刚发起的请求。"],
   overview: ["概览", "采集、上传与研究进展，一处查看。"],
   collections: ["采集记录", "每份录制的质量、投递和研究使用，分别查看。"],
   datasets: ["数据集", "固定来源与版本；新上传的数据不会自动改变已有训练集。"],
@@ -13,6 +16,7 @@ const views = {
 };
 const labels = {
   verified: ["云端已验收", "good"],
+  auth_blocked: ["上传授权需恢复", "wait"],
   pending: ["等待投递", "wait"],
   awaiting_upload: ["等待上传", "wait"],
   verification_pending: ["等待云端校验", "wait"],
@@ -268,7 +272,7 @@ function overview(data) {
   metrics.append(
     metric(
       local ? "本机待处理" : "等待接收 / 校验",
-      tally.pending,
+      Number.isFinite(tally.pending) ? tally.pending + (tally.auth_blocked || 0) : undefined,
       local ? "保持后台运行，可离线排队" : "仅统计有权限的远端记录",
     ),
     metric("云端已验收", tally.verified, "完整性与合同检查通过", "good"),
@@ -282,6 +286,7 @@ function overview(data) {
   );
   fragment.append(metrics);
   const attention =
+    (data.counts?.auth_blocked || 0) +
     (data.counts?.incident || 0) +
     (data.counts?.quarantined || 0) +
     (statuses?.quarantined || 0) +
@@ -809,14 +814,14 @@ function system(data) {
         "查看权限",
         data.access?.role || data.role || (local ? "本设备" : "当前授权范围"),
       ],
-      ["设备在线状态", "云端没有终端心跳，不作在线承诺"],
+      ["设备最近联络", "在账号与电脑查看；最近联络不代表当前在线"],
     ]),
   );
   if (local) {
     body.append(
       node(
         "p",
-        "设备连接配置一次后可持续上传；点击“打开云端”后按浏览器登录流程查看跨设备数据。",
+        "在“账号与电脑”登录后，两端查看相同授权数据；上方切换项目范围或本机队列。",
         "small muted",
       ),
     );
@@ -938,7 +943,7 @@ async function load(manual = false) {
   const serial = ++state.serial;
   const view = state.view,
     id = state.id;
-  const context = `${view}:${id || ""}:${state.offset}:${state.limit}`;
+  let context = `${view}:${id || ""}:${state.offset}:${state.limit}:${window.SpireIdentity.context()}`;
   if (renderedContext !== context) {
     $("content").replaceChildren(
       empty("正在读取…", "等待当前页面的拥有者状态。"),
@@ -960,7 +965,19 @@ async function load(manual = false) {
       ? `?limit=${state.limit}&offset=${state.offset}`
       : "";
   try {
-    const response = await fetch(`${config.api}/${route}${query}`, {
+    await window.SpireIdentity.refresh(manual);
+    if (serial !== state.serial) return;
+    const identityContext = window.SpireIdentity.context();
+    context = `${view}:${id || ""}:${state.offset}:${state.limit}:${identityContext}`;
+    if (renderedContext !== context) $("content").replaceChildren(empty("正在读取…", "当前账号与电脑范围"));
+    local = window.SpireIdentity.isLocal();
+    if (view === "devices" || view === "connect") {
+      const content = view === "devices" ? window.SpireIdentity.renderDevices() :
+        await window.SpireIdentity.renderConnect();
+      if (serial === state.serial) $("content").replaceChildren(content);
+      return;
+    }
+    const response = await fetch(window.SpireIdentity.api(route, query), {
       cache: "no-store",
       credentials: "same-origin",
       redirect: "error",
@@ -973,7 +990,7 @@ async function load(manual = false) {
           : "unavailable",
       );
     const data = await response.json();
-    if (serial !== state.serial) return;
+    if (serial !== state.serial || identityContext !== window.SpireIdentity.context()) return;
     if (data.error) throw new Error(data.error);
     const opened = [...document.querySelectorAll("details[open]")].map(
       (item) => item.dataset.preserve,
@@ -1024,20 +1041,22 @@ async function load(manual = false) {
         : "已通过身份验证";
   } catch (error) {
     if (serial !== state.serial) return;
+    if (!window.SpireIdentity.isLocal()) $("content").replaceChildren();
     const auth = error.message === "authentication_required";
     $("notice").replaceChildren(
       node(
         "div",
         auth
-          ? local
-            ? "云端设备凭据尚未配置或权限不足。原始数据保留在本机，请查看系统状态。"
+          ? localShell
+            ? "当前账号或设备授权不可用。请到“账号与电脑”重新登录；原始数据保留在本机。"
             : "登录已过期或没有访问权限。请重新打开云端入口登录。"
           : "暂时无法取得新状态。已有画面是此前观测，不代表新的成功或失败。",
         "banner error",
       ),
     );
     $("connection").textContent = auth ? "需要登录 / 授权" : "连接暂不可用";
-    if (!local) $("notice").append(link("重新登录云端 →", "/app/"));
+    $("notice").append(link(localShell ? "账号与电脑 →" : "重新登录云端 →",
+      localShell ? "?view=devices" : "/app/"));
   } finally {
     if (serial === state.serial) {
       state.busy = false;
@@ -1053,7 +1072,7 @@ document.querySelectorAll("[data-view]").forEach((item) =>
   }),
 );
 $("refresh").addEventListener("click", () => load(true));
-$("lifecycle-note").textContent = local
+$("lifecycle-note").textContent = localShell
   ? "关闭网页 ≠ 停止后台投递"
   : "只读团队视图 · 原始数据不公开";
 window.addEventListener("popstate", () => {
@@ -1066,5 +1085,12 @@ document.addEventListener("visibilitychange", () => {
 setInterval(() => {
   if (!document.hidden) load();
 }, 10000);
+window.SpireIdentity.connect((reset = false) => {
+  ++state.serial;
+  $("content").replaceChildren();
+  renderedContext = null;
+  if (reset) history.replaceState({}, "", "?view=" + state.view);
+  readLocation(); load(true);
+});
 readLocation();
 load();

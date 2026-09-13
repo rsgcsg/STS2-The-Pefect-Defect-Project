@@ -25,7 +25,8 @@ Do not put private payloads in image layers and then delete them in a later laye
 B is a developer distribution, not a one-click player installer. Each participating terminal
 needs the owned game, one qualified Platform Mod, Git, Node 20+, Python 3.11/uv and the .NET
 runtime declared by the collection tool. Clone STPD at the operator-approved exact commit;
-`uv sync --locked --all-extras` and `npm ci` supply pinned public dependencies. A Platform
+`uv sync --locked --extra cloud` and `npm ci` supply the lighter collector dependencies;
+researchers and CI use `--all-extras`. `tools/open_workbench.py` is the shared launcher. A Platform
 clone is needed only by Platform developers or the release builder, not every collector.
 There is one external workbench command surface; models are optional separate downloads.
 
@@ -41,7 +42,8 @@ A reviewable terminal handoff contains:
   inventory/release ID and required .NET runtime; never the game binaries;
 - exact STPD commit/lock and developer combination, public Evidence dependency pin;
 - public Hub URL and explicit HTTPS upload-host allowlist;
-- private device token delivered separately from a non-secret configuration example;
+- project email invitation and browser-approved device enrollment (legacy private token
+  provisioning remains an operator recovery route);
 - private campaign config, dedicated recording and outbox paths, startup/stop/status commands,
   and the campaign's explicit Human-origin attestation scope;
 - supported OS and tested gate, known limitations, rollback and incident instructions.
@@ -59,7 +61,7 @@ A copied public handoff is a template; it cannot grant consent on behalf of anot
 2. Separate qualification from collection: preserve the synthetic Hub state/prefix and prepare
    fresh collection state/prefix with budget zero, private permissions, backup/status checks and
    no configured GPU target. The public service being healthy is not a Human-upload permission.
-3. Register one revocable device token and prepare its local campaign config. Use a **dedicated
+3. Invite the account, bind one revocable device through the workbench and prepare its local campaign config. Use a **dedicated
    initially empty recording root** and a separate new outbox. The current delivery service
    discovers every sealed session under its configured root: do not aim it at a historical
    archive. Bind the game recording destination through Platform's supported profile/runtime

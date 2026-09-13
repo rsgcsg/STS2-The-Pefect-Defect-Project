@@ -827,3 +827,17 @@ footer span {
     left: 10px;
   }
 }
+
+/* Account and device onboarding uses the same small shell in both locations. */
+#account-actions { display: flex; align-items: center; gap: .7rem; flex-wrap: wrap; }
+.account-label { font-size: .82rem; overflow-wrap: anywhere; }
+.scope-label { display: flex; gap: .8rem; align-items: center; margin-bottom: 1.5rem; color: var(--muted); }
+select, .onboarding input { font: inherit; color: inherit; background: transparent; border: 1px solid #536575; border-radius: .6rem; padding: .6rem; max-width: 100%; }
+.onboarding { padding: 1.5rem; max-width: 850px; }
+.onboarding p { line-height: 1.7; }
+.onboarding label { display: grid; gap: .5rem; margin: 1.2rem 0; max-width: 25rem; }
+.onboarding .button { margin: .4rem .6rem .4rem 0; }
+.onboarding-step, .device-row { padding: 1rem; margin: 1rem 0; border: 1px solid #536575; border-radius: .7rem; }
+.device-row { display: flex; flex-direction: column; gap: .6rem; overflow-wrap: anywhere; }
+.pair-code { display: block; font-size: 1.8rem; letter-spacing: .15em; margin: 1rem 0; }
+@media(max-width: 760px) { .topbar, .topbar-actions { flex-wrap: wrap; } .scope-label { align-items: start; flex-direction: column; } }
