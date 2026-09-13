@@ -87,3 +87,5 @@ not copied source trees, shared branches or submodules.
 
 [Account and device protocol](IDENTITY_PROTOCOL.md) defines invited membership, approval,
 personal sessions, scoped devices, credential recovery and operations schema migration.
+
+[Packaging identity correction](evidence/B_WORKFLOW_PACKAGING_IDENTITY_CORRECTION_2026-09-13.md) records exact BOM file bytes and distinct tool revisions.

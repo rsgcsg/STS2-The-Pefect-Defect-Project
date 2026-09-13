@@ -70,16 +70,19 @@ Source/test, data, training, model-quality, service and scientific evidence are 
 ## Merge and release
 
 Inspect the live ruleset rather than inferring protection from this document. The current
-policy requires PRs, locked-python, resolved review conversations, no force update/deletion
-and no bypass on governed branches. Respect any stronger live rule. Merge only the exact
+policy requires PRs, locked-python, resolved review conversations, no force updates and
+no bypass on governed branches. Main/develop additionally prohibit deletion. Respect any stronger live rule. Merge only the exact
 reviewed/latest-head candidate after every required check and review condition is satisfied.
 
 Keep main and develop as the only long-lived branches. Release branches retain PR, required
 CI, non-fast-forward and no-bypass protection while active; their separate release ruleset
 may permit deletion after integration. Inspect and satisfy the actual rules before cleanup.
-Delete a topic/release ref only after proving its commits are retained in the intended
-integration/main history and checking active PR/worktree use. Preserve release tags and
-immutable evidence; remove clean disposable worktrees separately. No force deletion is a
+Delete a topic/release ref after proving its commits are retained in the intended
+integration/main history or an explicitly reviewed remote archive tag, and checking active
+PR/worktree use. Archive non-ancestor historical tips with their patch-equivalence or obsolete
+scope finding; never integrate old snapshots solely to make Git call them merged. Preserve
+release tags and immutable evidence. Keep dirty or runtime/evidence-bearing worktrees detached
+at their original HEAD with a private diff/file inventory; never reset or clean them. No force deletion is a
 substitute for investigating unmerged work.
 
 Publish versioned release notes with the approved Platform/STPD combination, lock/tool/Mod

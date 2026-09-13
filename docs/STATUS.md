@@ -284,3 +284,7 @@ local personal sessions, matching local/cloud project scope and typed same-devic
 recovery. Identity operations use Hub schema3. The scoped release report above owns actual
 login/service evidence; source implementation alone does not establish it. Each deployment
 retains a compatible backup/image pair and verifies its current account/receipt continuity.
+
+For release artifact checks use the [packaging identity correction](evidence/B_WORKFLOW_PACKAGING_IDENTITY_CORRECTION_2026-09-13.md). It corrects an unsupported
+BOM digest and distinguishes the fixed tool component revision from its workspace provenance.
+Original reports, archives and evidence remain unchanged.

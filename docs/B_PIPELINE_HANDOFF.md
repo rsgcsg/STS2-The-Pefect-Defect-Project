@@ -143,6 +143,44 @@ pair separately from the terminal Mod/tool identity. A local generated kit is a 
 its distribution location and inventory are verified. The cloud landing page's guide follows
 the deployed source; a Git merge alone does not update the running service or collectors.
 
+## Build the reviewed developer download
+
+Use the maintained offline builder from the clean exact STPD checkout. Obtain the Mod,
+manifest, current distribution BOM and fixed tool from the independently reviewed Platform
+release. Expected hashes/release ID come from that release's trusted inventory; do not simply
+trust a manifest downloaded beside unknown bytes. The operator checks compatibility and OS
+qualification separately. See the [metadata correction](evidence/B_WORKFLOW_PACKAGING_IDENTITY_CORRECTION_2026-09-13.md)
+for why BOM file bytes and tool component/workspace revisions are distinct.
+
+```bash
+uv run --locked python tools/package_developer_kit.py \
+  --mod-dll /ABS/STS2_PLATFORM.dll --mod-dll-sha256 APPROVED_DLL_SHA256 \
+  --mod-manifest /ABS/STS2_PLATFORM.json --mod-manifest-sha256 APPROVED_MANIFEST_SHA256 \
+  --platform-bom /ABS/platform-bom.json --platform-bom-sha256 APPROVED_BOM_FILE_SHA256 \
+  --collection-tool /ABS/collection-tool --tool-release-id APPROVED_TOOL_RELEASE_ID \
+  --output /ABS/new-developer-kit.zip
+```
+
+The output directory must exist outside tracked source. The builder rejects changed, extra
+or symlinked tool files and existing outputs, and reads no credentials or cloud services.
+It preserves the original tool manifest/embedded BOM, packages only named public inputs,
+and binds the runtime dependency combination by bytes rather than inventing its rules.
+Its receipt reports packaging facts; it cannot certify Human origin, install/load, CI or
+service readiness. Identical inputs/source produce identical ZIP bytes.
+
+After final gates, publish that new archive, its SHA256/size, `combination.json` inventory
+and independently reviewed release notes as immutable GitHub assets. Download it back and
+compare its hash before recommending it. Consumers verify the downloaded archive SHA256
+against the trusted release before extraction, for example:
+
+```bash
+python -c "import hashlib,pathlib; print(hashlib.sha256(pathlib.Path('/ABS/new-developer-kit.zip').read_bytes()).hexdigest())"
+```
+
+The exact Git checkout is still the workbench executable entry; the ZIP contains the Mod,
+fixed tool and identity/usage files, not a second copy of the workbench source or an installer.
+A corrected release uses a new tag/asset identity; never overwrite the previous archive.
+
 ## First terminal and real-upload gate
 
 1. Complete source review/root gates/latest-head CI in each repository. Prepare the exact Mod
