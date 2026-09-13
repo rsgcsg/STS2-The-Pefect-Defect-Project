@@ -122,12 +122,21 @@ by uid 10001 and mode 0600, using this format with real explicitly allowed devic
 ```json
 {"schema":"stpd/console-access-v1","principals":[
   {"email":"collector@example.org","role":"collector","devices":["developer-device-01"]},
+  {"email":"new-collector@example.org","role":"collector","devices":[],"enroll_devices":true},
   {"email":"reviewer@example.org","role":"reviewer","devices":["developer-device-01"]}
 ]}
 ```
 
+The new-collector entry explicitly permits first-device enrollment; omit it for people who
+must only view existing devices. Enrollment defaults to false, including for operators.
+The earlier CLI registration path remains available for a pre-provisioned device; claiming it
+requires its existing device credential and explicit device scope. Follow the
+[account protocol](../../docs/IDENTITY_PROTOCOL.md) and
+[local first-login steps](../../docs/PROJECT_CONSOLE.md#download-sign-in-bind-once).
+Neither enrollment nor login grants recording/upload consent.
+
 The optional `subject` pins the exact validated Access subject in addition to email. Roles:
-`collector` sees only listed devices' collections and shared result metadata;
+`collector` sees listed or personally owned devices' collections and shared result metadata;
 `reviewer` additionally sees project Dataset metadata; `operator` also sees private operational
 status. No role gets raw/Dataset payload download or research/job writes through the console.
 Identity approval/denial is the separately guarded exception; see the account protocol guide.
@@ -166,8 +175,11 @@ remain unqualified until their own exact evidence exists.
 
 Before real browser qualification, exercise missing/expired/wrong-audience/tampered JWT,
 plain email-header spoofing, direct-origin bypass, collector cross-device access, and preserved
-raw/Dataset restrictions. Then an allowlisted Human logs in once, checks a known receipt and
-confirms local-to-cloud links. This is a login/UI gate, not GPU or new Human recording evidence.
+raw/Dataset restrictions. Then an allowlisted Human starts local login, compares the computer
+name and pairing code, approves enrollment or connection of the intended existing device,
+and checks the same receipt and device scope locally and in the cloud. Local logout must clear
+personal views while retaining the device upload grant; reconnect must preserve that device ID.
+This is a login/UI gate, not GPU or new Human recording evidence.
 
 ## Normal operations and incident handling
 
@@ -361,7 +373,12 @@ sudo docker ps --filter name=stpd-backup-
 ```
 
 Confirm no backup container remains before proceeding; stopping a service/client alone does
-not prove container termination. Then stop the Hub and retrieve the selected recovery point:
+not prove container termination. Select the exact image/config paired with the recovery point
+before invoking `backupctl restore-check`: it checks the backup schema against that image's
+schema. In particular, a schema-3 to schema-2 rollback uses the predecessor image and its
+pre-migration backup, never the migrated live database. Preserve the matching identity
+master/admin key in external private recovery configuration; SQLite does not contain it.
+Then stop the Hub and retrieve the selected recovery point:
 
 ```bash
 dc stop caddy hub
@@ -371,6 +388,21 @@ STPD_RETIRED_STATE="/srv/stpd/hub.before-restore-$(date -u +%Y%m%dT%H%M%SZ)"
 sudo mv /srv/stpd/hub "$STPD_RETIRED_STATE"
 sudo install -d -m 0700 -o 10001 -g 10001 /srv/stpd/hub /srv/stpd/hub/work /srv/stpd/hub/backups
 sudo install -m 0600 -o 10001 -g 10001 "$STPD_RETIRED_STATE/backups/recovery-verified.sqlite" /srv/stpd/hub/operations.sqlite
+```
+
+If Access is configured, restore the reviewed private allowlist before preflight. The following
+uses the retained file only after reviewing its current membership and compatibility with the
+recovery image; whole-host recovery instead retrieves its separately retained private copy.
+Use the actual host path corresponding to `STPD_ACCESS_ALLOWLIST` if it differs:
+
+```bash
+sudo install -m 0600 -o 10001 -g 10001 "$STPD_RETIRED_STATE/console-access.json" /srv/stpd/hub/console-access.json
+```
+
+Do not copy prior maintenance status, WAL/shm or scratch files. Missing Access configuration
+must remain fail-closed; disabling login checks is not a recovery step. Then validate and start:
+
+```bash
 sudo python3 deploy/hub/preflight.py --config /etc/stpd/deployment.env --host
 dc config -q
 dc up -d
