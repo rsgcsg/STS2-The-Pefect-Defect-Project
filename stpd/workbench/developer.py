@@ -177,7 +177,10 @@ def setup(
     if install:
         log = config.state_dir / "logs" / "setup.log"
         with log.open("ab") as output:
-            for command in (["uv", "sync", "--locked", "--extra", "cloud", "--inexact"], ["npm", "ci"]):
+            for command in (
+                ["uv", "sync", "--locked", "--extra", "cloud", "--inexact"],
+                ["npm", "ci"],
+            ):
                 executable = shutil.which(command[0])
                 if executable is None:
                     raise BoundaryError("setup", "bootstrap_tool_missing")
