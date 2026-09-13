@@ -938,6 +938,7 @@ function changePage(offset) {
   load(true);
 }
 async function load(manual = false) {
+  if (!manual && document.activeElement?.id === "device-name") return;
   if (state.busy && !manual) return;
   state.busy = true;
   const serial = ++state.serial;

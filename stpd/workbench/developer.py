@@ -70,6 +70,12 @@ def atomic_json(path: Path, value: Any) -> None:
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary, path)
+        if os.name != "nt":
+            directory = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
     finally:
         temporary.unlink(missing_ok=True)
 
@@ -171,7 +177,7 @@ def setup(
     if install:
         log = config.state_dir / "logs" / "setup.log"
         with log.open("ab") as output:
-            for command in (["uv", "sync", "--locked", "--extra", "cloud"], ["npm", "ci"]):
+            for command in (["uv", "sync", "--locked", "--extra", "cloud", "--inexact"], ["npm", "ci"]):
                 executable = shutil.which(command[0])
                 if executable is None:
                     raise BoundaryError("setup", "bootstrap_tool_missing")
@@ -198,8 +204,7 @@ def setup(
 def tool_identity() -> dict[str, Any]:
     source = hashlib.sha256()
     paths = list((ROOT / "stpd/workbench").glob("*.py")) + [
-        path for path in (ROOT / "stpd/console").glob("*")
-        if path.suffix in {".py", ".css", ".js"}
+        path for path in (ROOT / "stpd/console").glob("*") if path.suffix in {".py", ".css", ".js"}
     ]
     for path in sorted(paths):
         source.update(path.relative_to(ROOT).as_posix().encode() + b"\0" + path.read_bytes())
@@ -344,6 +349,12 @@ def dependency_checks(config: ProjectConfig) -> dict[str, Any]:
     return checks
 
 
+def credential_present(config: ProjectConfig) -> bool:
+    from .identity import LocalIdentity
+
+    return bool(LocalIdentity(config).device_token())
+
+
 def doctor(config: ProjectConfig) -> dict[str, Any]:
     checks = dependency_checks(config)
     if config.delivery_config is not None:
@@ -396,8 +407,13 @@ def doctor(config: ProjectConfig) -> dict[str, Any]:
                 }
                 owner_hub = observed.get("hub_url")
                 checks["delivery_hub"] = {
-                    "status": ("NOT_CHECKED" if owner_hub is None else
-                               "PASS" if owner_hub == config.hub_url else "ENDPOINT_MISMATCH")
+                    "status": (
+                        "NOT_CHECKED"
+                        if owner_hub is None
+                        else "PASS"
+                        if owner_hub == config.hub_url
+                        else "ENDPOINT_MISMATCH"
+                    )
                 }
             except (OSError, ValueError, BoundaryError, subprocess.SubprocessError):
                 checks["delivery_preflight"] = {"status": "UNAVAILABLE"}
@@ -407,7 +423,7 @@ def doctor(config: ProjectConfig) -> dict[str, Any]:
         "checks": checks,
         "tool_identity": tool_identity(),
         "hub": "configured" if config.hub_url else "not_configured",
-        "hub_credential": "configured" if os.environ.get("STPD_HUB_TOKEN") else "not_configured",
+        "hub_credential": "configured" if credential_present(config) else "not_configured",
         "delivery": "configured" if config.delivery_config else "not_configured",
         "platform_runtime": "not_probed",
         "policy": "existing_adapter_only",

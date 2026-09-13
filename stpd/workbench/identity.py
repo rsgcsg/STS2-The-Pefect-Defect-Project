@@ -193,7 +193,10 @@ class LocalIdentity:
                 return {"status": "approved"}
             value = self.request(route + "/poll", body=body)
             if value.get("status") != "approved":
-                return {"status": value.get("status", "pending")}
+                status = value.get("status", "pending")
+                if status in {"denied", "expired"}:
+                    self.flow_path.unlink(missing_ok=True)
+                return {"status": status}
             device = value["device"]
             existing = self.device()
             expected = existing.get("device_id") or flow.get("existing_device")

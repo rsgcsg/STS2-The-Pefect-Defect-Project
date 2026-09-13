@@ -158,3 +158,7 @@ stops the owned delivery child, invokes the versioned Platform `resume-auth` API
 stopped-worker lock, then restarts the child. Exact archive/seal/upload/receipt identity is
 preserved. Other incidents are not cleared; legacy free-text failures require separate owning
 audits. Device token rotation never substitutes a new device ID or deletes transport state.
+
+Credential publication fsyncs the file and, on POSIX, its containing directory before
+acknowledging a pairing result. Windows retains atomic file replacement and process-restart
+recovery; arbitrary filesystem or power-loss survival is not a qualified claim.

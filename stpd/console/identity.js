@@ -4,6 +4,7 @@
 window.SpireIdentity = (() => {
   const local = document.body.dataset.mode === "local";
   let identity = null, checked = 0, busy = null, scope = local ? "local" : "project";
+  let deviceDraft = null;
   let timer = null, refreshPage = () => {}, epoch = 0, loggingOut = false;
   const el = (tag, text, cls) => {
     const node = document.createElement(tag);
@@ -131,7 +132,8 @@ window.SpireIdentity = (() => {
       if (!identity?.hub_configured) box.append(el("p", "尚未配置项目 Hub 地址。请使用项目提供的启动配置。"));
       else if (!who || identity.status !== "signed_in") {
         const label = el("label", "这台电脑的名称"), input = el("input");
-        input.type = "text"; input.maxLength = 80; input.value = identity?.device_name || "我的电脑";
+        input.type = "text"; input.maxLength = 80; input.value = deviceDraft ?? identity?.device_name ?? "我的电脑";
+        input.id = "device-name"; input.addEventListener("input", () => { deviceDraft = input.value; });
         label.append(input); box.append(label);
         box.append(action("登录并绑定这台电脑", async () => {
           const flow = await request("/api/identity/login", {device_name: input.value.trim()}, identity.csrf_token);
@@ -172,6 +174,8 @@ window.SpireIdentity = (() => {
     const facts = await request("/app/api/identity/flows/" + flow);
     box.append(el("h2", "确认接入这台电脑"), el("p", `账号：${identity?.principal?.email || "当前登录账号"}`));
     box.append(el("h3", facts.device_name), el("strong", facts.user_code, "pair-code"));
+    box.append(el("p", facts.purpose === "connect_existing_device" ?
+      `重新连接已有电脑：${facts.device_id}` : "注册一台新的采集电脑"));
     box.append(el("p", "请与本机工作台显示的配对码核对。批准后，此电脑获得独立上传凭据，工作台可查看你获授权的项目数据。不会启动游戏、训练或自动同意上传数据。"));
     if (facts.status === "pending" && facts.approval_allowed) box.append(action("确认是我的电脑，批准接入", async () => {
       await request("/app/api/identity/flows/" + flow + "/approve", {
@@ -180,6 +184,12 @@ window.SpireIdentity = (() => {
       box.replaceChildren(el("h2", "已批准"), el("p", "回到本机工作台，绑定结果会自动更新。这个页面可以关闭。"));
     }));
     else box.append(el("p", facts.status === "pending" ? "当前账号没有绑定这台电脑的权限。请使用受邀请且获授权的账号。" : `请求状态：${facts.status}。请回到本机工作台查看结果。`));
+    if (facts.status === "pending") box.append(action("不是我的请求，拒绝", async () => {
+      await request("/app/api/identity/flows/" + flow + "/deny", {
+        csrf_token: identity.csrf_token, user_code: facts.user_code,
+      }, identity.csrf_token);
+      box.replaceChildren(el("h2", "已拒绝"), el("p", "没有发放任何设备或个人凭据。可关闭此页面。"));
+    }));
     return box;
   }
   return {refresh, api, renderDevices, renderConnect,

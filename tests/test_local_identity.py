@@ -315,3 +315,39 @@ def test_local_bff_uses_actual_hub_dtos_and_preserves_legacy_upload_identity(tmp
     }
     assert account.logout()["remote_revoked"] is True
     assert account.device_token() == "one" * 16
+
+
+def test_denied_flow_can_immediately_restart(tmp_path, monkeypatch):
+    account = LocalIdentity(config(tmp_path))
+    atomic_json(
+        account.flow_path,
+        {
+            "hub_url": "https://hub.example",
+            "flow_id": "a" * 32,
+            "client_secret": "s" * 32,
+            "expires_at": time.time() + 600,
+        },
+    )
+    monkeypatch.setattr(account, "request", lambda *a, **k: {"status": "denied"})
+    assert account.poll() == {"status": "denied"}
+    assert not account.flow_path.exists()
+
+
+def test_atomic_private_publication_flushes_directory_before_return(tmp_path, monkeypatch):
+    if os.name == "nt":
+        pytest.skip("directory fsync is POSIX-specific")
+    events = []
+    original_fsync, original_replace = os.fsync, os.replace
+
+    def sync(descriptor):
+        events.append("directory" if os.path.isdir(f"/dev/fd/{descriptor}") else "file")
+        original_fsync(descriptor)
+
+    def replace(source, target):
+        events.append("replace")
+        original_replace(source, target)
+
+    monkeypatch.setattr(os, "fsync", sync)
+    monkeypatch.setattr(os, "replace", replace)
+    atomic_json(tmp_path / "credential.json", {"test": True})
+    assert events == ["file", "replace", "directory"]
