@@ -112,6 +112,23 @@ Use one Cloudflare Access self-hosted application for exact `/app` and `/app/*` 
 Use an allow policy for explicitly approved email identities and email one-time PIN or the
 team's existing identity provider. Do not create a Bypass policy. Configure no paid plan.
 Before enabling browser access, confirm the Cloudflare zone is proxied and TLS is Full (strict).
+Keep browser-only edge checks off the machine API through one narrowly scoped Configuration
+Rule (`set_config`, only `bic: false`). For this deployment the expression is:
+
+```text
+(http.host eq "hub.2-fire-2.com" and (http.request.uri.path eq "/health" or starts_with(http.request.uri.path, "/v1/")))
+```
+
+Use the actual reviewed hostname for another deployment. Cloudflare's default
+[Browser Integrity Check](https://developers.cloudflare.com/waf/tools/browser-integrity-check/)
+can reject a legitimate Python client's headers with error 1010 before Hub authentication.
+Cloudflare supports [API-scoped configuration rules](https://developers.cloudflare.com/rules/configuration-rules/examples/define-single-configuration-terraform/)
+for this case. This rule must not cover `/app` or skip Access, JWT/Bearer validation, other WAF
+checks or rate limits. Review rule order so a later matching rule does not override it.
+Qualify the actual unmodified client: `/health` returns the exact producer, unauthenticated
+`/v1/*` remains denied by Hub, a valid device sees only its own scope, and `/app` plus its API
+still require the intended browser login. Do not disguise the client as a browser to hide a
+misconfigured machine endpoint.
 The Hub validates the JWT at the origin; a spoofed email header or direct-IP request does not
 bypass login. JWT key discovery uses only the configured Cloudflare team origin and is bounded.
 
