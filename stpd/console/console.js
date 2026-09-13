@@ -944,7 +944,9 @@ async function load(manual = false) {
   const serial = ++state.serial;
   const view = state.view,
     id = state.id;
-  let context = `${view}:${id || ""}:${state.offset}:${state.limit}:${window.SpireIdentity.context()}`;
+  const record = view === "connect" ? new URLSearchParams(location.search).get("flow") : id;
+  const pageContext = `${view}:${record || ""}:${state.offset}:${state.limit}`;
+  let context = `${pageContext}:${window.SpireIdentity.context()}`;
   if (renderedContext !== context) {
     $("content").replaceChildren(
       empty("正在读取…", "等待当前页面的拥有者状态。"),
@@ -969,7 +971,7 @@ async function load(manual = false) {
     const identity = await window.SpireIdentity.refresh(manual);
     if (serial !== state.serial) return;
     const identityContext = window.SpireIdentity.context();
-    context = `${view}:${id || ""}:${state.offset}:${state.limit}:${identityContext}`;
+    context = `${pageContext}:${identityContext}`;
     if (renderedContext !== context) $("content").replaceChildren(empty("正在读取…", "当前账号与电脑范围"));
     local = window.SpireIdentity.isLocal();
     if (view === "devices" || view === "connect") {

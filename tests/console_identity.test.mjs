@@ -55,7 +55,7 @@ test('device selection changes request scope and invalidates prior response cont
   assert.equal(ui.api('collections', '?limit=25'), '/api/project/collections?limit=25&device=pc');
 });
 
-function pageSetup(view, identity, connectContent = async () => 'connection facts') {
+function pageSetup(view, identity, connectContent = async () => 'connection facts', flow = '') {
   const nodes = new Map();
   const element = () => Object.assign(new Element('div'), {
     textContent: '', attributes: {}, addEventListener() {},
@@ -74,7 +74,7 @@ function pageSetup(view, identity, connectContent = async () => 'connection fact
       context: () => scope, isLocal: () => false, refresh: async () => identity,
       renderDevices: () => 'account facts', renderConnect: connectContent, connect() {},
     }},
-    location: {search: '?view=' + view}, history: {}, Date, URLSearchParams,
+    location: {search: '?view=' + view + (flow ? '&flow=' + flow : '')}, history: {}, Date, URLSearchParams,
     setInterval() {},
   });
   vm.runInContext(readFileSync(new URL('../stpd/console/console.js', import.meta.url), 'utf8'), context);
@@ -113,4 +113,20 @@ test('connection response cannot repaint a changed identity scope', async () => 
   await settled();
   assert.equal(get('content').children.includes('previous account private connection'), false);
   assert.notEqual(get('connection').textContent, '已通过身份验证');
+});
+
+
+test('switching connection flow removes the previous approval panel before its replacement arrives', async () => {
+  let finish, calls = 0;
+  const pending = new Promise(resolve => {finish = resolve;});
+  const {get, context} = pageSetup('connect', {status: 'signed_in'},
+    () => ++calls === 1 ? 'approval for first flow' : pending, 'a'.repeat(32));
+  await settled();
+  assert.deepEqual(get('content').children, ['approval for first flow']);
+  context.location.search = '?view=connect&flow=' + 'b'.repeat(32);
+  const loading = vm.runInContext('readLocation(); load(true)', context);
+  await settled();
+  assert.equal(get('content').children.includes('approval for first flow'), false);
+  finish('approval for second flow'); await loading;
+  assert.deepEqual(get('content').children, ['approval for second flow']);
 });
