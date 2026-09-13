@@ -5,6 +5,12 @@ This document is a procedure, not a record that deployment happened. The source 
 worker image, Caddy image and deployment config each have an independently recorded identity.
 Use an exact clean checkout of the approved STPD revision. Do not edit code on a running host.
 
+[The default project workflow](../../docs/B_PIPELINE_HANDOFF.md) owns download, terminal
+onboarding, everyday collection/views and incident routing. Select the exact source/lock/OCI
+combination from its reviewed release notes before applying this runbook. A main/develop merge
+does not deploy the Hub, update a collector or qualify a new runtime. This is the one host
+procedure; campaigns link here rather than copying a second deployment recipe.
+
 ## Bootstrap the authorized Linux host
 
 Prepare Docker Engine and Compose >=2.30 using the host vendor's supported installation path.

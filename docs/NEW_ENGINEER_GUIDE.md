@@ -4,6 +4,15 @@ STPD studies candidate-ranking models using exact Platform evidence. It does not
 second game engine. Start with README, AGENTS, [Document Map](DOCUMENT_MAP.md),
 [Current Context](memory/CURRENT.md) and the owning source/tests.
 
+For collecting data or viewing uploads, use the [default project workflow](B_PIPELINE_HANDOFF.md)
+and [console guide](PROJECT_CONSOLE.md). Select the approved exact release combination, run
+the lightweight collector launcher, sign in and bind the computer, then attach the dedicated
+campaign once. Collectors do not need research dependencies, model weights, a Platform checkout
+or cloud storage keys. The same account sees authorized cloud records from either shell;
+the local queue is visible only beside that collector.
+
+For changing code, training tooling or research, use the complete environment and gate:
+
 ```bash
 uv sync --locked --all-extras
 npm ci

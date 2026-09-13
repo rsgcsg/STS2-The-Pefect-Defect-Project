@@ -1,7 +1,8 @@
 # Developer B pipeline operations
 
-For release distribution, terminal onboarding, incident ownership and the ordered model-plan
-freeze gates, start with [the current handoff](B_PIPELINE_HANDOFF.md).
+For the default download, account/device onboarding, collection, incident and model-plan
+freeze workflow, start with [the project procedure](B_PIPELINE_HANDOFF.md). This document
+owns the lower-level data and operator commands, not a second onboarding path.
 
 This is one STPD developer workbench consuming one independently released Platform Mod and
 its public collection tools. Repositories stay separate and packages are exact pins. Models
@@ -47,24 +48,30 @@ not add a Full-Run model, Mac Qwen backend, cloud inference, cloud STS2 or RL.
 
 Install Git, Python 3.11/uv, Node 20+, the game and the one exact Platform Mod. The fixed .NET
 collection tool needs its declared .NET runtime; developers do not rebuild it per session.
-Clone STPD; cloning Platform is optional for development, never a sibling Python import.
+Clone STPD at the approved exact revision; cloning Platform is optional for development,
+never a sibling Python import. The normal collector launcher and one-time campaign attachment
+are in the [project procedure](B_PIPELINE_HANDOFF.md#download-and-connect-once).
+For explicit setup by a developer/operator, use the lighter collector profile and the same
+private config/state paths throughout:
 
 ```bash
-uv sync --locked --all-extras
+uv sync --locked --extra cloud
 npm ci
-uv run --locked python -m stpd.workbench project setup --hub-url https://HUB \
+uv run --locked python -m stpd.workbench project setup --config /ABS/project.json \
+  --state-dir /ABS/workbench-state --hub-url https://HUB \
   --delivery-config /ABS/delivery.json --platform-url http://127.0.0.1:PORT
-uv run --locked python -m stpd.workbench project doctor
-uv run --locked python -m stpd.workbench project open
-uv run --locked python -m stpd.workbench project status
-uv run --locked python -m stpd.workbench project stop
+uv run --locked python -m stpd.workbench project doctor --config /ABS/project.json
+uv run --locked python -m stpd.workbench project open --config /ABS/project.json
+uv run --locked python -m stpd.workbench project status --config /ABS/project.json
+uv run --locked python -m stpd.workbench project stop --config /ABS/project.json
 ```
 
 The Platform-owned delivery config is documented in its Evidence DELIVERY.md. It binds the
 recording/outbox/tool absolute paths, externally pinned tool release, worker/campaign and
 operator Human-origin attestation. Do not silently attest future sessions or reuse an outbox
-after changing identity. Set `STPD_HUB_TOKEN` in the process environment; it is a developer
-credential, never the admin token. `open` supervises delivery while running. `project stop` stops
+after changing identity. The normal account/device pairing stores the upload credential in a
+private local file. `STPD_HUB_TOKEN` remains a legacy operator-provisioned developer credential,
+never the admin token or a step required of every collector. `open` supervises delivery while running. `project stop` stops
 background processing; closing a browser tab does not stop the detached processes. Sealed
 items reconcile on the next open.
 
@@ -81,8 +88,9 @@ This is a trusted developer group, not tenant isolation or a public collection p
 ## CPU Hub operator
 
 Use an exact clean STPD checkout/image. The same locked package supplies Hub and workers.
-`STPD_HUB_ADMIN_TOKEN` and `STPD_DEVICE_TOKEN` stay env-only in commands. The admin creates
-one distinct device credential per terminal; tokens can be revoked without deleting evidence.
+`STPD_HUB_ADMIN_TOKEN` and `STPD_DEVICE_TOKEN` stay env-only in commands. The operator approves
+invited enrollment or provisions one distinct legacy device credential per terminal; tokens
+can be revoked without deleting evidence.
 See [deployment](../deploy/hub/README.md) for TLS, mounts, limits and recovery.
 
 Common arguments are `--root /opt/stpd --state /var/lib/stpd --store s3 --staging s3`,

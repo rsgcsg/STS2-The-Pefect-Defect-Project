@@ -98,3 +98,16 @@ future model that trains on Reads requires a new explicit deterministic
 multi-instance projection and compatibility evidence rather than changing this
 checkpoint's input semantics. Legacy collectors that request a kind-keyed Read
 mapping fail closed when a requested kind is not unique instead of overwriting.
+
+## D-011 — Use the B workbench workflow as the default developer distribution
+
+**Status:** accepted for the developer workflow, not scientific qualification
+
+Use one qualified Platform Mod/fixed collection tool and one exact STPD workbench combination.
+The same invited account provides authorized local/cloud project views; a separate device
+grant supports background delivery. Campaign configuration and Human/upload attestation remain
+explicit. Models are separate immutable artifacts. [The project workflow](../B_PIPELINE_HANDOFF.md)
+owns everyday download, setup, collection, viewing, upgrade and incident order; the existing
+Hub runbook owns exact host commands. Preserve [ADR-0004](../adr/0004-developer-cloud-hub.md)
+and [ADR-0005](../adr/0005-local-cloud-console.md) authority boundaries. New source, terminal,
+service, research and model claims still require their own scoped evidence.

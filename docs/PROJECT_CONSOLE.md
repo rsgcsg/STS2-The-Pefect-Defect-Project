@@ -5,6 +5,12 @@ collector. Its personal project views and the cloud console use the same account
 Hub projections. Its additional local scope shows unuploaded records and the owned queue.
 Personal read sessions, device upload credentials and native evidence authority remain separate. [ADR-0005](adr/0005-local-cloud-console.md) defines this boundary.
 
+Start with the [default project workflow](B_PIPELINE_HANDOFF.md) to obtain an approved exact
+combination, install it and attach the campaign once. This guide owns screen meaning and
+account/recovery behavior. The project cloud entry is [hub.2-fire-2.com](https://hub.2-fire-2.com/);
+cloud project data requires an invited login. A successful deployment does not authorize
+collection or make historical receipts current evidence.
+
 ## Daily collection
 
 Run the approved developer combination through the existing entry:
@@ -30,7 +36,7 @@ Local raw sessions and bundles are not automatically deleted after cloud success
 
 ## Cloud login and connection
 
-Choose **打开云端** from the local page, or open `https://<hub>/app/` from another device.
+Choose **打开云端** from the local page, or open the configured Hub's `/app/` from another device.
 Cloudflare Access handles browser sign-in; the Hub verifies its signed identity and applies
 the operator's role/device allowlist. Device uploads continue through `/v1/*`, independently
 of browser cookies. Do not distribute Hub admin/R2/Modal credentials to collectors.
@@ -116,26 +122,28 @@ explicit operator re-delivery resets the counter. Quarantine is a separate dispo
 
 ## Download, sign in, bind once
 
-Use the exact developer candidate supplied by the operator. Git, Python 3.11 with uv,
+Use the exact developer combination selected in reviewed release notes. Git, Python 3.11 with uv,
 Node 20+ and the qualified Mod/fixed collection tool remain explicit prerequisites. The
 workbench setup installs the locked `cloud` profile; collector computers do not need Torch,
 Transformers, model weights, a Platform checkout, R2 keys or a Cloudflare account.
 Full research/CI environments continue to use `--all-extras`.
 
-1. From the approved STPD checkout run `python tools/open_workbench.py --hub-url https://YOUR-HUB`.
+1. From the approved STPD checkout run the launch command in the
+   [project workflow](B_PIPELINE_HANDOFF.md#download-and-connect-once), retaining its explicit `--config` path.
    The launcher installs locked dependencies, preserves existing project settings and opens
    the same loopback workbench on subsequent launches. An upgrade first stops the exact
    predecessor and explicitly refreshes setup; the launcher never changes branches or rewrites it.
 2. Open **账号与电脑**, name this computer, and choose **登录并绑定这台电脑**.
    Follow the displayed cloud link. Use an invited project email and its email verification code.
-   The first approved login creates the project profile. Public self-registration is disabled.
+   The first approved device connection establishes the project profile. Public self-registration is disabled.
 3. Compare the computer name and pairing code on both pages, then approve. The local page
    obtains the grant itself; there is no copying tokens, callback URL or browser-local secret.
    The **查看范围** selector shows project-wide or one authorized computer's cloud data on
    either surface; **这台电脑** additionally shows the local queue.
 4. A new device still needs the operator's dedicated campaign configuration and explicit
    Human-origin/upload attestation. Pairing never enrolls an old recording or grants consent.
-   Reopen that configuration, pass owning preflight, and perform its bounded Close-to-receipt gate.
+   Follow [campaign attachment](B_PIPELINE_HANDOFF.md#attach-a-campaign-once-reopen-it-thereafter),
+   pass owning preflight, and perform its bounded Close-to-receipt gate.
 
 The device may remain authorized when the person logs out. Local logout clears personal pages
 and revokes its short-lived personal session when Hub is reachable; otherwise expiry bounds

@@ -25,7 +25,34 @@ shipped STS2 / qualified Platform Host Runtime
    data -> representation -> model -> training -> evaluation
 ```
 
-## Current developer data and cloud pipeline
+## Start here: collect and view project data
+
+The default project workflow is one qualified Platform game Mod, one STPD workbench and the
+same invited account in the local workbench and [cloud portal](https://hub.2-fire-2.com/).
+Record in the game, press Recorder **Close**, then inspect packaging, upload and remote
+acceptance in **采集记录**. The local **这台电脑** scope also shows the unuploaded queue.
+
+Follow [download, install, account/device setup, collection and maintenance](docs/B_PIPELINE_HANDOFF.md).
+It is the canonical everyday procedure, including the exact release combination to obtain,
+one-time campaign consent/configuration and recovery when a step fails. Choose a reviewed
+release or explicitly non-stable candidate; do not infer a supported build from a branch name.
+
+From that approved STPD checkout, the collector entry is:
+
+```bash
+python tools/open_workbench.py --config /ABS/project.json --hub-url https://hub.2-fire-2.com
+```
+
+The launcher installs the locked lightweight `cloud` dependencies and opens the workbench.
+Use the same private `--config` path on every launch. First-time collectors still need the
+qualified Mod/tool, invited login, device approval and operator-prepared campaign; opening
+the page alone does not start recording or authorize uploads. Models are separate downloads.
+See [the console guide](docs/PROJECT_CONSOLE.md) for screen meanings and
+[scoped release evidence](docs/evidence/B_UNIFIED_WORKFLOW_RELEASE_2026-09-13.md) for what has
+actually been tested. Uploaded evidence, an admitted Dataset and trained model quality are
+three different results.
+
+## Develop and research the data pipeline
 
 The Local-First Full-Run lane is separate from historical combat-v0. Platform owns semantic
 state, complete `A_sem(S)`, Human choice/Commit and causal successor; STPD consumes that
@@ -44,8 +71,6 @@ scientific campaign.
 uv sync --locked --all-extras
 npm ci
 uv run --locked python tools/project.py check
-uv run --locked python -m stpd.workbench project setup
-uv run --locked python -m stpd.workbench project doctor
 ```
 
 The common gate includes a clean-source CPU E2E with replacement-process resume, store
@@ -61,7 +86,7 @@ scoped cloud records, immutable Dataset/job/model lineage and operational eviden
 One invited account can view the same authorized project data in both shells and explicitly
 bind its computers. Personal sessions remain separate from background device uploads. Project
 data views are read-only; identity approval and local recovery are deliberate actions. The
-lightweight collector launcher is `python tools/open_workbench.py --hub-url https://YOUR-HUB`.
+lightweight collector launcher above uses the same workbench implementation.
 Real corpus sufficiency, actual storage/GPU qualification, Human Gold and STS2 live evaluation
 remain separately gated; source/test success is not service or scientific qualification.
 
@@ -162,7 +187,7 @@ See [v0 execution plan](docs/V0_EXECUTION_PLAN.md).
 - Qwen is accessed through a pinned, typed backend interface; model modules do not call
   Hugging Face implementation details directly.
 
-## Quick start: current integration smoke
+## Engineering smoke: retained integration lane
 
 ```bash
 uv sync --locked --all-extras
@@ -203,6 +228,9 @@ candidate artifact identity, and exact loaded Host identity remain independent e
 
 ## Repository navigation
 
+- [Default download, collection, cloud and maintenance workflow](docs/B_PIPELINE_HANDOFF.md)
+- [Local/cloud console, accounts and computers](docs/PROJECT_CONSOLE.md)
+- [Hub deployment, backup and incident runbook](deploy/hub/RUNBOOK.md)
 - [Document map](docs/DOCUMENT_MAP.md)
 - [Current status](docs/STATUS.md)
 - [Architecture](docs/ARCHITECTURE.md)

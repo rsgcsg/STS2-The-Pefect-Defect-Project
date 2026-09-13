@@ -1,12 +1,19 @@
 # Current Status
 
-## Developer B pipeline
+## Default workflow and B pipeline
 
 The B workstream implements collection delivery, independent bundle3 ingestion/projection,
 a durable CPU Hub, frozen feature jobs, disposable Modal execution and one developer entry.
-[Operations](CLOUD_PIPELINE_B.md) describes exact commands and remaining gates. No real cloud
-service, GPU execution, sufficient real training corpus or new model quality is claimed by
-these source changes. Scoped real Hub/OCI/TLS/R2/backup/restore receipts at source
+[The project workflow](B_PIPELINE_HANDOFF.md) is the default entry for approved downloads,
+account/device setup, collection, cloud views and maintenance. [Operations](CLOUD_PIPELINE_B.md)
+owns the data/worker commands. Current scoped account/service evidence is recorded in the
+[unified workflow release report](evidence/B_UNIFIED_WORKFLOW_RELEASE_2026-09-13.md): real Human
+login/approval occurred at `974c770493572746dd27fa23d894629aa6f8baa2`, and the existing account,
+device and receipt continuity were checked at `3555f0962f82b0e9b2ddb13b93cad7568cdcbafd`.
+Those exact receipts do not qualify later source, new users/devices, actual logout/relogin,
+GPU execution, sufficient real training corpus or model quality. Resolve any newer published
+combination and its own CI/service receipts before deployment. Scoped predecessor
+Hub/OCI/TLS/R2/backup/restore receipts at source
 `78896eee009e39933b5a1548da3567eda94bad6b` are retained in
 `refs/notes/stpd-hub-public-qualification` and `refs/notes/stpd-hub-live-qualification`.
 They used synthetic uploads and do not qualify a changed candidate, production Human
@@ -272,7 +279,8 @@ interpret future live parity as Core/B6 or open Gold-test. See the
 [AgenticSTS audit](evidence/AGENTICSTS_DATA_ADMISSION_AUDIT_2026-08-22.md),
 [Data and Provenance](DATA_AND_PROVENANCE.md), and [Roadmap](ROADMAP.md).
 
-The unified account candidate implements invited login, browser-approved computer binding,
-private local personal sessions, matching local/cloud project scope and typed same-device
-upload recovery. Identity operations use Hub schema3; deployment requires a paired predecessor
-backup/image and a fresh browser gate. This source does not itself establish production login.
+The unified account path implements invited login, browser-approved computer binding, private
+local personal sessions, matching local/cloud project scope and typed same-device upload
+recovery. Identity operations use Hub schema3. The scoped release report above owns actual
+login/service evidence; source implementation alone does not establish it. Each deployment
+retains a compatible backup/image pair and verifies its current account/receipt continuity.

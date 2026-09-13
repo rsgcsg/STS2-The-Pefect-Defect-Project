@@ -1,42 +1,35 @@
 # Current Context
 
-B pipeline work adds a version-pinned Platform bundle3 adapter, developer entry, durable Hub
-and one disposable Modal provider to the merged Pre-Full-Run Local-First system. Read
-CLOUD_PIPELINE_B, CLOUD_PIPELINE_B_PLAN and ADR-0004; re-resolve exact remote refs and receipts.
-Never infer a live cloud service or real GPU PASS from implementation or portable tests.
+The default cross-repository developer workflow is [B_PIPELINE_HANDOFF](../B_PIPELINE_HANDOFF.md):
+approved exact release combination -> one Platform Mod/fixed collection tool -> one STPD
+workbench -> invited account and explicit device binding -> dedicated attested campaign ->
+Recorder Close -> durable local outbox -> independently verified cloud receipt. The shared
+[console](../PROJECT_CONSOLE.md) shows the same authorized project views in both shells;
+the local queue remains local. Models are separate downloads. No floating sibling imports.
 
-Platform owns Close/native recording/immutable delivery verification; STPD owns admission,
-Dataset/model views/features/training/evaluation. Preserve H != S, execution A_sem(S), exact
-occurrence/parent/root lineage and separate Commit/successor. V1 research archives retain
-original identity; V2 is the new bundle3 projection, not a silent historical upgrade.
+The [unified workflow report](../evidence/B_UNIFIED_WORKFLOW_RELEASE_2026-09-13.md) records
+bounded Human approval at 974c770 and retained account/device/receipt continuity at 3555f09.
+Resolve current remote refs, release combination, CI and service receipts before promotion;
+historical source-bound evidence does not qualify a changed candidate. Actual logout/relogin,
+new-user/new-device Human usability and whole-host disaster recovery remain distinct gates.
 
-ArtifactStore is immutable. Registry is rebuildable. Hub operations.sqlite owns credentials,
-uploads, attempts/fences, budget reservations and result selection; back it up consistently,
-restore paused and reconcile remote work. Unknown submit/expired lease never means stopped.
+Platform owns recording/Close/native authority and immutable delivery verification. STPD
+owns projection/admission/Dataset/model views/features/training/evaluation. Preserve H != S,
+complete execution A_sem(S), exact occurrence/parent/root lineage and separate Commit/successor.
+V1 research archives keep their original identity; bundle3 ResearchTransitionV2 is versioned.
 
-Use tools/project.py check/closeout, including both clean-source CPU E2Es. Actual R2/OCI/Modal,
-sufficient independent real run components and model/runtime qualification remain distinct
-external gates. No new Full-Run model, Mac backend, cloud game, inference service or RL is
-implemented by this pipeline work. Historical combat-v0/H1/S1/Gold evidence keeps its scope.
+ArtifactStore is immutable. Registry/DuckDB are rebuildable. Hub operations.sqlite owns
+credentials, ownership, uploads, attempts/fences, budget reservations and result selection.
+Back it up consistently off host; restore paused with compatible image/config and reconcile
+actual provider work. Expiry or unknown submission never means stopped. Compute budget remains
+zero until separately authorized. Daily status/backup inspection is required while no tested
+off-host alert destination exists. The Hub runbook owns exact maintenance commands.
 
-Current release/terminal/maintenance workflow and ordered model-protocol freeze are in
-B_PIPELINE_HANDOFF.md. Never point a newly attested campaign at a historical recording root.
+Use tools/project.py check/closeout with both clean-source CPU E2Es. Collector launch uses
+the locked cloud profile; research and CI use all extras. A first approved upload is neither
+a Dataset nor a training permit. Freeze the full v1 research protocol after measured real
+admission/profile and a separately budgeted worker canary, before selection training.
 
-First dedicated Human Close-to-R2 and 412-record V2 projection passed at historical
-99aa819; see evidence/B_PIPELINE_FIRST_HUMAN_UPLOAD_2026-09-13.md. One run is not
-a Dataset. Preserve existing tool/outbox/receipts during Python diagnostic upgrades.
-
-The shared [project console](../PROJECT_CONSOLE.md) implements local/cloud read-only
-visibility. Platform Evidence rc.7 supplies safe owner summaries and bounded outbox queries;
-Cloudflare Access application JWTs gate browser pages with explicit role/device scopes.
-Missing browser configuration fails closed; source tests do not qualify actual login.
-Device uploads keep their existing independent authentication and consent boundary.
-
-
-The unified account candidate adds invited email login, explicit browser-approved device
-binding and personal read sessions in the local BFF. Persistent device delivery remains
-independent. Public project views are shared across local/cloud scope; the local queue is
-separately labelled. See PROJECT_CONSOLE and ADR-0005. Browser auth, new Hub DB migration,
-exact deployment and Human usability must be qualified at the new candidate; historical
-9566b11 service receipts are not current login proof. New accounts/devices do not grant
-campaign consent or reassign old uploads. Compute launch budget remains zero.
+Historical combat-v0/H1/S1/Gold evidence retains its scope. The B pipeline does not supply a
+new Full-Run model adapter, Mac backend, cloud game, inference service or RL implementation.
+Source/test, service, Human recording, data, training and scientific qualification stay separate.

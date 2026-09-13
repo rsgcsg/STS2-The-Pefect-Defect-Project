@@ -1,9 +1,97 @@
-# B pipeline: release, terminal handoff and next gates
+# Project workflow: download, collect, view and maintain
 
-This is the current cross-repository operator entry. [B operations](CLOUD_PIPELINE_B.md)
-owns the data/worker mechanics; [Hub runbook](../deploy/hub/RUNBOOK.md) owns host commands.
-This document defines their order and acceptance boundaries, not a claim that a deployment,
-Human session or training campaign passed. Exact receipts are bound to their own source.
+This is the default developer workflow for the whole project. The B pipeline is its current
+implementation: one Platform game Mod, one STPD workbench, one protected cloud portal and
+separately downloaded models. [B operations](CLOUD_PIPELINE_B.md) owns data/worker commands;
+the [Hub runbook](../deploy/hub/RUNBOOK.md) owns deployment and recovery commands;
+the [console guide](PROJECT_CONSOLE.md) explains the screens and account/device behavior.
+Do not maintain a separate set of setup instructions in a campaign or chat transcript.
+
+The project cloud entry is [hub.2-fire-2.com](https://hub.2-fire-2.com/). Its account page is
+protected; it is not a public dataset browser. Select the exact supported combination from
+reviewed release notes, then follow this guide. A branch name or an old private candidate ZIP
+is not a release identity. Current bounded qualification is recorded in
+[the unified workflow release report](evidence/B_UNIFIED_WORKFLOW_RELEASE_2026-09-13.md).
+
+## The everyday path
+
+| When | What to do | What confirms success |
+|---|---|---|
+| first install | obtain the approved Mod/tool and exact STPD checkout; run the launcher below | local workbench opens; project doctor passes |
+| first connection | log in with an invited email, compare the pairing code, approve this computer | the same named computer appears locally and in the cloud |
+| before first recording | obtain the operator's dedicated campaign configuration and explicitly authorize its upload/Human origin | delivery preflight checks the intended recording root and outbox |
+| each collection | open the same campaign, record in the game, press Recorder **Close** | collection detail reaches **云端已验收** with an exact remote receipt |
+| inspect data | use **采集记录** locally or in the cloud; use **这台电脑** for the local queue | recorded/failed counts, upload stage and research use are shown separately |
+| finish or reboot | use `project stop` when stopping delivery; open the same configuration after reboot | retained sealed work resumes under the same device and IDs |
+| upgrade or report a problem | follow the upgrade/incident procedure below | old evidence is retained and a new exact candidate has its own checks |
+
+An uploaded collection is not automatically a Dataset or a training launch. The ordered
+research gates below remain explicit, with compute launch budget zero until authorized.
+
+## Download and connect once
+
+1. Choose the reviewed release from [STPD Releases](https://github.com/rsgcsg/STS2-The-Perfect-Defect/releases)
+   and its linked [Platform release](https://github.com/rsgcsg/STS2-AI-PLATFORM/releases), or an
+   explicitly non-stable developer combination. Verify its
+   published hashes and supported operating system. Obtain STPD at the release's exact Git
+   commit, the single qualified Platform Mod, and the entire fixed collection-tool directory.
+   Use an exact Git checkout for this developer distribution; a generated source ZIP does not
+   carry the checkout identity used by the reviewed workflow.
+2. Install Git, Python 3.11/uv, Node 20+ and the collection tool's declared .NET runtime once.
+   The game must already be owned and installed. Install the Mod using the Platform release's
+   exact install/load instructions; do not copy game files from another developer.
+3. From that clean STPD checkout, open the workbench. Use the same explicit config path in
+   all commands; the launcher's user-state default and the lower-level CLI default differ.
+   Replace `/ABS/project.json` with the private path selected for this terminal:
+
+   ```bash
+   python tools/open_workbench.py --config /ABS/project.json --hub-url https://hub.2-fire-2.com
+   ```
+
+   The launcher installs the locked `cloud` profile and exact Node dependencies. It does not
+   select a Git revision, install the game Mod, attach a recording directory or authorize a
+   campaign. It preserves existing configuration. Collectors need no model weights, Torch,
+   Platform checkout, R2 keys, Cloudflare account or admin token.
+4. Open **账号与电脑 → 登录并绑定这台电脑**. Use the invited email and verification code,
+   compare the displayed computer name/pairing code and approve in the cloud. Return to the
+   local page; it stores credentials privately without copying tokens. Public self-signup
+   is disabled. Login authorizes account views; the separate device grant permits background
+   upload even after personal logout. It does not authorize recording or attest Human origin.
+5. Have the operator attach the dedicated campaign as described below. Save the approved
+   launcher command with its exact `--config` path as this terminal's normal entry. Each new
+   terminal performs a bounded first Close-to-receipt check before routine collection.
+
+Developers changing code and researchers running the full gate still use
+`uv sync --locked --all-extras` and `npm ci`; the lighter collector setup does not replace CI.
+
+## Attach a campaign once; reopen it thereafter
+
+The operator supplies a private Platform delivery configuration bound to the approved tool,
+device, Human attestation and initially empty recording root. This is the remaining deliberate
+setup step; account pairing alone is insufficient. Follow the version-pinned Platform
+Evidence DELIVERY guide for those fields. Do not point a new campaign at a historical archive.
+
+Stop an existing workbench before changing its configuration. Preserve its exact state directory
+so its personal session and device credential remain in place. Replace all placeholders with
+the approved existing values, including `--platform-url` if the terminal uses it:
+
+```bash
+uv run --locked python -m stpd.workbench project stop --config /ABS/project.json
+uv run --locked python -m stpd.workbench project setup --replace-config --config /ABS/project.json \
+  --state-dir /ABS/existing-workbench-state --hub-url https://hub.2-fire-2.com \
+  --delivery-config /ABS/delivery.json --platform-url http://127.0.0.1:PORT
+uv run --locked python -m stpd.workbench project doctor --config /ABS/project.json
+uv run --locked python -m stpd.workbench project open --config /ABS/project.json
+```
+
+Omit `--platform-url` only when it was deliberately unconfigured. Setup with replacement uses
+the supplied values; it does not merge omitted settings. Never move a retained outbox into a
+different device/campaign to clear an error. A failed doctor blocks collection startup.
+
+For daily reuse, run the saved launcher command or `project open --config /ABS/project.json`.
+Pressing Recorder **Close** seals the session; the running delivery service packages and sends
+it automatically. Keep the workbench process running until the remote receipt is observed.
+The browser tab can close independently. There is no installed OS autostart service.
 
 ## One system, separate owners
 
@@ -20,15 +108,12 @@ permission. A private registry is a supported future deployment choice, requirin
 read-only pull credentials and adapter/rotation tests; it is not a second training system.
 Do not put private payloads in image layers and then delete them in a later layer.
 
-## What is distributed now
+## Release builder and operator responsibilities
 
-B is a developer distribution, not a one-click player installer. Each participating terminal
-needs the owned game, one qualified Platform Mod, Git, Node 20+, Python 3.11/uv and the .NET
-runtime declared by the collection tool. Clone STPD at the operator-approved exact commit;
-`uv sync --locked --extra cloud` and `npm ci` supply the lighter collector dependencies;
-researchers and CI use `--all-extras`. `tools/open_workbench.py` is the shared launcher. A Platform
-clone is needed only by Platform developers or the release builder, not every collector.
-There is one external workbench command surface; models are optional separate downloads.
+B remains a developer distribution, not a one-click player installer. A Platform clone is
+needed only by Platform developers or the release builder. Both repositories retain independent
+versions and source authority. The approved combination links their artifacts; it does not
+create a third source repository or a floating sibling dependency.
 
 The release builder produces the fixed collection-tool directory once, from a clean exact
 Platform checkout, using its `publish:collection-tool` command. Distribute the entire directory,
@@ -51,6 +136,12 @@ A reviewable terminal handoff contains:
 Do not distribute a developer's `.local`, `.env`, home directory, SQLite or outbox. Never give
 collectors R2 access keys, the Hub admin token, registry publish credentials or Modal credentials.
 A copied public handoff is a template; it cannot grant consent on behalf of another operator.
+
+Publish the reviewed combination, inventories, hashes and supported OS in versioned release
+notes before advertising a download. Include the exact Hub OCI digest/source/lock and rollback
+pair separately from the terminal Mod/tool identity. A local generated kit is a candidate until
+its distribution location and inventory are verified. The cloud landing page's guide follows
+the deployed source; a Git merge alone does not update the running service or collectors.
 
 ## First terminal and real-upload gate
 
@@ -87,6 +178,13 @@ The Human can keep playing offline; upload state is not native decision validity
 
 ## Daily work, upgrades and incidents
 
+Before distributing a new combination, stop the owned local process, retain its configuration,
+credentials, raw sessions, bundles and outbox, and move the clean checkout to the reviewed exact
+revision. Use explicit replacement setup with the same state/campaign settings, run doctor,
+then reopen. The launcher does not silently replace a changed combination. Recheck local/cloud
+identity and receipt continuity; repeat the owning native or delivery canary when affected.
+Roll back with the recorded compatible source/tool/config pair, never by rewriting evidence.
+
 | Event | Required workflow | Retained evidence |
 |---|---|---|
 | ordinary code change | owner branch/PR, falsifying regression, common gate, fresh actual-diff review, latest CI | exact source/test receipt |
@@ -107,6 +205,21 @@ secrets, certificate state and provider access; a SQLite restore alone does not 
 Retain complete incident evidence privately. Public issues/PRs contain redacted findings and
 identities, never raw sessions or credentials. Reproduce on the exact version, fix the owner,
 add a regression, publish new artifacts, then canary before expanding distribution.
+
+The operator performs a daily check until an external alert channel is separately configured:
+
+| Check | Where | Action when missing or wrong |
+|---|---|---|
+| cloud reachability and exact producer | public `/health`, then authenticated **系统** | inspect DNS/TLS/host and the deployed digest; a healthy API does not prove login |
+| stuck delivery or native failures | **采集记录** detail, last observation, receipt and local queue | keep original bytes; route by the first failing owner rather than re-recording a success |
+| budget, pending age and disk pressure | **作业／系统**, `hubctl status` and host disk metrics in the runbook | keep dispatch paused/budget zero; investigate before increasing limits |
+| backup freshness and timer | runbook `maintenance.py status` and `systemctl list-timers stpd-backup.timer` | inspect the failed stage and verify a new off-host backup/readback |
+| recoverability | isolated restore drill after deployment/schema change and on the operator's review schedule | retain image/config/secret recovery material; prove restored state before trusting it |
+
+Backup failure/status is persisted, but no email/webhook/off-host outage alert is promised.
+The console cannot announce its own dead host. Save a redacted issue with exact combination,
+OS, timestamp, collection/upload/receipt IDs, typed error and reproduction; link private evidence
+through the authorized channel. Never include credentials, signed URLs or raw Human payloads.
 
 One Hub with SQLite and one active verifier is the deliberate initial scale. Measure queue age,
 verification wall time, disk/scratch and worker memory before raising limits. Many collectors
@@ -172,10 +285,11 @@ success or an automatic retry into research admission.
 
 ## Read-only local and cloud visibility
 
-Use the [project console guide](PROJECT_CONSOLE.md) for daily operation and
+Use the [project console guide](PROJECT_CONSOLE.md) for screen interpretation and
 [ADR-0005](adr/0005-local-cloud-console.md) for ownership. The same console serves
-local device status and the protected cloud portal. Local setup retains a device
-credential; cloud browser login is separate and cannot control a collector.
+local device status and the protected cloud portal. The invited account gives both shells the
+same authorized project view; an independently retained device credential owns background
+upload. The cloud cannot control the collector or inspect its unuploaded local queue.
 Deployment of code does not qualify a Cloudflare Access application or an actual
 browser login. The Hub runbook records that external activation gate. No GPU is
 started by opening any console page.
