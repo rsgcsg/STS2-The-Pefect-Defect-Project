@@ -1,24 +1,34 @@
-## Change
+## Change identity
 
-Describe the owning layer, problem, and smallest implemented change.
+- Repository: rsgcsg/STS2-The-Perfect-Defect
+- Exact base branch/SHA:
+- Exact latest head branch/SHA:
+- Change class (G0-G6), primary owner and owning fact:
+- Merge method and any stacked prerequisites:
 
-## Evidence
+## Scope and design
 
-- Source/tests:
-- Runtime/GPU/data evidence, when applicable:
-- Exact source/data/model/Host/Connector identities:
+- Problem, implemented change and justified design deviations:
+- Failure model and recovery:
+- Affected contracts/consumers:
+- Exact Platform pin and cross-repo impact:
+- Data / Model / Scientific-protocol / Service impact:
+- Non-goals:
 
-## Non-goals and non-claims
+## Evidence at this head
 
-State what this change does not prove or implement.
+- Focused tests and fresh review:
+- Full Linux / Windows / locked-python CI:
+- Package, patch hygiene and fixture E2E:
+- Exact source/data/model/runtime/protocol identities where applicable:
+- Remaining non-claims and real external/Human gates:
 
-## Checklist
+## Rollback
 
-- [ ] Public interfaces are typed and documented.
-- [ ] Pure tests pass without STS2, Qwen weights, GPU, or network.
-- [ ] No hidden facts, Host-local IDs, or native operands enter model inputs.
-- [ ] Data/model/environment provenance and seeds are explicit.
-- [ ] New canonical docs are linked from `docs/DOCUMENT_MAP.md`.
-- [ ] Status, ADR, and memory files are updated when facts or decisions change.
-- [ ] Raw data, weights, proprietary files, credentials, and private paths are absent.
-- [ ] Claims distinguish implementation, tests, runtime evidence, and inference.
+Explain code/config rollback and artifact/evidence quarantine without rewriting history.
+
+## Review
+
+Confirm typed boundaries, failure regressions, no hidden/native/future model features,
+immutable provenance, updated canonical docs/routes/memory, no secrets/raw data/weights,
+and no transfer of source/test evidence into runtime or scientific claims.

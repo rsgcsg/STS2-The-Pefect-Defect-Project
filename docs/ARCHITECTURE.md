@@ -1,6 +1,38 @@
 # Architecture
 
-## Goal
+## Current Full-Run architecture
+
+GitHub owns source. Local tools own control and analysis; generic S3-compatible or local
+ArtifactStore owns immutable artifacts. SQLite Registry is a rebuildable manifest projection.
+The B Hub operations SQLite separately owns mutable upload/attempt/budget state and must be
+backed up; it is never rebuilt from a Registry cache. See [ADR-0004](adr/0004-developer-cloud-hub.md)
+and [B operations](CLOUD_PIPELINE_B.md).
+DuckDB and local static HTML consume projections. Cloud GPU is disposable compute using the
+same Worker contract. Hub selects validated candidate results with durable attempt fences, without changing artifact IDs.
+The B deployment adds one permanent CPU service and one provider adapter; training stays shared.
+
+Platform owns S, complete A_sem(S), exact Human action, native Commit and causal successor.
+Preserve H != S and A_public != A_sem(S). `stpd/fullrun` consumes a separately versioned
+ResearchTransitionV1/V2. The pinned bundle3 adapter preserves public and native execution
+catalog authority as distinct facts. The synthetic adapter remains only engineering input.
+
+```text
+verified Platform bundle3 source / explicit synthetic engineering source
+  -> ResearchTransitionV1/V2 -> admission/dedup/whole-run component split -> Dataset
+  -> provisional Lite/Standard/Full ModelView -> frozen Qwen/FakeQwen FeatureSet
+  -> exact TrainingInput -> Experiment/Run -> provider-neutral Worker
+  -> durable Checkpoint/resume -> shared Linear/MLP Model -> OfflineEvaluation
+ArtifactStore <-> rebuildable Registry -> DuckDB / local Dashboard / readiness receipts
+Gold tasks/annotations and E0-E7 protocol tooling remain research-owned and isolated
+```
+
+Core contracts live in `artifact_contracts.py`, `fullrun/`, and `workers/`; mechanisms live
+in `storage/` and `workbench/`. Training consumes immutable feature vectors and never chooses
+its dataset, scientific config or semantic actions. `surface`, `family`, and `domain` are
+metadata for stratification rather than model routing. Standard remains provisional pending
+real-corpus profiling. Historical research and live policy namespaces remain reproducible.
+
+## Historical v0 goal
 
 STPD is a research system for learning and evaluating action scores over the complete
 finite legal action set supplied by the Player Environment:
@@ -151,3 +183,18 @@ policy source closure, not only the process entrypoint.
 - Identity/schema/model/data drift: invalidate the affected cache/evidence.
 - Unknown external data rights or provenance: exclude from training.
 - Final-test leakage: invalidate the experiment, not merely the metric.
+
+## Project console boundary
+
+`console/` owns a shared dependency-free browser shell. Local `workbench/console.py`
+composes the public Platform delivery projection and device-authenticated Hub reads;
+`hub/console_*` owns scoped cloud metadata, signed browser identity and rebuildable
+indexes. Browser GET never verifies raw evidence, runs admission or launches compute.
+Existing immutable artifacts and durable operations remain the authorities. See
+[ADR-0005](adr/0005-local-cloud-console.md) and the [console guide](PROJECT_CONSOLE.md).
+
+The shared console's account extension keeps personal read sessions in the local BFF and
+persistent upload grants in the delivery child. Hub owns invited membership and explicit
+computer ownership. Cloud project pages and local project scope consume the same APIs;
+local queue state is separately labelled. Pairing and credential recovery do not grant
+Human origin, campaign consent, Dataset admission or gameplay authority.

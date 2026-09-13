@@ -9,6 +9,11 @@ STPD studies decision models for *Slay the Spire 2*. The project owns research-s
 projection, datasets, model representations, learning, evaluation, and experiment
 provenance. It does **not** own game rules, legality, RNG, effects, or execution.
 
+Within the wider project system, STS2 AI Platform is the upper-level foundation
+and STPD is an independently versioned research project mounted on its public
+contracts. Repository independence isolates research lifecycle; it does not
+make STPD a peer platform or transfer environment authority to it.
+
 ```text
 shipped STS2 / qualified Platform Host Runtime
                   |
@@ -20,7 +25,72 @@ shipped STS2 / qualified Platform Host Runtime
    data -> representation -> model -> training -> evaluation
 ```
 
-## What exists today
+## Start here: collect and view project data
+
+The default project workflow is one qualified Platform game Mod, one STPD workbench and the
+same invited account in the local workbench and [cloud portal](https://hub.2-fire-2.com/).
+Record in the game, press Recorder **Close**, then inspect packaging, upload and remote
+acceptance in **采集记录**. The local **这台电脑** scope also shows the unuploaded queue.
+
+Follow [download, install, account/device setup, collection and maintenance](docs/B_PIPELINE_HANDOFF.md).
+It is the canonical everyday procedure, including the exact release combination to obtain,
+one-time campaign consent/configuration and recovery when a step fails. Choose a reviewed
+release or explicitly non-stable candidate; do not infer a supported build from a branch name.
+
+From that approved STPD checkout, the collector entry is:
+
+```bash
+python tools/open_workbench.py --config /ABS/project.json --hub-url https://hub.2-fire-2.com
+```
+
+The launcher installs the locked lightweight `cloud` dependencies and opens the workbench.
+Use the same private `--config` path on every launch. First-time collectors still need the
+qualified Mod/tool, invited login, device approval and operator-prepared campaign; opening
+the page alone does not start recording or authorize uploads. Models are separate downloads.
+See [the console guide](docs/PROJECT_CONSOLE.md) for screen meanings and
+[scoped release evidence](docs/evidence/B_UNIFIED_WORKFLOW_RELEASE_2026-09-13.md) for what has
+actually been tested. Uploaded evidence, an admitted Dataset and trained model quality are
+three different results.
+
+## Develop and research the data pipeline
+
+The Local-First Full-Run lane is separate from historical combat-v0. Platform owns semantic
+state, complete `A_sem(S)`, Human choice/Commit and causal successor; STPD consumes that
+contract without reconstructing native authority. The pinned Platform bundle3 adapter preserves first-class occurrences, exact parent/root lineage,
+execution catalogs and Read/Commit/successor evidence. Synthetic input remains explicitly separate.
+
+The implemented flow is Dataset → provisional ModelView → frozen FeatureSet → TrainingInput
+→ disposable Worker → Checkpoint/Model → OfflineEvaluation. Local/S3-compatible ArtifactStore
+owns immutable bytes/manifests. The Registry SQLite is rebuildable; the Hub operations SQLite
+is durable and requires backup. DuckDB plus a local dashboard
+provide projections. One shared Linear/MLP candidate scorer spans all surfaces; Qwen never
+outputs native commands. Gold tooling and E0–E7 configuration do not imply Human labels or a
+scientific campaign.
+
+```bash
+uv sync --locked --all-extras
+npm ci
+uv run --locked python tools/project.py check
+```
+
+The common gate includes a clean-source CPU E2E with replacement-process resume, store
+transfer, Registry deletion/rebuild and dashboard/analysis. Hosted Linux and Windows run
+that same gate; latest exact-source evidence determines readiness.
+See [operations](docs/PREFULLRUN_OPERATIONS.md), [research](docs/FULLRUN_RESEARCH.md),
+[training](docs/FULLRUN_TRAINING.md), [Gold](docs/FULLRUN_GOLD.md), and
+[workbench](docs/LOCAL_WORKBENCH.md). The B lane adds close-to-outbox delivery, private evidence ingress, a CPU Hub and disposable
+Modal execution using existing research workers. Start with [release, terminal handoff and next gates](docs/B_PIPELINE_HANDOFF.md),
+then [B pipeline operations](docs/CLOUD_PIPELINE_B.md).
+The [shared project console](docs/PROJECT_CONSOLE.md) connects local delivery status with
+scoped cloud records, immutable Dataset/job/model lineage and operational evidence.
+One invited account can view the same authorized project data in both shells and explicitly
+bind its computers. Personal sessions remain separate from background device uploads. Project
+data views are read-only; identity approval and local recovery are deliberate actions. The
+lightweight collector launcher above uses the same workbench implementation.
+Real corpus sufficiency, actual storage/GPU qualification, Human Gold and STS2 live evaluation
+remain separately gated; source/test success is not service or scientific qualification.
+
+## Retained historical combat-v0 and integration evidence
 
 The current package contains the v0 engineering lane, an admitted real frozen-Qwen L2
 backend, and the retained H1 integration regression tools:
@@ -117,7 +187,7 @@ See [v0 execution plan](docs/V0_EXECUTION_PLAN.md).
 - Qwen is accessed through a pinned, typed backend interface; model modules do not call
   Hugging Face implementation details directly.
 
-## Quick start: current integration smoke
+## Engineering smoke: retained integration lane
 
 ```bash
 uv sync --locked --all-extras
@@ -158,11 +228,15 @@ candidate artifact identity, and exact loaded Host identity remain independent e
 
 ## Repository navigation
 
+- [Default download, collection, cloud and maintenance workflow](docs/B_PIPELINE_HANDOFF.md)
+- [Local/cloud console, accounts and computers](docs/PROJECT_CONSOLE.md)
+- [Hub deployment, backup and incident runbook](deploy/hub/RUNBOOK.md)
 - [Document map](docs/DOCUMENT_MAP.md)
 - [Current status](docs/STATUS.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Interfaces](docs/INTERFACES.md)
 - [Data and provenance](docs/DATA_AND_PROVENANCE.md)
+- [End-to-end data lifecycle and training-host handoff](docs/DATA_LIFECYCLE.md)
 - [Human corpus lane](docs/HUMAN_CORPUS.md)
 - [Qwen integration](docs/QWEN_INTEGRATION.md)
 - [Qwen L2 operations and owner handoff](docs/QWEN_L2_OPERATIONS.md)
@@ -172,6 +246,7 @@ candidate artifact identity, and exact loaded Host identity remain independent e
 - [Roadmap](docs/ROADMAP.md)
 - [Pre-Qwen operations and historical L1 handoff](docs/PRE_QWEN_OPERATIONS.md)
 - [Agent and contributor rules](AGENTS.md)
+- [Development workflow](docs/DEVELOPMENT_WORKFLOW.md)
 
 The project is evidence-first: a test, implementation, benchmark, and runtime claim are
 separate facts. Every result must identify source, data, model, Host, Connector, seeds,
