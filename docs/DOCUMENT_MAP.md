@@ -9,6 +9,7 @@ classes are defined in [Engineering Governance](ENGINEERING_GOVERNANCE.md).
 
 | Document | Responsibility |
 |---|---|
+| [Default project workflow](B_PIPELINE_HANDOFF.md) | approved download/install, account/device, collection/cloud views, upgrades and incidents |
 | [New Engineer Guide](NEW_ENGINEER_GUIDE.md) | first checkout and ownership orientation |
 | [Status](STATUS.md) | implemented/measured state and non-claims |
 | [Project System](PROJECT_SYSTEM.md) | context/check/closeout and bounded memory |
@@ -66,3 +67,25 @@ not copied source trees, shared branches or submodules.
 
 - [Pre-Full-Run AI closeout](PREFULLRUN_AI_CLOSEOUT.md)
 - [Human and external-input handoff](PREFULLRUN_HUMAN_HANDOFF.md)
+
+## Default project workflow and cloud B implementation
+
+- [Shared local/cloud project console](PROJECT_CONSOLE.md)
+- [ADR-0005: console authority and authentication](adr/0005-local-cloud-console.md)
+
+- [Download, collect, view, maintain and freeze the training plan](B_PIPELINE_HANDOFF.md)
+
+- [B operations and external gates](CLOUD_PIPELINE_B.md)
+- [Execution scope and acceptance plan](CLOUD_PIPELINE_B_PLAN.md)
+- [ADR-0004: durable Hub](adr/0004-developer-cloud-hub.md)
+
+- [B architecture and operational closeout review](evidence/B_PIPELINE_QUALITY_CLOSEOUT_2026-09-12.md)
+
+- [First dedicated Human upload and projection audit](evidence/B_PIPELINE_FIRST_HUMAN_UPLOAD_2026-09-13.md)
+
+- [Unified workflow release and bounded account/service qualification](evidence/B_UNIFIED_WORKFLOW_RELEASE_2026-09-13.md)
+
+[Account and device protocol](IDENTITY_PROTOCOL.md) defines invited membership, approval,
+personal sessions, scoped devices, credential recovery and operations schema migration.
+
+[Packaging identity correction](evidence/B_WORKFLOW_PACKAGING_IDENTITY_CORRECTION_2026-09-13.md) records exact BOM file bytes and distinct tool revisions.
