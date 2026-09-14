@@ -10,7 +10,7 @@ model capabilities. These pages describe current source, not proof that an older
 release has the new UI. Use a qualified exact release combination and its service/Human receipts.
 
 Start with the [default project workflow](B_PIPELINE_HANDOFF.md) to obtain an approved exact
-combination, install it and attach the campaign once. This guide owns screen meaning and
+combination, install it and complete daily recording setup once. This guide owns screen meaning and
 account/recovery behavior. The project cloud entry is [hub.2-fire-2.com](https://hub.2-fire-2.com/);
 cloud project data requires an invited login. A successful deployment does not authorize
 collection or make historical receipts current evidence.
@@ -69,7 +69,7 @@ processes running as the same OS user; separate OS accounts provide that boundar
 
 | Page | Purpose |
 |---|---|
-| 概览 | local/authorized cloud counts, known quality totals and the latest collections |
+| 概览 | persisted local setup stages, local/authorized cloud counts, known quality totals and the latest uploads |
 | 采集记录 | paginated sessions, native run boundaries, owner quality, transfer stages, receipt and timeline |
 | 数据集 | authorized immutable Dataset metadata, source references and research usage |
 | 数据统计 | actual received totals, owner summary coverage and available facets; unknown stays unknown |
@@ -77,7 +77,7 @@ processes running as the same OS user; separate OS accounts provide that boundar
 | 训练与分析 | existing Dataset/job/result lineage and analysis; job submission remains with the owning CLI and budget gates |
 | 模型与评估 | model artifact lineage; local catalog, compatibility checks and explicit supported Runtime controls |
 | 账号与电脑 | profile available at first verified login; explicit computer pairing and separate upload authorization |
-| 采集活动 | administrator-versioned activity, device-owner consent and inactive dedicated local preparation |
+| 录制与上传 | daily default, saved device-owner consent, local preparation/binding/upload activation; topic activities in advanced options |
 | 成员管理 | browser-admin invitations, current status, quotas and explicit revocation |
 | 系统 | connection, source/lock, role scope, available backup state and explicit operational non-claims |
 
@@ -100,6 +100,37 @@ show actual use without inventing a current admission report for unassessed data
 Upload attempts include normal receipt checks. A stale cloud connection preserves the latest
 confirmed receipt and its observation time. No percentage/ETA or historical phase timestamp is
 fabricated. The list supports 25/50 rows; the search box explicitly filters only the current page.
+
+## Recording setup and saved state
+
+**录制与上传** starts with the administrator's daily default. Members review the purpose and
+explicitly confirm Human origin, upload and project-member sharing. No checkbox is preselected.
+The cloud administrator edits the default with name, description and consent fields; a new
+purpose/consent version does not replace already saved declarations. Topic activities and
+previous enrollments stay under **高级选项：专题活动与已有授权**.
+
+Local setup distinguishes five stages: account/device, recorded consent, saved configuration,
+current game connection and background upload. **准备本机录制配置** creates inactive private
+paths; **绑定本机录制目录** uses the packaged Platform helper while the game is closed; after
+launching the game, **启用本机上传** requires fresh native binding and delivery preflight.
+The binding field accepts a local game directory only on the collector's workbench. Cloud
+views cannot bind local files, start the game or activate its uploader.
+
+Refresh and a new browser session read persisted consent/configuration again. They do not
+repeat attestation or infer native readiness from a saved file. A stopped game may have a
+configured destination without a confirmed loaded identity. A running uploader and a verified
+remote receipt are separate observations. Missing or invalid state remains explicit. An existing
+attached enrollment remains visible when it is older than the first page or no longer the default.
+
+In **采集记录**, activity names come from the exact verified upload/device/enrollment join.
+Unlinked history and not-yet-associated local rows stay explicit; names alone grant neither
+sharing permission nor research admission. The current-page filter accepts activity names.
+
+Daily template v2 separates consent/purpose from installed software. Software changes alone do
+not renew that consent; every actual tool, native load and outbox keeps an exact identity.
+Historical v1 templates keep their original software pins. An existing outbox is not upgraded
+by registering another tool, and controlled rollover is not automated in this bounded workflow.
+See [maintenance](B_PIPELINE_HANDOFF.md#daily-work-upgrades-and-incidents) before updating.
 
 ## Existing data and upgrades
 
@@ -217,13 +248,13 @@ Full research/CI environments continue to use `--all-extras`.
    obtains the grant itself; there is no copying tokens, callback URL or browser-local secret.
    The **查看范围** selector shows project-wide or one authorized computer's cloud data on
    either surface; **这台电脑** additionally shows the local queue.
-4. Register the trusted fixed tool once with `project collection-tool` as shown in the
-   [project workflow](B_PIPELINE_HANDOFF.md#attach-a-campaign-once-reopen-it-thereafter).
-   Select an approved **采集活动** and explicitly declare Human origin, upload and project
-   sharing consent. Prepare fresh local paths, then have the operator verify native binding
-   and attach its configuration. Pairing never enrolls an old recording or grants consent.
-   Follow [campaign attachment](B_PIPELINE_HANDOFF.md#attach-a-campaign-once-reopen-it-thereafter),
-   pass owning preflight, and perform its bounded Close-to-receipt gate.
+4. Stop the workbench, register the trusted fixed tool, then reopen the same configuration,
+   as shown in [daily recording setup](B_PIPELINE_HANDOFF.md#set-up-daily-recording-once-reopen-it-thereafter).
+   Registration holds the stopped-workbench lock; closing a browser tab is insufficient.
+5. Open **录制与上传**, review the daily default and give the three explicit declarations.
+   Prepare local files, close the game and bind its recording directory, then launch and refresh.
+   Enable uploads only after the current native connection passes. No topic activity is required.
+   Finish this terminal's bounded Recorder Close-to-receipt check before routine recording.
 
 The device may remain authorized when the person logs out. Local logout clears personal pages
 and revokes its short-lived personal session when Hub is reachable; otherwise expiry bounds
