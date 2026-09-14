@@ -76,8 +76,8 @@ configuration. Keep the workbench running for uploads; closing a tab does not st
 
 Daily consent v2 does not pin software, but an existing outbox retains its exact tool release.
 Registering a new tool does not upgrade a saved queue. Use the documented stopped-workbench
-collection-upgrade procedure for an eligible v2 completed queue; retain the old valid tool. Never rewrite
-an outbox identity or enroll an old recording archive to force an upgrade.
+collection-upgrade procedure for an eligible v2 completed queue; retain the old valid tool. Never
+rewrite an outbox identity or enroll an old recording archive to force an upgrade.
 
 Retain raw recordings, failed evidence and outbox IDs. Never copy credentials into reports.
 See docs/B_PIPELINE_HANDOFF.md for the full workflow, docs/PROJECT_CONSOLE.md for screen meaning
