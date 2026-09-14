@@ -105,6 +105,20 @@ The Hub operator uses `console-refresh` to index existing verified artifacts. Br
 perform this work. Updating code or an index is not permission to enroll historical Human data
 in a new consent scope. Upgrade the exact developer combination, never just a sibling import.
 
+Category profiles are explicit, bounded owner work. Use `python -m stpd.hub statistics-refresh
+--upload EXACT_UPLOAD_ID` (or repeat `--dataset-id EXACT_DATASET_ID`), together with the deployed
+state/store arguments, to materialize up to ten sources. The result distinguishes available
+profiles from failed projections. It changes no receipt, Dataset admission or source artifact.
+The administrator API `POST /app/api/admin/statistics/refresh` accepts the same bounded
+`upload_ids` / `dataset_ids` selection with browser Origin/CSRF proof; it performs CPU work and
+is not called by page refresh. No UI request infers categories from action labels.
+
+New consented enrollments bind sharing only after exact receiver verification. For a historical
+upload, an owner can use `python -m stpd.hub collection-sharing --upload EXACT_UPLOAD_ID
+--evidence APPROVAL_SHA256 --approve-sharing` only after reviewing its explicit scoped approval;
+`--revoke-sharing` prevents subsequent export reads. Neither action rewrites old consent or
+deletes data already downloaded. An automatic verifier retry never overwrites a revoked grant.
+
 ## Incidents and future work
 
 Inspect the collection detail for the owning error, exact IDs and last confirmed stage. Preserve

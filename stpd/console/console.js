@@ -1109,6 +1109,7 @@ $("lifecycle-note").textContent = localShell
   ? "关闭网页 ≠ 停止后台投递"
   : "邀请制项目 · 共享数据按权限访问";
 window.SpireProject.reload = () => load(true);
+window.SpireProject.navigate = (view, id = null) => navigate(view, id);
 window.addEventListener("popstate", () => {
   readLocation();
   load(true);
