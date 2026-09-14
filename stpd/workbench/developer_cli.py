@@ -61,6 +61,7 @@ def main(argv: list[str] | None = None) -> int:
             "model",
             "credential",
             "collection-tool",
+            "collection-upgrade",
         ),
     )
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
@@ -118,6 +119,9 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="explicitly replace a previous private CollectionTool registration",
     )
+    parser.add_argument("--enrollment-id")
+    parser.add_argument("--phase", choices=("prepare", "activate"))
+    parser.add_argument("--game-directory", type=Path)
     args = parser.parse_args(argv)
     try:
         result: Any
@@ -151,6 +155,18 @@ def main(argv: list[str] | None = None) -> int:
                     selection=args.selection,
                     artifact=args.artifact,
                     runtime_archive=args.runtime_archive,
+                )
+            elif args.command == "collection-upgrade":
+                from .collection_upgrade import upgrade
+
+                if not args.enrollment_id or not args.tool_release_id or not args.phase:
+                    raise BoundaryError("collection_upgrade", "enrollment_tool_and_phase_required")
+                result = upgrade(
+                    args.config,
+                    args.enrollment_id,
+                    args.tool_release_id,
+                    phase=args.phase,
+                    game_directory=args.game_directory,
                 )
             elif args.command == "collection-tool":
                 from .collection_tool_registration import register_collection_tool

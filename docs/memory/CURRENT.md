@@ -14,13 +14,13 @@ activities remain in advanced settings. Preparation, current Platform-owned nati
 and upload activation are distinct persistent stages. Actual software identities remain in
 the fixed tool/native evidence, with no game-version pin in daily consent. Historical v1
 constraints and each existing outbox's exact tool identity remain unchanged. Registration
-of a new tool is not a queue migration; automated software rollover is outside this closeout.
+of a new tool is not a queue migration. Explicit stopped-workbench collection-upgrade prepares
+a fresh generation under the same v2 consent after Evidence proves old completion.
 Promotion requires this candidate's package, service and new-member Close-to-receipt gate.
 
 Historical [workflow](../evidence/B_UNIFIED_WORKFLOW_RELEASE_2026-09-13.md) and
 [multi-profile](../evidence/B_MULTI_PROFILE_REVIEW_2026-09-14.md) receipts retain their scope.
-Resolve current refs, package, CI and service identities before promotion; new-member
-recording and whole-host recovery remain distinct gates.
+Resolve live refs/package/CI before promotion; recording and whole-host recovery remain distinct.
 
 Platform owns recording/Close/native authority and immutable delivery verification. STPD
 owns projection/admission/Dataset/model views/features/training/evaluation. Preserve H != S,

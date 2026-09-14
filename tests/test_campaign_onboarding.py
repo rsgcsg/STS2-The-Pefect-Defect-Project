@@ -230,9 +230,7 @@ def test_prepare_rejects_remote_and_local_identity_drift_before_creating_roots(c
     assert not (config.state_dir / "campaigns").exists()
 
 
-def test_incomplete_publication_remains_fail_closed_without_recreating_history(
-    campaign, monkeypatch
-):
+def test_unpublished_partial_preparation_can_retry_without_adopting_history(campaign, monkeypatch):
     selected = enroll(campaign)
     _, _, _, _, config, tool = campaign
     import stpd.workbench.campaign_prepare as module
@@ -248,8 +246,9 @@ def test_incomplete_publication_remains_fail_closed_without_recreating_history(
     with pytest.raises(OSError):
         prepare_campaign(config, selected, tool)
     monkeypatch.setattr(module, "atomic_json", write)
-    with pytest.raises(BoundaryError, match="preparation_exists_or_incomplete"):
-        prepare_campaign(config, selected, tool)
+    assert not (config.state_dir / "campaigns" / selected["enrollment_id"]).exists()
+    prepared = prepare_campaign(config, selected, tool)
+    assert list(Path(prepared["recordings_root"]).iterdir()) == []
     assert config.delivery_config is None
     assert len(list((config.state_dir / "campaigns").iterdir())) == 1
 
@@ -282,3 +281,15 @@ def test_template_rejects_unversioned_or_private_fields(campaign):
     future = {**enroll(campaign), "declared_at": time.time(), "consent": {}}
     with pytest.raises(ValueError):
         validate_enrollment(future)
+
+
+def test_unknown_existing_preparation_directory_is_never_replaced(campaign):
+    selected = enroll(campaign)
+    _, _, _, _, config, tool = campaign
+    directory = config.state_dir / "campaigns" / selected["enrollment_id"]
+    directory.mkdir(parents=True)
+    marker = directory / "unknown-recording"
+    marker.write_bytes(b"must remain unchanged")
+    with pytest.raises(BoundaryError, match="preparation_exists_or_incomplete"):
+        prepare_campaign(config, selected, tool)
+    assert marker.read_bytes() == b"must remain unchanged"

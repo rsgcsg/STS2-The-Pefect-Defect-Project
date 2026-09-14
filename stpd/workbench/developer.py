@@ -7,6 +7,7 @@ research admission, and never starts gameplay as a side effect of opening its UI
 from __future__ import annotations
 
 import base64
+import contextlib
 import hashlib
 import importlib.machinery
 import importlib.metadata
@@ -148,6 +149,41 @@ class ProjectConfig:
 
 
 def setup(
+    path: Path,
+    *,
+    state_dir: Path,
+    hub_url: str = "",
+    platform_url: str = "",
+    delivery_config: Path | None = None,
+    install: bool = True,
+    replace_config: bool = False,
+) -> dict[str, Any]:
+    from .developer_server import instance_lock
+
+    # Serialize configuration writers, including a relocation between state directories.
+    # The same state lock excludes a live workbench or a stopped maintenance operation.
+    with instance_lock(path.with_name(f".{path.name}.configure.lock")):
+        current = (
+            ProjectConfig.load(path, require_current_combination=False) if path.exists() else None
+        )
+        states = {state_dir.expanduser().resolve()}
+        if current is not None:
+            states.add(current.state_dir)
+        with contextlib.ExitStack() as held:
+            for state in sorted(states):
+                held.enter_context(instance_lock(state / "instance.lock"))
+            return _setup_unlocked(
+                path,
+                state_dir=state_dir,
+                hub_url=hub_url,
+                platform_url=platform_url,
+                delivery_config=delivery_config,
+                install=install,
+                replace_config=replace_config,
+            )
+
+
+def _setup_unlocked(
     path: Path,
     *,
     state_dir: Path,

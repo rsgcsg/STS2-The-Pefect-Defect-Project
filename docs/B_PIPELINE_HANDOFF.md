@@ -302,18 +302,59 @@ it does not change a saved preparation, replace the uploader's tool, or migrate 
 A still-valid attached tool continues to serve its existing queue. Do not edit the queue's release
 ID or point a fresh uploader at the old recording archive to force an upgrade.
 
-A controlled software rollover would need the old game/uploader stopped, owner-proved completion
-of the old queue, fresh recording/outbox directories under the same v2 consent enrollment, and
-new native binding/activation, with predecessor bytes retained. **This bounded workflow does not
-automate that rollover.** If the game/Mod update makes the existing tool incompatible, stop
-collection and keep the approved compatible pair until an explicit reviewed rollover is available.
-A new template or renewed consent is not a workaround for a queue-identity mismatch.
+For a software-only update of an attached **v2 daily enrollment**, the operator uses the
+stopped-workbench `collection-upgrade` procedure. It keeps the old raw data, queue and tool;
+only a newly prepared generation receives future recordings. No new member, device, template
+or consent declaration is created. This is an explicit maintenance command, not an automatic
+upgrade when the game version changes. Legacy v1 constraints remain unchanged.
+
+1. Stop the game and workbench. Upgrade to the approved STPD combination with the existing
+   config values as above. Install the approved compatible Mod through the owner lifecycle,
+   keeping the game closed. Register its complete tool with `--replace-tool`.
+2. Use the existing enrollment ID from the collection settings' technical details. Prepare:
+
+   ```bash
+   uv run --locked python -m stpd.workbench project collection-upgrade --config /ABS/project.json \
+     --enrollment-id EXISTING_ID --tool-release-id NEW_APPROVED_ID --phase prepare \
+     --game-directory /ABS/Steam/GameDirectory
+   ```
+
+   Evidence must prove that every old session is sealed, enrolled and **verified** with matching
+   raw/bundle/archive/receipt bytes, under the stopped-worker lock. A verified bundle containing
+   an honest recording failure is retained and does not block retirement. Pending, rejected,
+   unknown, tampered or unsealed work blocks this command. Resolve the actual owner failure;
+   do not delete files or change queue identities to force success.
+3. Preparation creates fresh `generations/<tool-release>/` recording/outbox paths under the
+   same enrollment and binds that root through the stopped-game owner. It leaves the active
+   ProjectConfig unchanged and starts no upload. Cold-load and verify the new Mod through the
+   Platform lifecycle. Do not begin recording yet.
+4. Activate the exact prepared generation:
+
+   ```bash
+   uv run --locked python -m stpd.workbench project collection-upgrade --config /ABS/project.json \
+     --enrollment-id EXISTING_ID --tool-release-id NEW_APPROVED_ID --phase activate
+   uv run --locked python -m stpd.workbench project open --config /ABS/project.json
+   ```
+
+   Activation rechecks old completion, the unchanged proposal/config, fresh new roots, current
+   native binding and doctor before atomically selecting the new delivery config. Failure leaves
+   the old active pointer and all files intact; no newer directory is selected by timestamp.
+   The command does not itself start delivery. Reopening starts the one selected worker.
+   Run the bounded native/Close-to-receipt canary required by the release.
+
+The local queue view follows its selected generation; old records remain in the cloud's member
+collection view and in their retained local directories. Use the old exact config/tool to inspect
+an old outbox. Preserve `upgrade.json`, old/new config and lifecycle receipts for recovery.
+If preparation is interrupted after native binding, keep the game/workbench stopped and inspect
+that exact generation; a prepared directory is not activation evidence. Never resume normal
+recording until current-root and activation checks pass. Reverting software also requires its
+compatible native/tool/config pair and explicit stopped-process checks.
 
 | Event | Required workflow | Retained evidence |
 |---|---|---|
 | ordinary code change | owner branch/PR, falsifying regression, common gate, fresh actual-diff review, latest CI | exact source/test receipt |
 | Platform native or Mod change | Platform exact build/install/cold-load and owning Human gate when applicable | old/new BOM, artifact and loaded identity; no gameplay claim from portable tests |
-| collection-tool/Evidence change | verify new bytes and affected contracts; retain an existing queue's tool; controlled queue rollover is not automated | old tool, old outbox and original failed receipts |
+| collection-tool/Evidence change | verify new bytes and affected contracts; retain an existing queue's tool; explicit v2 completed-queue generation rollover | old tool, old outbox and original failed receipts |
 | Hub/worker update | pause dispatch, verified private backup, exact source/lock/image, compatible schema, fresh service smoke | old image/config, closed snapshot, new load receipt |
 | failed upload | inspect typed incident; fix transport or owning verifier; explicit retry only where supported | original bytes, intent, receipt and error code |
 | native recording defect | report to Platform with exact version and private session evidence | original failed decision/lineage; no cloud-side repair of native truth |

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -65,6 +66,16 @@ def prepare_campaign(
     campaigns = config.state_dir / "campaigns"
     _directory(campaigns)
     directory = campaigns / selected["enrollment_id"]
+    return _create_preparation(config, selected, owner, directory)
+
+
+def _create_preparation(
+    config: ProjectConfig, selected: dict[str, Any], owner: CollectionTool, directory: Path
+) -> dict[str, Any]:
+    template = selected["template"]
+    legacy = template["schema"] == TEMPLATE_SCHEMA
+    tool_directory = owner.directory
+    release_id = owner.manifest["release_id"]
     delivery_path = directory / "delivery.json"
     record_path = directory / "preparation.json"
     expected = {
@@ -92,30 +103,41 @@ def prepare_campaign(
         if observed != _delivery(expected, template, selected):
             raise BoundaryError("campaign", "prepared_config_changed")
         return expected
-    os.mkdir(directory, mode=0o700)
-    # Each root is created exclusively. No discovery, copy or enrollment of older recordings.
-    os.mkdir(directory / "recordings", mode=0o700)
-    os.mkdir(directory / "outbox", mode=0o700)
-    cfg = _delivery(expected, template, selected)
-    atomic_json(
-        delivery_path,
-        {
-            "schema": "sts2.evidence/delivery-config-1",
-            "recordings_root": str(cfg.recordings_root),
-            "outbox_root": str(cfg.outbox_root),
-            "tool_directory": str(cfg.tool_directory),
-            "tool_release_id": cfg.tool_release_id,
-            "worker_id": cfg.worker_id,
-            "campaign_id": cfg.campaign_id,
-            "human_origin_attested": cfg.human_origin_attested,
-            "hub_url": cfg.hub_url,
-            "allowed_upload_hosts": cfg.allowed_upload_hosts,
-        },
-    )
-    # The Platform codec, not this preparation layer, owns actual delivery config admission.
-    if DeliveryConfig.load(delivery_path) != cfg or owner.verify() != owner.manifest:
+    # Only unpublished generated configuration lives in staging. A crash cannot leave a
+    # half-written final generation; stale staging never selects a recording destination.
+    with tempfile.TemporaryDirectory(prefix=".preparing-", dir=directory.parent) as temporary:
+        pending = Path(temporary)
+        os.mkdir(pending / "recordings", mode=0o700)
+        os.mkdir(pending / "outbox", mode=0o700)
+        cfg = _delivery(expected, template, selected)
+        atomic_json(
+            pending / "delivery.json",
+            {
+                "schema": "sts2.evidence/delivery-config-1",
+                "recordings_root": str(cfg.recordings_root),
+                "outbox_root": str(cfg.outbox_root),
+                "tool_directory": str(cfg.tool_directory),
+                "tool_release_id": cfg.tool_release_id,
+                "worker_id": cfg.worker_id,
+                "campaign_id": cfg.campaign_id,
+                "human_origin_attested": cfg.human_origin_attested,
+                "hub_url": cfg.hub_url,
+                "allowed_upload_hosts": cfg.allowed_upload_hosts,
+            },
+        )
+        atomic_json(pending / "preparation.json", expected)
+        if owner.verify() != owner.manifest or directory.exists() or directory.is_symlink():
+            raise BoundaryError("campaign", "prepared_owner_identity_changed")
+        os.rename(pending, directory)
+        if os.name != "nt":
+            descriptor = os.open(directory.parent, os.O_RDONLY)
+            try:
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+    # Validate through the Platform codec after the complete directory is published.
+    if DeliveryConfig.load(delivery_path) != cfg:
         raise BoundaryError("campaign", "prepared_owner_identity_changed")
-    atomic_json(record_path, expected)
     return expected
 
 
@@ -150,7 +172,17 @@ def read_preparation(config: ProjectConfig, enrollment: object) -> dict[str, Any
         raise BoundaryError("campaign", "approved_combination_required")
     root = config.state_dir / "campaigns"
     directory = root / selected["enrollment_id"]
-    if root.is_symlink() or directory.is_symlink():
+    active = config.delivery_config
+    if active is not None and active.parent.parent.parent == directory:
+        if active.name != "delivery.json" or active.parent.parent.name != "generations":
+            raise BoundaryError("campaign", "invalid_generation_path")
+        digest(active.parent.name, "campaign.generation")
+        if selected["template"]["schema"] == TEMPLATE_SCHEMA:
+            raise BoundaryError("campaign", "legacy_generation_not_supported")
+        directory = active.parent
+    if root.is_symlink() or any(
+        p.is_symlink() for p in (directory, directory.parent, directory.parent.parent)
+    ):
         raise BoundaryError("campaign", "non_symlink_directory_required")
     if not directory.exists():
         return None
@@ -176,6 +208,8 @@ def read_preparation(config: ProjectConfig, enrollment: object) -> dict[str, Any
     for path in (directory / "recordings", directory / "outbox", directory / "delivery.json"):
         if path.is_symlink() or not path.exists():
             raise BoundaryError("campaign", "prepared_config_changed")
+    if directory.parent.name == "generations" and value.get("tool_release_id") != directory.name:
+        raise BoundaryError("campaign", "generation_tool_mismatch")
     delivery = DeliveryConfig.load(directory / "delivery.json")
     if delivery != _delivery(value, selected["template"], selected):
         raise BoundaryError("campaign", "prepared_config_changed")

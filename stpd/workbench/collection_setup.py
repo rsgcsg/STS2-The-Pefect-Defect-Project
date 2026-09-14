@@ -141,10 +141,17 @@ class CollectionSetup:
         enrollments = self.members.request("campaigns/enrollments?limit=25")
         items = [item for item in enrollments["items"] if item["device_id"] == device]
         attached = self.config.delivery_config
-        if attached is not None and attached.parent.parent == self.config.state_dir / "campaigns":
-            identity = attached.parent.name
+        active_directory = attached.parent if attached is not None else None
+        if active_directory is not None and active_directory.parent.name == "generations":
+            active_directory = active_directory.parent.parent
+        if (
+            active_directory is not None
+            and active_directory.parent == self.config.state_dir / "campaigns"
+        ):
+            identity = active_directory.name
             if (
-                attached.name == "delivery.json"
+                attached is not None
+                and attached.name == "delivery.json"
                 and re.fullmatch(r"[a-f0-9]{32}", identity)
                 and not any(item["enrollment_id"] == identity for item in items)
             ):
@@ -154,8 +161,7 @@ class CollectionSetup:
             (
                 item
                 for item in items
-                if self.config.delivery_config
-                == (self.config.state_dir / "campaigns" / item["enrollment_id"] / "delivery.json")
+                if active_directory == self.config.state_dir / "campaigns" / item["enrollment_id"]
             ),
             None,
         )

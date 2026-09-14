@@ -75,8 +75,8 @@ Record through the game Recorder, press Close and check this session's cloud rec
 configuration. Keep the workbench running for uploads; closing a tab does not stop delivery.
 
 Daily consent v2 does not pin software, but an existing outbox retains its exact tool release.
-Registering a new tool does not upgrade a saved queue. Controlled rollover is not automated;
-keep the old valid tool and consult the workflow before a game/Mod/tool update. Never rewrite
+Registering a new tool does not upgrade a saved queue. Use the documented stopped-workbench
+collection-upgrade procedure for an eligible v2 completed queue; retain the old valid tool. Never rewrite
 an outbox identity or enroll an old recording archive to force an upgrade.
 
 Retain raw recordings, failed evidence and outbox IDs. Never copy credentials into reports.
