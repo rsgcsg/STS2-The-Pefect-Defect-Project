@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+import builtins
 import hashlib
 import secrets
 import sqlite3
 import time
 from typing import Any, Protocol
 
-from ..collection_activity import ENROLLMENT_SCHEMA, validate_consent, validate_template
-from ..json_boundary import BoundaryError, decode_json, digest, json_bytes, text
+from ..collection_activity import (
+    COLLECTION_SETTINGS_SCHEMA,
+    ENROLLMENT_SCHEMA,
+    validate_consent,
+    validate_template,
+)
+from ..json_boundary import BoundaryError, decode_json, digest, json_bytes, object_fields, text
 from .console_auth import ConsolePrincipal
 from .database import Operations
 
@@ -98,6 +104,68 @@ class Campaigns:
             "total": total,
             "next_offset": offset + limit if offset + limit < total else None,
         }
+
+    def default(self, principal: ConsolePrincipal) -> dict[str, Any] | None:
+        with self.ops.transaction() as db:
+            self.members.authorize(db, principal)
+            row = db.execute(
+                "SELECT a.* FROM settings s JOIN collection_activities a ON a.id=s.value "
+                "WHERE s.key='default_collection_template'"
+            ).fetchone()
+            return None if row is None else self._template(row)
+
+    def set_default(self, principal: ConsolePrincipal, template_id: str) -> dict[str, Any]:
+        digest(template_id, "collection.default_template")
+        with self.ops.transaction() as db:
+            current = self.members.admin(db, principal)
+            row = db.execute(
+                "SELECT * FROM collection_activities WHERE id=?", (template_id,)
+            ).fetchone()
+            if row is None:
+                raise BoundaryError("campaign", "activity_not_found")
+            previous = db.execute(
+                "SELECT value FROM settings WHERE key='default_collection_template'"
+            ).fetchone()
+            if previous is None or previous[0] != template_id:
+                db.execute(
+                    "INSERT INTO settings VALUES('default_collection_template',?) "
+                    "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                    (template_id,),
+                )
+                self.ops._event(db, current.subject, "default_collection_changed", template_id, {})
+            return self._template(row)
+
+    def publish_default(
+        self, principal: ConsolePrincipal, value: object, upload_hosts: builtins.list[str]
+    ) -> dict[str, Any]:
+        """A small admin form chooses consent settings, not another software release ledger.
+
+        The existing immutable template owner still publishes every version. A failed
+        recommendation leaves a harmless published template; retry is idempotent.
+        """
+        fields = object_fields(value, {"name", "description", "consent_text"}, "collection.default")
+        with self.ops.transaction() as db:
+            self.members.admin(db, principal)
+            row = db.execute(
+                "SELECT * FROM collection_activities WHERE activity_id='project-default' "
+                "ORDER BY version DESC LIMIT 1"
+            ).fetchone()
+        latest = None if row is None else decode_json(row["template"])
+        version = 1 if latest is None else latest["version"]
+        template = validate_template(
+            {
+                "schema": COLLECTION_SETTINGS_SCHEMA,
+                "activity_id": "project-default",
+                "version": version,
+                **fields,
+                "allowed_upload_hosts": upload_hosts,
+                "sharing_scope": "project_members",
+            }
+        )
+        if latest is not None and template != latest:
+            template["version"] += 1
+        published = self.create(principal, template)
+        return self.set_default(principal, published["template_id"])
 
     def enroll(
         self, principal: ConsolePrincipal, template_id: str, device_id: str, consent: object

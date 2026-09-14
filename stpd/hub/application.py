@@ -328,6 +328,10 @@ class HubApplication:
                         return self.response(
                             self.member_api.admin_create_campaign(value, principal)
                         )
+                    if resource == "collection-settings":
+                        return self.response(
+                            self.member_api.admin_collection_settings(value, principal)
+                        )
                     if resource == "statistics/refresh":
                         from .statistics import refresh_decision_statistics
 

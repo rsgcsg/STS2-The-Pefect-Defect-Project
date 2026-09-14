@@ -172,7 +172,7 @@ def main(argv: list[str] | None = None) -> int:
             elif args.command == "stop":
                 result = stop_project(config)
             elif args.command == "serve":
-                result = serve(config)
+                result = serve(config, config_path=args.config)
             elif args.command == "status":
                 result = status_project(config)
             else:

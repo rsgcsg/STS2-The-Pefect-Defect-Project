@@ -16,6 +16,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterator
 from typing import Any, cast
+from urllib.parse import urlsplit
 
 from ..collection_activity import ENROLLMENT_SCHEMA, validate_enrollment
 from ..json_boundary import BoundaryError, decode_json, digest, object_fields
@@ -25,7 +26,7 @@ from .console_index import pagination, timestamp
 from .exports import ExportService
 from .identity import IdentityService
 from .statistics import refresh_decision_statistics
-from .uploads import UploadService
+from .uploads import LocalStaging, S3Staging, UploadService
 
 
 class MemberApi:
@@ -43,6 +44,8 @@ class MemberApi:
 
     def read(self, route: str, query: str, principal: ConsolePrincipal) -> dict[str, Any]:
         current = self._principal(principal)
+        if route == "collection-settings" and not query:
+            return self.collection_settings(current)
         if route in {"campaigns", "campaigns/enrollments"}:
             limit, offset, status = pagination(query)
             if status is not None:
@@ -83,6 +86,38 @@ class MemberApi:
     def admin_create_campaign(self, body: object, principal: ConsolePrincipal) -> dict[str, Any]:
         """Called only after fresh browser identity + Origin + CSRF; owner repeats admin check."""
         return self.campaigns.create(principal, body)
+
+    def _upload_hosts(self) -> list[str]:
+        staging = self.service.staging
+        if isinstance(staging, LocalStaging):
+            address = staging.public_url
+        elif isinstance(staging, S3Staging):
+            # The owning S3 client is configured for path addressing; never expose a
+            # signed URL or storage credential merely to render collection settings.
+            address = staging.client.meta.endpoint_url
+        else:
+            raise BoundaryError("collection", "upload_destination_unavailable")
+        host = urlsplit(address).hostname
+        if not host:
+            raise BoundaryError("collection", "upload_destination_unavailable")
+        return [host]
+
+    def collection_settings(self, principal: ConsolePrincipal) -> dict[str, Any]:
+        return {
+            "schema": "stpd/collection-settings-v1",
+            "default": self.campaigns.default(principal),
+            "upload_hosts": self._upload_hosts(),
+            "observed_at": timestamp(),
+        }
+
+    def admin_collection_settings(
+        self, body: object, principal: ConsolePrincipal
+    ) -> dict[str, Any]:
+        if isinstance(body, dict) and set(body) == {"template_id"}:
+            self.campaigns.set_default(principal, body["template_id"])
+        else:
+            self.campaigns.publish_default(principal, body, self._upload_hosts())
+        return self.collection_settings(principal)
 
     def payload(
         self,

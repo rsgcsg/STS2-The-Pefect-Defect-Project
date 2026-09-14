@@ -225,6 +225,18 @@ class ConsoleIndex:
                 "summary": json.loads(value["summary"]) if value["summary"] else None,
                 "summary_status": value["summary_status"] or "not_indexed",
                 "research": {"status": "not_assessed", "scope": "explicit_input_set_required"},
+                "collection_context": (
+                    {
+                        "name": value["collection_name"],
+                        "kind": "default"
+                        if value["collection_activity"] == "project-default"
+                        else "activity",
+                        "template_id": value["collection_template"],
+                        "activity_id": value["collection_activity"],
+                    }
+                    if value.get("collection_template")
+                    else {"kind": "unlinked", "name": None}
+                ),
             }
         )
         return result
@@ -248,10 +260,16 @@ class ConsoleIndex:
         query = (
             "SELECT u.id,u.device,u.content_id,u.status,u.receipt,u.retry_at,u.verify_attempts,"
             "u.last_error,c.archive_bytes,c.summary,c.summary_status,"
+            "json_extract(a.template,'$.name') AS collection_name,a.id AS collection_template,"
+            "a.activity_id AS collection_activity,"
             "(SELECT MIN(at) FROM events e WHERE e.subject=u.id AND e.operation='upload_created') "
             "AS created_at,"
             "(SELECT MAX(at) FROM events e WHERE e.subject=u.id AND e.operation='upload_receipt') "
             "AS verified_at FROM uploads u LEFT JOIN console_collections c ON c.upload_id=u.id "
+            "LEFT JOIN collection_enrollments ce "
+            "ON ('campaign-'||ce.id)=json_extract(c.summary,'$.campaign_id') "
+            "AND ce.device_id=u.device AND u.status='verified' "
+            "LEFT JOIN collection_activities a ON a.id=ce.template_id "
             "WHERE " + where
         )
         with closing(self.read()) as db:

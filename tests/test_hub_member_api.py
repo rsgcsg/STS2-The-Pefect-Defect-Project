@@ -120,6 +120,57 @@ def test_admin_creation_separate_and_personal_session_cannot_admin(api):
         router.write("campaigns", value, admin)
 
 
+def test_daily_settings_require_current_admin_and_do_not_create_consent(api):
+    router, owner, admin, member, _ = api
+    assert router.read("collection-settings", "", member)["default"] is None
+    body = {"name": "Daily", "description": "New recordings", "consent_text": "Explicit consent"}
+    for principal in (member, replace(admin, session_binding="")):
+        with pytest.raises(BoundaryError, match="admin_browser_required"):
+            router.admin_collection_settings(body, principal)
+    first = router.admin_collection_settings(body, admin)
+    assert first["default"]["template"]["schema"] == "stpd/collection-activity-v2"
+    assert router.admin_collection_settings(body, admin)["default"] == first["default"]
+    assert router.read("campaigns/enrollments", "", member)["items"] == []
+    selected = router.write(
+        "campaigns/" + first["default"]["template_id"] + "/enroll",
+        {
+            "device_id": "one",
+            "consent": {key: True for key in CONSENT_FIELDS},
+        },
+        member,
+    )
+    second = router.admin_collection_settings({**body, "description": "New wording"}, admin)
+    assert second["default"]["template"]["version"] == 2
+    assert router.read("campaigns/enrollments/" + selected["enrollment_id"], "", member) == selected
+    router.admin_collection_settings({"template_id": first["default"]["template_id"]}, admin)
+    assert router.read("collection-settings", "", member)["default"] == first["default"]
+    with pytest.raises(BoundaryError):
+        router.read("collection-settings", "extra=1", member)
+    with pytest.raises(BoundaryError, match="resource_not_found"):
+        router.write("collection-settings", body, admin)
+    router.identity.membership.update(admin, member.member_id, {"status": "disabled"})
+    with pytest.raises(BoundaryError, match="membership_not_authorized"):
+        router.read("collection-settings", "", member)
+
+
+def test_default_classification_is_immutable_when_recommendation_changes(api, tmp_path):
+    router, owner, admin, member, _ = api
+    daily = router.admin_collection_settings(
+        {"name": "Daily", "description": "Recordings", "consent_text": "Explicit consent"}, admin
+    )
+    daily_api = (router, owner, admin, member, daily["default"])
+    upload, _, _ = staged(daily_api, tmp_path)
+    assert owner.verify_pending() == 1
+    observed = owner.console_index.collections(member, limit=25, offset=0)["items"][0]
+    assert observed["id"] == upload and observed["collection_context"]["kind"] == "default"
+    router.admin_collection_settings(
+        {"name": "Changed", "description": "Recordings", "consent_text": "Explicit consent"}, admin
+    )
+    later = owner.console_index.collections(member, limit=25, offset=0)["items"][0]
+    assert later["collection_context"] == observed["collection_context"]
+    assert later["receipt"] == observed["receipt"]
+
+
 def test_payload_export_and_stale_membership_rechecked(api):
     router, owner, admin, member, _ = api
     payload = owner.store.put_payload("weights", io.BytesIO(b"immutable weights"))

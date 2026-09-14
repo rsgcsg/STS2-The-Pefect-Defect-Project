@@ -10,11 +10,20 @@ from typing import Any
 from .json_boundary import BoundaryError, decode_json, digest, json_bytes, object_fields, text
 
 TEMPLATE_SCHEMA = "stpd/collection-activity-v1"
+COLLECTION_SETTINGS_SCHEMA = "stpd/collection-activity-v2"
 ENROLLMENT_SCHEMA = "stpd/collection-enrollment-v1"
 CONSENT_FIELDS = {"human_origin_attested", "upload_authorized", "project_sharing_authorized"}
 
 
 def validate_template(value: object) -> dict[str, Any]:
+    software_fields = {
+        "platform_source_revision",
+        "evidence_source_revision",
+        "tool_release_id",
+        "game",
+        "mod",
+    }
+    flexible = isinstance(value, dict) and value.get("schema") == COLLECTION_SETTINGS_SCHEMA
     obj = object_fields(
         value,
         {
@@ -31,10 +40,14 @@ def validate_template(value: object) -> dict[str, Any]:
             "mod",
             "allowed_upload_hosts",
             "sharing_scope",
-        },
+        }
+        - (software_fields if flexible else set()),
         "campaign.template",
     )
-    if obj["schema"] != TEMPLATE_SCHEMA or obj["sharing_scope"] != "project_members":
+    if (
+        obj["schema"] not in {TEMPLATE_SCHEMA, COLLECTION_SETTINGS_SCHEMA}
+        or obj["sharing_scope"] != "project_members"
+    ):
         raise BoundaryError("campaign", "unsupported_template")
     slug = text(obj["activity_id"], "campaign.activity_id", maximum=80)
     if not re.fullmatch(r"[a-z0-9][a-z0-9._-]*", slug):
@@ -43,19 +56,8 @@ def validate_template(value: object) -> dict[str, Any]:
         raise BoundaryError("campaign", "invalid_template_version")
     for key, maximum in (("name", 120), ("description", 2000), ("consent_text", 2000)):
         text(obj[key], "campaign." + key, maximum=maximum)
-    for key in ("platform_source_revision", "evidence_source_revision"):
-        digest(obj[key], "campaign." + key, length=40)
-    digest(obj["tool_release_id"], "campaign.tool_release_id")
-    game = object_fields(obj["game"], {"version", "revision", "assembly_sha256"}, "campaign.game")
-    text(game["version"], "campaign.game.version", maximum=80)
-    text(game["revision"], "campaign.game.revision", maximum=80)
-    digest(game["assembly_sha256"], "campaign.game.assembly")
-    mod = object_fields(obj["mod"], {"sha256", "mvid"}, "campaign.mod")
-    digest(mod["sha256"], "campaign.mod.sha256")
-    if not isinstance(mod["mvid"], str) or not re.fullmatch(
-        r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}", mod["mvid"]
-    ):
-        raise BoundaryError("campaign", "invalid_mod_mvid")
+    if not flexible:
+        _software_identity(obj)
     hosts = obj["allowed_upload_hosts"]
     if (
         not isinstance(hosts, list)
@@ -72,6 +74,23 @@ def validate_template(value: object) -> dict[str, Any]:
     # Own a canonical copy; callers cannot mutate the persisted identity after validation.
     result: dict[str, Any] = decode_json(json_bytes(obj))
     return result
+
+
+def _software_identity(obj: dict[str, Any]) -> None:
+    """Historical v1 requirements remain exact; v2 never silently rewrites them."""
+    for key in ("platform_source_revision", "evidence_source_revision"):
+        digest(obj[key], "campaign." + key, length=40)
+    digest(obj["tool_release_id"], "campaign.tool_release_id")
+    game = object_fields(obj["game"], {"version", "revision", "assembly_sha256"}, "campaign.game")
+    text(game["version"], "campaign.game.version", maximum=80)
+    text(game["revision"], "campaign.game.revision", maximum=80)
+    digest(game["assembly_sha256"], "campaign.game.assembly")
+    mod = object_fields(obj["mod"], {"sha256", "mvid"}, "campaign.mod")
+    digest(mod["sha256"], "campaign.mod.sha256")
+    if not isinstance(mod["mvid"], str) or not re.fullmatch(
+        r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}", mod["mvid"]
+    ):
+        raise BoundaryError("campaign", "invalid_mod_mvid")
 
 
 def validate_consent(value: object) -> dict[str, bool]:

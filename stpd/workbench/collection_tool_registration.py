@@ -103,3 +103,10 @@ def registered_collection_tool(config: ProjectConfig, expected_release_id: str) 
     if registration["release_id"] != expected:
         raise BoundaryError("collection_tool", "collection_tool_registered_release_mismatch")
     return _tool(Path(registration["path"]), expected)
+
+
+def current_collection_tool(config: ProjectConfig) -> tuple[Path, str]:
+    """The installed release owns software identity; daily consent does not pin it."""
+    registration = _registration(config.state_dir / REGISTRATION_FILE)
+    identity = registration["release_id"]
+    return _tool(Path(registration["path"]), identity), identity

@@ -8,6 +8,7 @@ import hmac
 import importlib
 import json
 import os
+import re
 import secrets
 import signal
 import subprocess
@@ -16,6 +17,7 @@ import threading
 import time
 import webbrowser
 from collections.abc import Iterator
+from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, cast
@@ -165,13 +167,17 @@ def status_project(config: ProjectConfig) -> dict[str, Any]:
 
 
 class Application:
-    def __init__(self, config: ProjectConfig) -> None:
+    def __init__(self, config: ProjectConfig, *, config_path: Path | None = None) -> None:
+        from .collection_setup import CollectionSetup
+
         self.config = config
+        self.config_path = config_path
         self.instance_id = secrets.token_hex(16)
         self.control_token = secrets.token_hex(32)
         self.identity = tool_identity()
         self.account = LocalIdentity(config)
         self.members = MemberClient(self.account)
+        self.collection = CollectionSetup(self.members)
         self.delivery: subprocess.Popen[bytes] | None = None
         self.delivery_log: Any = None
         self.operation_lock = threading.Lock()
@@ -184,6 +190,52 @@ class Application:
             config, self.hub, self.delivery_environment, self.delivery_process, self.identity
         )
         self.models = LocalModelService(config, hub=self.hub)
+
+    def activate_collection(self, enrollment_id: str) -> dict[str, Any]:
+        with self.operation_lock:
+            if self.config_path is None or ProjectConfig.load(self.config_path) != self.config:
+                raise BoundaryError("collection", "running_configuration_mismatch")
+            target = self.collection.activation_config(enrollment_id)
+            if self.config.delivery_config is not None and self.config.delivery_config != target:
+                raise BoundaryError("collection", "another_collection_attached")
+            updated = replace(self.config, delivery_config=target)
+            if doctor(updated)["status"] != "PASS":
+                raise BoundaryError("collection", "delivery_preflight_blocked")
+            if self.config != updated:
+                runtime_path = updated.state_dir / "runtime.json"
+                runtime = json.loads(runtime_path.read_bytes())
+                if runtime.get("instance_id") != self.instance_id:
+                    raise BoundaryError("collection", "runtime_instance_mismatch")
+                previous_config = self.config.to_dict()
+                updated_runtime = {
+                    **runtime,
+                    "configuration_id": configuration_id(updated),
+                    "delivery": "configured",
+                }
+                atomic_json(self.config_path, updated.to_dict())
+                try:
+                    atomic_json(runtime_path, updated_runtime)
+                except OSError:
+                    atomic_json(self.config_path, previous_config)
+                    raise
+                self.config = updated
+                self.account.config = updated
+                self.models.config = updated
+                self.console = LocalConsole(
+                    updated,
+                    self.hub,
+                    self.delivery_environment,
+                    self.delivery_process,
+                    self.identity,
+                )
+            if self.delivery is None or self.delivery.poll() is not None:
+                self.close_delivery()
+                self.delivery, self.delivery_log = None, None
+                self.start_delivery()
+            return self.collection.preparation(
+                self.collection.enrollment(enrollment_id),
+                self.delivery_process(),
+            )
 
     def delivery_process(self) -> str:
         if self.delivery is None:
@@ -415,7 +467,15 @@ def create_server(app: Application) -> ThreadingHTTPServer:
                 try:
                     if parsed.path.startswith("/api/member/"):
                         route = parsed.path.removeprefix("/api/member/")
-                        if route == "download-status" and not parsed.query:
+                        preparation = re.fullmatch(r"campaigns/([a-f0-9]{32})/preparation", route)
+                        if route == "collection-status" and not parsed.query:
+                            value = app.collection.status(app.delivery_process())
+                        elif preparation and not parsed.query:
+                            value = app.collection.preparation(
+                                app.collection.enrollment(preparation[1]),
+                                app.delivery_process(),
+                            )
+                        elif route == "download-status" and not parsed.query:
                             value = app.members.download_status()
                         else:
                             value = app.members.request(
@@ -501,10 +561,17 @@ def create_server(app: Application) -> ThreadingHTTPServer:
                         route = self.path.removeprefix("/api/member/")
                         download = re.fullmatch(r"exports/([a-f0-9]{64})/download", route)
                         prepare = re.fullmatch(r"campaigns/([a-f0-9]{32})/prepare", route)
+                        bind = re.fullmatch(r"campaigns/([a-f0-9]{32})/bind", route)
+                        activate = re.fullmatch(r"campaigns/([a-f0-9]{32})/activate", route)
                         if download and not body:
                             value = app.members.download(download[1])
                         elif prepare and not body:
                             value = app.members.prepare_campaign(prepare[1])
+                        elif bind and isinstance(body, dict) and set(body) == {"game_directory"}:
+                            with app.operation_lock:
+                                value = app.collection.bind(bind[1], body["game_directory"])
+                        elif activate and not body:
+                            value = app.activate_collection(activate[1])
                         else:
                             value = app.members.request(route, body)
                     self.respond(200, json.dumps(value, ensure_ascii=False).encode())
@@ -577,11 +644,11 @@ def create_server(app: Application) -> ThreadingHTTPServer:
     return server
 
 
-def serve(config: ProjectConfig) -> dict[str, Any]:
+def serve(config: ProjectConfig, *, config_path: Path | None = None) -> dict[str, Any]:
     if doctor(config)["status"] != "PASS":
         raise BoundaryError("project", "doctor_blocked")
     with instance_lock(config.state_dir / "instance.lock"):
-        app = Application(config)
+        app = Application(config, config_path=config_path)
         server = create_server(app)
         previous_signal = signal.getsignal(signal.SIGTERM)
         signal.signal(

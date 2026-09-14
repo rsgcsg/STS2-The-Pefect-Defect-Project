@@ -34,7 +34,7 @@ class MemberClient:
     def request(self, route: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
         path, _, query = route.partition("?")
         allowed = (
-            r"campaigns(?:/[a-f0-9]{64}/enroll|/enrollments(?:/[a-f0-9]{32})?)?"
+            r"collection-settings|campaigns(?:/[a-f0-9]{64}/enroll|/enrollments(?:/[a-f0-9]{32})?)?"
             r"|exports(?:/[a-f0-9]{64})?"
         )
         if re.fullmatch(allowed, path) is None:
@@ -62,10 +62,16 @@ class MemberClient:
         enrollment = self.request("campaigns/enrollments/" + enrollment_id)
         current = self.account.config.delivery_config
         if current is None:
-            from .collection_tool_registration import registered_collection_tool
+            from .collection_tool_registration import (
+                current_collection_tool,
+                registered_collection_tool,
+            )
 
-            tool_directory = registered_collection_tool(
-                self.account.config, enrollment["template"]["tool_release_id"]
+            release = enrollment["template"].get("tool_release_id")
+            tool_directory = (
+                registered_collection_tool(self.account.config, release)
+                if release
+                else current_collection_tool(self.account.config)[0]
             )
         else:
             tool_directory = DeliveryConfig.load(current).tool_directory
