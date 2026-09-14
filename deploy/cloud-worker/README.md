@@ -67,6 +67,10 @@ inside a worker, an image build, GPU availability, billing limits or an executio
    digest**, and `STPD_SOURCE_REVISION` set to the full reviewed commit. No floating base
    image belongs in a deployment receipt. The image retains that clean checkout and runs
    `uv sync --locked --all-extras`; no local source or credentials are copied into it.
+   A measured small source/dependency update can instead use the qualified-image refresh
+   procedure in [the Hub runbook](../hub/RUNBOOK.md#refresh-from-a-qualified-image). Its
+   default path requires an unchanged lock; an explicitly reviewed new lock requires the
+   exact parent source/lock and a full locked synchronization of the resulting environment.
 3. Push the built image and resolve its immutable registry digest. Capture build source,
    base image, uv version, final OCI digest and registry/build receipts separately.
    The current adapter uses an anonymously pullable image: both the Hub host and Modal
