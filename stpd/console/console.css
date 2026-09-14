@@ -878,3 +878,14 @@ select, .onboarding input { font: inherit; color: inherit; background: transpare
   .project-form textarea { min-width: 0; }
   .project-panel .metric-value { font-size: 27px; }
 }
+
+.collection-stages { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); list-style: none; padding: 0; gap: 10px; margin: 20px 0; }
+.collection-stages li { display: flex; flex-direction: column; gap: 7px; padding: 14px; background: #f8fbfc; border: 1px solid var(--border); border-radius: 8px; }
+.collection-stages strong { font-size: 13px; }
+.collection-stages span { color: var(--muted); font-size: 12px; }
+.collection-advanced { margin: 24px 0; }
+.collection-advanced > summary { cursor: pointer; padding: 16px; color: var(--muted); border: 1px solid var(--border); border-radius: 8px; }
+.collection-advanced[open] > summary { margin-bottom: 18px; }
+.collection-binding, .collection-settings { width: 100%; }
+.collection-settings .form-field:last-of-type { flex-basis: 100%; }
+.collection-settings textarea { font: inherit; }

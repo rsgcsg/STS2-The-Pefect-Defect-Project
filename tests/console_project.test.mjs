@@ -372,20 +372,32 @@ test("server last-admin rejection remains a visible failure without optimistic s
   assert.equal(env.reloads, 0);
 });
 
-function campaignHandler(url, options) {
-  if (url.includes("/enrollments?")) return emptyList();
-  if (url.endsWith("/enroll")) return enrollment;
-  if (url.endsWith("/prepare"))
-    return {
-      schema: "stpd/local-campaign-preparation-v1",
-      status: "native_binding_required",
-      native_binding_verified: false,
-      delivery_started: false,
+const settings = (record = template) => ({
+  schema: "stpd/collection-settings-v1", default: record, upload_hosts: ["uploads.example.test"],
+  observed_at: "2026-09-15T00:00:00Z",
+});
+const preparation = (saved = false) => ({
+  status: saved ? "native_binding_required" : "not_prepared",
+  configuration_saved: saved, delivery_selected: false, delivery_status: "stopped",
+  native_binding: { status: "not_checked" }, next_action: saved ? "bind_recording_root" : "prepare",
+});
+function campaignHandler() {
+  let saved = [], prepared = false;
+  return (url, options) => {
+    if (url.endsWith("/collection-status")) return {
+      schema: "stpd/local-collection-status-v1", settings: settings(null), device_id: "this-pc",
+      items: saved.map(item => ({...item, preparation: preparation(prepared)})),
     };
-  return { templates: [template], total: 1 };
+    if (url.endsWith("/collection-settings")) return settings(null);
+    if (url.includes("/enrollments?")) return {items: saved, total: saved.length};
+    if (url.endsWith("/enroll")) { saved = [enrollment]; return enrollment; }
+    if (url.endsWith("/prepare")) { prepared = true; return preparation(true); }
+    if (url.endsWith("/preparation")) return preparation(prepared);
+    return { templates: [template], total: 1 };
+  };
 }
 test("campaign enrollment requires three deliberate declarations and uses only the local owned active device", async () => {
-  const env = setup({ view: "campaigns", handler: campaignHandler });
+  const env = setup({ view: "campaigns", handler: campaignHandler() });
   let page = await env.render();
   const device = field(page, "device_id");
   assert.deepEqual(
@@ -426,18 +438,19 @@ test("campaign enrollment requires three deliberate declarations and uses only t
   );
   assert.deepEqual(body(post(env.calls)[1]), {});
   page = await env.render();
-  assert.match(text(page), /需要精确原生绑定/);
-  assert.match(text(page), /尚未启动/);
-  assert.match(text(page), /不是已验证的真人来源/);
+  assert.match(text(page), /尚未检查游戏连接/);
+  assert.match(text(page), /已停止/);
+  assert.match(text(page), /本机配置/);
 });
 
 test("persisted activity enrollment can prepare after a fresh page without reattesting consent", async () => {
+  const baseHandler = campaignHandler();
   const env = setup({
     view: "campaigns",
     handler: (url, options) =>
       url.includes("/enrollments?")
         ? { items: [enrollment], total: 1 }
-        : campaignHandler(url, options),
+        : baseHandler(url, options),
   });
   const page = await env.render();
   await action(page, "prepare-" + enrollmentId).onclick();
@@ -446,12 +459,13 @@ test("persisted activity enrollment can prepare after a fresh page without reatt
 });
 
 test("mismatched enrollment response cannot become a local preparation target", async () => {
+  const baseHandler = campaignHandler();
   const env = setup({
     view: "campaigns",
     handler: (url, options) =>
       url.endsWith("/enroll")
         ? { ...enrollment, device_id: "someone-else" }
-        : campaignHandler(url, options),
+        : baseHandler(url, options),
   });
   let page = await env.render();
   for (const name of [
@@ -771,25 +785,22 @@ test("a loaded service flag without a running Runtime observation cannot enable 
   }
 });
 
-test("prepared persisted enrollment remains visible when its older template is outside the current template page", async () => {
-  const env = setup({
-    view: "campaigns",
-    handler: (url, options) => {
-      if (url.includes("/enrollments?"))
-        return { items: [enrollment], total: 1 };
-      if (url.endsWith("/prepare"))
-        return {
-          status: "native_binding_required",
-          native_binding_verified: false,
-          delivery_started: false,
-        };
-      return { templates: [], total: 0 };
-    },
-  });
-  let page = await env.render();
-  await action(page, "prepare-" + enrollmentId).onclick();
-  page = await env.render();
-  assert.match(text(page), /需要精确原生绑定/);
+test("persisted preparation remains visible after reload when its template is outside the page", async () => {
+  const handler = (url) => {
+    if (url.includes("/enrollments?")) return {items: [enrollment], total: 1};
+    if (url.endsWith("/preparation")) return preparation(true);
+    if (url.endsWith("/collection-status")) return {
+      schema: "stpd/local-collection-status-v1", settings: settings(null), device_id: "this-pc", items: [],
+    };
+    return {templates: [], total: 0};
+  };
+  for (let visit = 0; visit < 2; visit++) {
+    const env = setup({view: "campaigns", handler});
+    const page = await env.render();
+    assert.match(text(page), /尚未检查游戏连接/);
+    assert.equal(walk(page).some(item => item.dataset?.action === "prepare-" + enrollmentId), false);
+    assert.equal(post(env.calls).length, 0);
+  }
 });
 
 test("in-page project navigation preserves selected export identities and leaves file downloads untouched", async () => {
@@ -841,4 +852,163 @@ test("in-page project navigation preserves selected export identities and leaves
     find(page, (node) => node.textContent === "下载此文件").onclick,
     undefined,
   );
+});
+
+const defaultTemplate = {
+  template_id: id("b"), template: {...template.template, schema: "stpd/collection-activity-v2",
+    name: "日常录制", game: undefined},
+};
+function collectionHandler({items = [], binding = "not_checked"} = {}) {
+  let entries = items, prepared = items.length > 0;
+  return (url, options) => {
+    if (url.endsWith("/collection-status")) return {
+      schema: "stpd/local-collection-status-v1", settings: settings(defaultTemplate), device_id: "this-pc",
+      observed_at: "2026-09-15T00:00:00Z",
+      items: entries.map(item => ({...item, preparation: {...preparation(prepared), native_binding: {status: binding}}})),
+    };
+    if (url.endsWith("/collection-settings")) return settings(defaultTemplate);
+    if (url.includes("/enrollments?")) return {items: entries, total: entries.length};
+    if (url.endsWith("/enroll")) { entries = [enrollment]; return enrollment; }
+    if (url.endsWith("/prepare")) { prepared = true; return preparation(true); }
+    if (url.endsWith("/preparation")) return {...preparation(prepared), native_binding: {status: binding}};
+    if (url.endsWith("/bind") || url.endsWith("/activate")) return {status: "completed"};
+    return emptyList();
+  };
+}
+
+test("daily default needs no activity choice and new consent is never prechecked", async () => {
+  const env = setup({view: "campaigns", handler: collectionHandler()});
+  let page = await env.render();
+  assert.equal(page.children[0].children[0].textContent, "日常录制");
+  const advanced = page.children.find(item => item.tag === "details");
+  assert.ok(advanced);
+  assert.notEqual(advanced.open, true);
+  const consentNames = ["human_origin_attested", "upload_authorized", "project_sharing_authorized"];
+  await action(page, "enroll-" + id("b")).onclick();
+  assert.equal(post(env.calls).length, 0);
+  for (const name of consentNames) {
+    const control = field(page, name);
+    assert.equal(control.checked, false);
+    control.checked = true;
+  }
+  await action(page, "enroll-" + id("b")).onclick();
+  assert.deepEqual(body(post(env.calls)[0]), {device_id: "this-pc", consent: {
+    human_origin_attested: true, upload_authorized: true, project_sharing_authorized: true,
+  }});
+  page = await env.render();
+  assert.match(text(page.children[0]), /授权已保存/);
+  assert.equal(walk(page.children[0]).some(item => item.name === "human_origin_attested"), false);
+  await action(page.children[0], "prepare-" + enrollmentId).onclick();
+  page = await env.render();
+  assert.match(text(page.children[0]), /尚未检查游戏连接/);
+  assert.equal(action(page.children[0], "activate-" + enrollmentId).disabled, true);
+});
+
+test("homepage reads durable local stages after a new browser session without implying native readiness", async () => {
+  for (const binding of ["not_checked", "game_not_running", "mismatch", "blocked"]) {
+    const env = setup({view: "collection-overview", handler: collectionHandler({items: [enrollment], binding})});
+    const page = await env.render();
+    assert.match(text(page), /授权已保存/);
+    assert.match(text(page), /已保存/);
+    assert.doesNotMatch(text(page), /游戏连接与录制目录已核对|正在运行/);
+    assert.equal(post(env.calls).length, 0);
+    assert.ok(env.calls.some(call => call.url === "/api/member/collection-status"));
+  }
+});
+
+test("only freshly bound native status allows activation and a later mismatch disables it", async () => {
+  let binding = "bound";
+  const env = setup({view: "campaigns", handler: (url, options) =>
+    collectionHandler({items: [enrollment], binding})(url, options)});
+  let page = await env.render();
+  assert.equal(action(page, "activate-" + enrollmentId).disabled, false);
+  await action(page, "activate-" + enrollmentId).onclick();
+  assert.equal(post(env.calls)[0].url, `/api/member/campaigns/${enrollmentId}/activate`);
+  assert.deepEqual(body(post(env.calls)[0]), {});
+  binding = "mismatch";
+  page = await env.render();
+  assert.equal(action(page, "activate-" + enrollmentId).disabled, true);
+});
+
+test("native binding accepts deliberate local absolute game location and never auto retries unknown effects", async () => {
+  const base = collectionHandler({items: [enrollment]});
+  const env = setup({view: "campaigns", handler: (url, options) => {
+    if (url.endsWith("/bind")) throw new Error("connection dropped after mutation");
+    return base(url, options);
+  }});
+  const page = await env.render();
+  field(page, "game_directory").value = "relative/path";
+  await action(page, "bind-" + enrollmentId).onclick();
+  assert.equal(post(env.calls).length, 0);
+  field(page, "game_directory").value = "/games/STS2";
+  await action(page, "bind-" + enrollmentId).onclick();
+  assert.deepEqual(body(post(env.calls)[0]), {game_directory: "/games/STS2"});
+  assert.equal(post(env.calls).length, 1);
+  assert.match(text(env.notice), /不会自动重发/);
+});
+
+test("cloud administrator publishes typed daily defaults while member and local admin cannot", async () => {
+  for (const [mode, role] of [["cloud", "member"], ["local", "admin"], ["cloud", "admin"]]) {
+    const env = setup({mode, identity: owner(role), view: "campaigns", handler: collectionHandler()});
+    const page = await env.render();
+    const controls = walk(page).filter(item => item.dataset?.action === "save-default-collection");
+    assert.equal(controls.length, mode === "cloud" && role === "admin" ? 1 : 0);
+    if (controls.length) {
+      field(page, "default_name").value = "Everyday capture";
+      field(page, "default_description").value = "Only new sessions";
+      field(page, "default_consent_text").value = "Member reviewed grant";
+      await controls[0].onclick();
+      assert.deepEqual(body(post(env.calls)[0]), {
+        name: "Everyday capture", description: "Only new sessions", consent_text: "Member reviewed grant",
+        csrf_token: "local-csrf",
+      });
+      assert.equal(post(env.calls)[0].url, "/app/api/admin/collection-settings");
+    }
+    if (mode === "cloud") {
+      assert.equal(env.calls.some(call => call.url.startsWith("/api/")), false);
+      assert.equal(walk(page).some(item => item.name === "game_directory"), false);
+    }
+  }
+});
+
+test("default readback from a different local device cannot become a preparation or native target", async () => {
+  const base = collectionHandler({items: [enrollment]});
+  const env = setup({view: "collection-overview", handler: (url, options) => {
+    const value = base(url, options);
+    return url.endsWith("/collection-status") ? {...value, device_id: "someone-else"} : value;
+  }});
+  const page = await env.render();
+  assert.match(text(page), /collection_status_identity_mismatch/);
+  assert.doesNotMatch(text(page), /授权已保存/);
+  assert.equal(post(env.calls).length, 0);
+});
+
+test("changing the recommendation cannot overwrite the explicitly selected older local recording", async () => {
+  const base = collectionHandler({items: [enrollment]});
+  const env = setup({view: "collection-overview", handler: (url, options) => {
+    const value = base(url, options);
+    if (!url.endsWith("/collection-status")) return value;
+    return {...value, settings: settings({...defaultTemplate, template_id: id("c")}),
+      items: [{...enrollment, preparation: {...preparation(true), delivery_selected: true,
+        delivery_status: "running", native_binding: {status: "game_not_running"}}}]};
+  }});
+  const page = await env.render();
+  assert.match(text(page), /Bounded capture/);
+  assert.match(text(page), /不会改写这份授权/);
+  assert.match(text(page), /正在运行/);
+  assert.match(text(page), /请启动游戏后刷新/);
+  assert.doesNotMatch(text(page), /游戏连接与录制目录已核对/);
+});
+
+test("missing preparation facts remain unknown and cannot offer setup or activation mutations", async () => {
+  const base = collectionHandler({items: [enrollment]});
+  const env = setup({view: "campaigns", handler: (url, options) => {
+    const value = base(url, options);
+    return url.endsWith("/collection-status") ? {...value, items: [{...enrollment, preparation: {status: "unavailable"}}]} : value;
+  }});
+  const page = await env.render();
+  assert.match(text(page.children[0]), /状态未取得/);
+  assert.equal(walk(page).some(item => item.dataset?.action?.startsWith("prepare-") ||
+    item.dataset?.action?.startsWith("activate-") || item.dataset?.action?.startsWith("bind-")), false);
+  assert.equal(post(env.calls).length, 0);
 });

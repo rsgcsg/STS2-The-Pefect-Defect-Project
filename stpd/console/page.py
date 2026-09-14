@@ -52,6 +52,7 @@ def render_shell(mode: str, api_base: str, cloud_url: str = "") -> str:
         f'<span class="nav-icon" aria-hidden="true">{icon}</span>{name}</a>'
         for key, name, icon in (
             ("overview", "概览", "◫"),
+            ("campaigns", "录制与上传", "◉"),
             ("collections", "采集记录", "▤"),
             ("statistics", "数据统计", "▥"),
             ("datasets", "数据集", "▦"),
@@ -60,7 +61,6 @@ def render_shell(mode: str, api_base: str, cloud_url: str = "") -> str:
             ("models", "模型与评估", "◇"),
             ("local-models", "本机模型测试", "▷"),
             ("devices", "账号与电脑", "▣"),
-            ("campaigns", "采集活动", "◉"),
             ("members", "成员管理", "♙"),
             ("system", "系统", "⚙"),
         )
@@ -125,7 +125,7 @@ def render_landing(source_revision: str) -> str:
 <p><a class="button" href="/app/">登录项目账号 →</a>
 <a class="button secondary" href="{guide}" rel="noreferrer">获取开发者工作台 ↗</a></p>
 <ol><li>在采集电脑打开工作台。</li><li>用受邀请的项目邮箱登录，核对并绑定电脑。</li>
-<li>配置获同意的采集活动；Recorder Close 后在工作台跟踪上传。</li></ol>
+<li>打开“录制与上传”，确认日常录制授权并完成本机检查；Recorder Close 后跟踪上传。</li></ol>
 <p>本机队列在工作台查看。云端只显示已收到的数据；账号登录不代表同意上传。</p>
 <p class="small muted">当前供项目开发者使用，按邀请接入。无需单独注册密码。</p>
 </section></main></body></html>'''

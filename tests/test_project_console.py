@@ -34,6 +34,7 @@ def test_shared_shell_has_no_embedded_runtime_data_or_external_dependencies():
     for mode, api in [("local", "/api/console"), ("cloud", "/app/api")]:
         page = render_shell(mode, api, "https://hub.example")
         assert 'lang="zh-CN"' in page and 'data-api="' + api in page
+        assert "录制与上传" in page
         assert "http-equiv" not in page
         assert "localStorage" not in asset("console.js")[1].decode()
         assert "innerHTML" not in asset("console.js")[1].decode()

@@ -7,6 +7,7 @@ class Element {
   constructor(tag) { this.tag = tag; this.children = []; this.value = ''; this.dataset = {}; }
   append(...items) { this.children.push(...items); }
   replaceChildren(...items) { this.children = items; }
+  addEventListener() {}
   get options() { return this.children; }
 }
 function setup() {
@@ -149,4 +150,56 @@ test('system preserves capacity attention and missing observations without claim
     assert.match(rendered, /不会自动删除数据或镜像/);
     assert.doesNotMatch(rendered, /运行余量充足|在有效期内/);
   }
+});
+
+
+test('bound member continues into recording setup without the old configuration handoff', async () => {
+  const {ui, calls} = setup();
+  const initial = ui.refresh(true);
+  calls.shift().answer({...person(), hub_configured: true, device_credential_present: true,
+    delivery_configured: false});
+  await initial;
+  const page = ui.renderDevices();
+  const flatten = element => [element.textContent || '', ...(element.children || []).map(flatten)].join(' ');
+  assert.match(flatten(page), /确认日常录制授权/);
+  assert.doesNotMatch(flatten(page), /领取活动配置/);
+  assert.equal(page.children.find(item => item.textContent === '继续录制与上传 →')?.href,
+    '?view=campaigns');
+});
+
+test('record list and detail use the verified activity association without guessing from campaign IDs', async () => {
+  const {context} = pageSetup('devices', {status: 'signed_in'});
+  await settled();
+  const flatten = element => [element.textContent || '', ...(element.children || []).map(
+    child => typeof child === 'string' ? child : flatten(child))].join(' ');
+  for (const [association, expected] of [
+    [{kind: 'default', name: '每日练习'}, '日常录制 · 每日练习'],
+    [{kind: 'activity', name: '专题一'}, '专题活动 · 专题一'],
+    [{kind: 'unlinked', name: null}, '未关联专题活动'],
+    [undefined, '录制用途尚未关联'],
+  ]) {
+    context.recordFixture = {id: 'a'.repeat(32), campaign_id: 'campaign-looking-like-a-default',
+      collection_context: association};
+    for (const expression of ['collectionTable([recordFixture])', 'detail({item: recordFixture})']) {
+      const rendered = flatten(vm.runInContext(expression, context));
+      assert.ok(rendered.includes(expected), expression + ' must preserve association status');
+    }
+  }
+});
+
+test('overview still presents recording setup when this computer has no delivery configuration', async () => {
+  const {context, get} = pageSetup('devices', {status: 'signed_in'});
+  await settled();
+  const rendered = [];
+  context.window.SpireProject.render = async (view, identity) => {
+    rendered.push([view, identity.status]);
+    return 'durable setup steps';
+  };
+  context.window.SpireIdentity.api = route => '/app/api/' + route;
+  context.fetch = async () => ({ok: true, json: async () => ({status: 'not_configured'})});
+  context.AbortSignal = AbortSignal;
+  context.location.search = '?view=overview';
+  await vm.runInContext('readLocation(); load(true)', context);
+  assert.deepEqual(rendered, [['collection-overview', 'signed_in']]);
+  assert.equal(get('content').children[0].children[0], 'durable setup steps');
 });

@@ -131,7 +131,7 @@ window.SpireIdentity = (() => {
     if (local) {
       box.append(el("p", identity?.device_credential_present ?
         "这台电脑已保存上传凭据；是否有效以 Hub 最近验证为准。个人退出不会删除它。" :
-        "先登录并确认电脑名称。绑定成功后，还需配置采集活动与数据上传同意；登录不代表同意上传。"));
+        "先登录并确认电脑名称。绑定成功后，打开“录制与上传”确认日常录制授权并完成本机设置；登录不代表同意上传。"));
       if (!identity?.hub_configured) box.append(el("p", "尚未配置项目 Hub 地址。请使用项目提供的启动配置。"));
       else if (!who || identity.status !== "signed_in") {
         const label = el("label", "这台电脑的名称"), input = el("input");
@@ -152,10 +152,13 @@ window.SpireIdentity = (() => {
         refreshPage();
       }));
       box.append(el("p", identity?.delivery_configured ?
-        "采集活动已有配置；在“这台电脑”的采集记录中查看封装、排队、上传与云端收据。" :
-        "当前未配置采集活动，尚不会上传数据。向项目负责人领取活动配置后，用同一工作台打开。"));
+        "这台电脑已有投递配置；在“录制与上传”查看本机检查，在“这台电脑”的采集记录中查看上传与云端收据。" :
+        "当前尚未配置投递。打开“录制与上传”，确认日常录制授权并查看本机设置的下一步。"));
     }
     if (who) {
+      const recording = el("a", "继续录制与上传 →", "button");
+      recording.href = "?view=campaigns";
+      box.append(recording);
       box.append(el("p", `当前账号：${who.email} · ${who.role}`));
       for (const device of identity.devices || []) {
         const row = el("div", undefined, "device-row");
