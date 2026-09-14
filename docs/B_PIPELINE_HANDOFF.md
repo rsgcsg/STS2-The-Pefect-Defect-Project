@@ -45,7 +45,9 @@ research gates below remain explicit, with compute launch budget zero until auth
    carry the checkout identity used by the reviewed workflow.
 2. Install Git, Python 3.11/uv, Node 20+ and the collection tool's declared .NET runtime once.
    The game must already be owned and installed. Install the Mod using the Platform release's
-   exact install/load instructions; do not copy game files from another developer.
+   exact install/load instructions; do not copy game files from another developer. Initial native
+   installation is operator-assisted using a retained exact Platform checkout; see
+   [developer kit installation](DEVELOPER_KIT_INSTALL.md). The kit has no standalone installer.
 3. From that clean STPD checkout, open the workbench. Use the same explicit config path in
    all commands; the launcher's user-state default and the lower-level CLI default differ.
    The launcher normally uses `%LOCALAPPDATA%/spireagent/workbench/project.json` on Windows,
@@ -138,6 +140,9 @@ An enrollment alone does not prove which remote upload belongs to it. Sharing ad
 the exact verified upload/device and bundle campaign identity, or a separately reviewed historical
 grant. Names in **采集记录** show verified association only; unknown association is not guessed from
 timestamps, the current default or a similarly named campaign. Association does not grant access.
+The local queue list stays available offline and does not query a cloud association for every row.
+Open its detail to see the exact matched Hub association and dated cloud observation; a missing
+local list label is not a failed enrollment.
 
 For daily reuse, run the saved launcher command or `project open --config /ABS/project.json`.
 The selected configuration and consent persist. After Recorder **Close**, delivery packages and

@@ -187,6 +187,17 @@ test('record list and detail use the verified activity association without guess
   }
 });
 
+test('local list distinguishes an unqueried cloud association from a missing enrollment', async () => {
+  const {context} = pageSetup('devices', {status: 'signed_in'});
+  await settled();
+  context.localRecordFixture = {local_delivery: true, campaign_id: 'campaign-looking-like-a-default'};
+  assert.equal(vm.runInContext('collectionContext(localRecordFixture)', context),
+    '本机记录 · 云端归属见详情');
+  context.localRecordFixture.collection_context = {kind: 'default', name: '日常真人采集'};
+  assert.equal(vm.runInContext('collectionContext(localRecordFixture)', context),
+    '日常录制 · 日常真人采集');
+});
+
 test('overview still presents recording setup when this computer has no delivery configuration', async () => {
   const {context, get} = pageSetup('devices', {status: 'signed_in'});
   await settled();

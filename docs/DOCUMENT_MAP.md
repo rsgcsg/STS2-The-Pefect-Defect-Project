@@ -97,3 +97,6 @@ verified source-IP changes, lost access and daily capacity/backup inspection.
 
 [Measured Hub access and capacity recovery](evidence/HUB_ACCESS_CAPACITY_REPAIR_2026-09-14.md)
 records the predecessor incident separately from later candidate qualification.
+
+- [Developer kit initial installation](DEVELOPER_KIT_INSTALL.md): operator-assisted exact binary installation and rollback.
+- [Daily collection Human audit](evidence/B_DEFAULT_COLLECTION_HUMAN_AUDIT_2026-09-15.md): actual transfer/access PASS and one unresolved native event Continue; not Full-Run PASS.

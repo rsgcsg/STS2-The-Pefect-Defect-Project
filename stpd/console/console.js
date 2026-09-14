@@ -183,7 +183,7 @@ function collectionContext(row) {
   if (context?.kind === "unlinked") return "未关联专题活动";
   if (["default", "activity"].includes(context?.kind) && typeof context.name === "string" && context.name)
     return `${context.kind === "default" ? "日常录制" : "专题活动"} · ${context.name}`;
-  return "录制用途尚未关联";
+  return row.local_delivery ? "本机记录 · 云端归属见详情" : "录制用途尚未关联";
 }
 function summary(row) {
   return row.summary || {};
