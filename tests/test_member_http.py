@@ -46,18 +46,21 @@ def test_admin_http_requires_browser_csrf_current_membership(tmp_path, signed):
         browser_access=access,
         public_origin="https://hub.example",
     )
-    identity = request(app, "/app/api/identity", jwt=token())[1]
+    # A browser retains one Access JWT; a newly issued JWT has a different CSRF binding.
+    admin_token = token()
+    identity = request(app, "/app/api/identity", jwt=admin_token)[1]
     route = "/app/api/admin/members"
     invite = {"email": "new@example.org", "csrf_token": identity["csrf_token"]}
     assert (
-        request(app, route, method="POST", jwt=token(), body=invite, origin="https://evil")[0]
+        request(app, route, method="POST", jwt=admin_token, body=invite, origin="https://evil")[0]
         == 403
     )
     assert (
-        request(app, route, method="POST", jwt=token(), body={"email": "new@example.org"})[0] == 400
+        request(app, route, method="POST", jwt=admin_token, body={"email": "new@example.org"})[0]
+        == 400
     )
     assert request(app, route, method="POST", bearer="admin" * 16, body=invite)[0] == 401
-    code, member = request(app, route, method="POST", jwt=token(), body=invite)
+    code, member = request(app, route, method="POST", jwt=admin_token, body=invite)
     assert code == 200 and member["status"] == "invited"
     assert member["device_quota"] == 3
     user_token = token(email="new@example.org")
@@ -65,11 +68,21 @@ def test_admin_http_requires_browser_csrf_current_membership(tmp_path, signed):
     assert request(app, route, jwt=user_token)[0] == 403
     assert request(app, "/app/api/statistics", jwt=user_token)[0] == 200
     assert request(app, "/app/api/member/campaigns", jwt=user_token)[0] == 200
+    changed_session = token(iat=int(time.time()) - 30)
+    rejected = request(
+        app,
+        route + "/" + member["member_id"],
+        method="POST",
+        jwt=changed_session,
+        body={"status": "disabled", "csrf_token": identity["csrf_token"]},
+    )
+    assert rejected[0] == 403 and rejected[1]["error"] == "identity_csrf_rejected"
+    assert request(app, "/app/api/statistics", jwt=user_token)[0] == 200
     result = request(
         app,
         route + "/" + member["member_id"],
         method="POST",
-        jwt=token(),
+        jwt=admin_token,
         body={"status": "disabled", "csrf_token": identity["csrf_token"]},
     )
     assert result[0] == 200
