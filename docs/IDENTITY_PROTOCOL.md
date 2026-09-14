@@ -41,8 +41,8 @@ the cookie scope nor its name grants Hub membership or replaces device credentia
 There are two Human console roles. Members can inspect shared project data, select explicitly
 shareable exports, review research lineage and use supported local model workflows. Job
 submission remains with existing CLI and budget controls; member API writes are limited to
-explicit activity enrollment and export selection. Administrators additionally
-manage members, device enrollment quotas and activity templates. Native control remains local
+explicit daily/optional-activity enrollment and export selection. Administrators additionally
+manage members, device enrollment quotas, daily defaults and activity templates. Native control remains local
 and separate. Membership grants neither sealed-test access nor unlimited compute.
 
 An administrator adds an email in **成员管理**, with role, enrollment permission and device
@@ -78,6 +78,27 @@ The old `stpd/console-access-v1` file is archival/explicit migration input only.
 `STPD_ACCESS_ALLOWLIST` is rejected in runtime configuration. It cannot grant or revive
 membership. Current browser configuration uses only `STPD_ACCESS_ISSUER` and
 `STPD_ACCESS_AUDIENCE`; no Cloudflare administration credential is installed in the Hub.
+
+## Recording consent and software identity
+
+The project daily default is a Hub setting pointing to an immutable collection template.
+Only a freshly authorized cloud-browser administrator can publish or change that recommendation,
+with the existing Origin/CSRF checks. It neither enrolls members nor grants Human/upload/sharing
+consent. Enrollment still requires all three explicit declarations and an active device owned
+by the current member. Saved declarations remain member-private, including from administrators.
+
+`stpd/collection-activity-v2` records purpose, description, consent, sharing scope and upload
+hosts separately from software. A tool or game update does not itself create new consent.
+A changed declaration scope publishes a new template; existing enrollment identities and data
+remain unchanged. Historical `stpd/collection-activity-v1` templates retain their exact original
+source/tool/game/Mod requirements. Neither version lets STPD attest native Human origin.
+
+Local readback combines that authenticated enrollment with its persisted preparation and a fresh
+Platform-owned native check. Prepare creates inactive files; bind requires the game stopped;
+activation requires the current native destination and delivery preflight. The cloud cannot
+supply local file operands or activate a collector. Registering a new tool does not change a
+saved queue's exact release identity. Controlled queue rollover is not automated here; follow
+[the maintenance boundary](B_PIPELINE_HANDOFF.md#daily-work-upgrades-and-incidents).
 
 ## Local connection flow
 

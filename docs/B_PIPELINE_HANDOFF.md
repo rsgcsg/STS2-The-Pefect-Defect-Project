@@ -13,7 +13,7 @@ reviewed release notes, then follow this guide. A branch name or an old private 
 is not a release identity. Current bounded qualification is recorded in
 [the unified workflow release report](evidence/B_UNIFIED_WORKFLOW_RELEASE_2026-09-13.md).
 
-The member/admin, activity, export and local-model changes described here are a source candidate
+The daily-default recording, member/admin, export and local-model changes here are a source candidate
 until their exact release, deployed schema-4 migration and browser/Human gates pass. An existing
 v1 release remains qualified only for its published scope. Select a release that explicitly
 includes these capabilities; do not treat this document or an older successful receipt as a
@@ -25,8 +25,8 @@ production rollout. [ADR-0006](adr/0006-project-members-and-local-models.md) rec
 |---|---|---|
 | first install | obtain the approved Mod/tool and exact STPD checkout; run the launcher below | local workbench opens; project doctor passes |
 | first connection | log in with an invited email; then separately compare the pairing code and approve this computer | the profile is visible immediately after verified login; the same named computer appears after approval |
-| before first recording | select an approved activity, declare Human/upload/project-sharing consent and prepare its fresh local paths | exact native root/identity binding and delivery doctor pass; preparation alone is insufficient |
-| each collection | open the same campaign, record in the game, press Recorder **Close** | collection detail reaches **云端已验收** with an exact remote receipt |
+| before first recording | open **录制与上传**, confirm daily Human/upload/project-sharing consent, prepare local files, bind with the game closed, then launch and enable uploads | persisted setup, current native root/identity check and delivery doctor pass; each is a separate stage |
+| each collection | reopen the same workbench configuration, record in the game, press Recorder **Close** | collection detail reaches **云端已验收** with an exact remote receipt |
 | inspect data | use **采集记录／数据统计／数据下载**; use **这台电脑** for the local queue | counts/coverage, upload receipt, explicit sharing and research use remain separate |
 | finish or reboot | use `project stop` when stopping delivery; open the same configuration after reboot | retained sealed work resumes under the same device and IDs |
 | upgrade or report a problem | follow the upgrade/incident procedure below | old evidence is retained and a new exact candidate has its own checks |
@@ -48,7 +48,10 @@ research gates below remain explicit, with compute launch budget zero until auth
    exact install/load instructions; do not copy game files from another developer.
 3. From that clean STPD checkout, open the workbench. Use the same explicit config path in
    all commands; the launcher's user-state default and the lower-level CLI default differ.
-   Replace `/ABS/project.json` with the private path selected for this terminal:
+   The launcher normally uses `%LOCALAPPDATA%/spireagent/workbench/project.json` on Windows,
+   or `~/.local/share/spireagent/workbench/project.json` elsewhere. Use the resolved absolute
+   path consistently, and a separate private directory for another account. Replace
+   `/ABS/project.json` below with that terminal's selected path; quote paths containing spaces:
 
    ```bash
    python tools/open_workbench.py --config /ABS/project.json --hub-url https://hub.2-fire-2.com
@@ -56,7 +59,7 @@ research gates below remain explicit, with compute launch budget zero until auth
 
    The launcher installs the locked `cloud` profile and exact Node dependencies. It does not
    select a Git revision, install the game Mod, attach a recording directory or authorize a
-   campaign. It preserves existing configuration. Collectors need no model weights, Torch,
+   recording scope. It preserves existing configuration. Collectors need no model weights, Torch,
    Platform checkout, R2 keys, Cloudflare account or admin token.
 4. An administrator first adds the member email in the cloud **成员管理** page; no invitation
    mail is sent automatically. Open **账号与电脑 → 登录并绑定这台电脑**. Use that email and verification code,
@@ -69,69 +72,77 @@ research gates below remain explicit, with compute launch budget zero until auth
    config on a computer. To use another account on the same physical computer, choose a
    separate private config/state directory and a distinguishable device name; do not copy
    device credentials or reuse another owner's recording/outbox paths.
-5. Select the approved activity and complete the dedicated campaign preparation below. Native
-   Mod installation and the current exact recording-root activation gate remain operator responsibilities. Save the approved
-   launcher command with its exact `--config` path as this terminal's normal entry. Each new
-   terminal performs a bounded first Close-to-receipt check before routine collection.
+5. Complete **录制与上传** below. The administrator provides a daily default; members do not
+   need to create or select a topic activity. Native Mod installation still follows the approved
+   Platform release. Save the launcher command with its exact `--config` path as this terminal's
+   normal entry, and perform a bounded first Close-to-receipt check before routine collection.
 
 Developers changing code and researchers running the full gate still use
 `uv sync --locked --all-extras` and `npm ci`; the lighter collector setup does not replace CI.
 
-## Attach a campaign once; reopen it thereafter
+<a id="attach-a-campaign-once-reopen-it-thereafter"></a>
 
-The administrator publishes a versioned activity with exact game/Mod/tool identities and consent
-scope. In **采集活动**, select the reviewed version and this owned active device. Explicitly
-declare Human origin for this dedicated campaign, permission to upload and permission to share
-with project members. These are declarations, not machine verification of Human gameplay.
-Login, an older campaign and past upload consent do not make these declarations for you.
+## Set up daily recording once; reopen it thereafter
 
-On the first terminal, register the trusted tool once using the release's independently approved
-ID and complete fixed directory. No delivery configuration has to exist yet:
+The cloud administrator opens **录制与上传 → 日常录制默认设置** and publishes a name,
+description and consent text. This recommends one immutable template to new collectors; it
+neither grants consent nor changes an existing local configuration. **高级选项：专题活动与已有授权**
+contains optional topic activities and previous declarations.
 
-```bash
-uv run --locked python -m stpd.workbench project collection-tool --config /ABS/project.json \
-  --tool-directory /ABS/kit/collection-tool --tool-release-id EXACT_APPROVED_ID
-```
-
-This verifies and registers the tool; it starts neither the game nor upload. Paths and credentials
-are not accepted from the cloud browser. The local preparation uses this registered tool and
-Platform `DeliveryConfig` codec. It creates new private recording/outbox paths and an inactive
-config; repeating the same enrollment preserves its ID. It never scans/enrolls an old archive, starts upload, launches the
-game or changes the native configuration. Missing or drifted tool registration is an explicit
-setup blocker, not permission to trust a browser-provided release ID.
-
-Preparation reports `native_binding_required`. The operator binds those fresh paths through
-the supported Platform Mod/profile configuration and checks the actual loaded native identity
-and recording destination, then runs the owning delivery doctor. A checkbox or configuration
-file alone is not native binding evidence. Only then attach the prepared delivery config as
-below. Preserve incomplete preparation for inspection; never clear a directory that could
-contain Human evidence. A changed policy or game/Mod/tool identity requires a new activity version.
-
-Stop an existing workbench before changing its configuration. Preserve its exact state directory
-so its personal session and device credential remain in place. Replace all placeholders with
-the approved existing values, including `--platform-url` if the terminal uses it:
+First register the approved fixed tool. Registration requires the workbench to be stopped;
+closing its browser tab is insufficient. Use the same private configuration created by the
+launcher and the release's independently approved tool ID:
 
 ```bash
 uv run --locked python -m stpd.workbench project stop --config /ABS/project.json
-uv run --locked python -m stpd.workbench project setup --replace-config --config /ABS/project.json \
-  --state-dir /ABS/existing-workbench-state --hub-url https://hub.2-fire-2.com \
-  --delivery-config /ABS/delivery.json --platform-url http://127.0.0.1:PORT
-uv run --locked python -m stpd.workbench project doctor --config /ABS/project.json
+uv run --locked python -m stpd.workbench project collection-tool --config /ABS/project.json \
+  --tool-directory /ABS/kit/collection-tool --tool-release-id EXACT_APPROVED_ID
 uv run --locked python -m stpd.workbench project open --config /ABS/project.json
 ```
 
-Omit `--platform-url` only when it was deliberately unconfigured. Setup with replacement uses
-the supplied values; it does not merge omitted settings. Never move a retained outbox into a
-different device/campaign to clear an error. A failed doctor blocks collection startup.
+Keep Node 20+ and the tool's declared .NET runtime on the local PATH. Register the complete
+fixed directory, including its packaged setup helper and provenance. A missing helper requires
+an approved tool update; a browser-provided path or release ID is not a replacement trust source.
+Registration verifies bytes and saves the selected tool; it starts no game or upload.
 
-An enrollment alone does not prove which remote upload belongs to it. Shared-download admission
-requires the exact verified upload/device and bundle campaign identity, or a separately reviewed
-explicit historical sharing grant. Timestamps and a guessed current activity cannot grant access.
+In the **local** workbench:
+
+1. Open **录制与上传**. Read the daily recording description and separately confirm Human origin,
+   upload permission and project-member sharing, then choose **确认授权并继续**. These declarations
+   are saved by Hub for this owned active device. They are never prechecked or inferred from login.
+2. Choose **准备本机录制配置**. The service creates fresh private recording/outbox directories and
+   an inactive configuration. Reopening the page reads the saved result; it does not create
+   another enrollment or adopt historical recordings.
+3. Close STS2, enter this computer's game installation directory and choose **绑定本机录制目录**.
+   The packaged Platform helper checks the installation and binds its recording destination.
+   This can report configured while the game is stopped; it is not proof of a loaded game.
+4. Start STS2 and refresh. Proceed only when the current native connection and exact recording
+   root are confirmed. Choose **启用本机上传**; the local service repeats native/preflight checks
+   before attaching the configuration and starting delivery. Cloud pages cannot perform this step.
+5. Record through the game's Recorder, press **Close**, and open **采集记录**. Confirm the exact
+   cloud receipt for this first session. Home and **录制与上传** show setup and background status;
+   the individual record shows packaging, upload and receiver acceptance.
+
+A failed or unknown native check remains blocked. Keep incomplete preparation and its errors
+for inspection. A bind request cannot silently replace a different attached recording config.
+Do not bypass that guard with a different device, copied directory or manual outbox edits.
+
+Daily templates use `stpd/collection-activity-v2`: purpose, consent and upload destinations are
+separate from software identity. A software-only update does not itself require another Human
+consent declaration. Changed purpose/sharing/consent publishes a new immutable template and
+requires deliberate consent for that scope. Historical v1 templates retain their original exact
+game/Mod/tool/source requirements; they are not silently converted to v2. This distinction does
+not make an existing outbox upgradeable in place; see the maintenance procedure below.
+
+An enrollment alone does not prove which remote upload belongs to it. Sharing admission requires
+the exact verified upload/device and bundle campaign identity, or a separately reviewed historical
+grant. Names in **采集记录** show verified association only; unknown association is not guessed from
+timestamps, the current default or a similarly named campaign. Association does not grant access.
 
 For daily reuse, run the saved launcher command or `project open --config /ABS/project.json`.
-Pressing Recorder **Close** seals the session; the running delivery service packages and sends
-it automatically. Keep the workbench process running until the remote receipt is observed.
-The browser tab can close independently. There is no installed OS autostart service.
+The selected configuration and consent persist. After Recorder **Close**, delivery packages and
+sends the sealed session automatically. Keep the workbench process running until the remote
+receipt is observed. Its browser tab can close independently; there is no OS autostart service.
 
 ## One system, separate owners
 
@@ -169,8 +180,8 @@ A reviewable terminal handoff contains:
 - public Hub URL and explicit HTTPS upload-host allowlist;
 - Hub project membership invitation and browser-approved device enrollment (legacy private token
   provisioning remains an operator recovery route);
-- immutable activity/enrollment and explicit Human/upload/project-sharing declarations; private
-  campaign config, dedicated recording/outbox paths and startup/stop/status commands;
+- immutable daily/optional-activity enrollment and explicit Human/upload/project-sharing declarations;
+  private configuration, dedicated recording/outbox paths and startup/stop/status commands;
 - supported OS and tested gate, known limitations, rollback and incident instructions.
 
 Do not distribute a developer's `.local`, `.env`, home directory, SQLite or outbox. Never give
@@ -230,18 +241,19 @@ A corrected release uses a new tag/asset identity; never overwrite the previous 
 2. Separate qualification from collection: preserve the synthetic Hub state/prefix and prepare
    fresh collection state/prefix with budget zero, private permissions, backup/status checks and
    no configured GPU target. The public service being healthy is not a Human-upload permission.
-3. Invite the account, bind one revocable device through the workbench and prepare its local campaign config. Use a **dedicated
+3. Invite the account, bind one revocable device through the workbench, obtain explicit
+   Human/upload/project-sharing consent, then prepare its local recording config. Use a **dedicated
    initially empty recording root** and a separate new outbox. The current delivery service
    discovers every sealed session under its configured root: do not aim it at a historical
    archive. Bind the game recording destination through Platform's supported profile/runtime
    configuration. Do not infer campaign membership from timestamps or copy/mutate sealed files.
-4. Run project setup and the owning read-only delivery preflight through `project doctor`.
-   Inspect source/tool/pin/.NET/config/token checks and the discovered-session count. A failed
-   preflight blocks open. No automatic collection starts merely because setup ran.
-5. The Human explicitly declares this campaign's Human origin, upload permission and
-   project-member sharing scope. Start the
-   exact workbench/delivery process, then the Human records a new bounded session and presses
-   Recorder Close. The agent never supplies gameplay, console actions or attestation.
+4. Confirm the exact currently loaded native identity/root, then explicitly enable uploads.
+   The local activation runs the owning delivery preflight before starting its child. Inspect
+   source/tool/pin/.NET/config/token checks and the discovered-session count; failed checks block
+   activation. File preparation alone starts no collection or upload.
+5. With the saved declaration and exact workbench/delivery process in place, the Human records
+   a new bounded session and presses Recorder Close. The agent never supplies gameplay or
+   the Human's consent declaration.
 6. Verify the local seal, immutable outbox/archive IDs, public Hub receipt and R2 manifest/bytes.
    Repeat a client restart to recover the same receipt. Confirm failed native decisions remain
    failures, pending means pending and no historical session was unexpectedly enrolled.
@@ -264,11 +276,39 @@ then reopen. The launcher does not silently replace a changed combination. Reche
 identity and receipt continuity; repeat the owning native or delivery canary when affected.
 Roll back with the recorded compatible source/tool/config pair, never by rewriting evidence.
 
+For an STPD configuration/combination refresh, stop first and preserve every configured value:
+
+```bash
+uv run --locked python -m stpd.workbench project stop --config /ABS/project.json
+uv run --locked python -m stpd.workbench project setup --replace-config --config /ABS/project.json \
+  --state-dir /ABS/existing-workbench-state --hub-url https://hub.2-fire-2.com \
+  --delivery-config /ABS/existing-delivery.json --platform-url http://127.0.0.1:PORT
+uv run --locked python -m stpd.workbench project doctor --config /ABS/project.json
+uv run --locked python -m stpd.workbench project open --config /ABS/project.json
+```
+
+Use the actual existing delivery path and platform URL; omit an option only if it was deliberately
+unconfigured. Replacement setup uses the supplied values, not a merge with omitted settings.
+This refresh does not rewrite the Platform delivery config or change an existing queue's tool.
+
+**Existing outboxes keep their exact tool release.** Preserve that complete tool directory with
+the queue. `project collection-tool --replace-tool` changes the registration for new preparation;
+it does not change a saved preparation, replace the uploader's tool, or migrate pending work.
+A still-valid attached tool continues to serve its existing queue. Do not edit the queue's release
+ID or point a fresh uploader at the old recording archive to force an upgrade.
+
+A controlled software rollover would need the old game/uploader stopped, owner-proved completion
+of the old queue, fresh recording/outbox directories under the same v2 consent enrollment, and
+new native binding/activation, with predecessor bytes retained. **This bounded workflow does not
+automate that rollover.** If the game/Mod update makes the existing tool incompatible, stop
+collection and keep the approved compatible pair until an explicit reviewed rollover is available.
+A new template or renewed consent is not a workaround for a queue-identity mismatch.
+
 | Event | Required workflow | Retained evidence |
 |---|---|---|
 | ordinary code change | owner branch/PR, falsifying regression, common gate, fresh actual-diff review, latest CI | exact source/test receipt |
 | Platform native or Mod change | Platform exact build/install/cold-load and owning Human gate when applicable | old/new BOM, artifact and loaded identity; no gameplay claim from portable tests |
-| collection-tool/Evidence change | immutable new tool/package, pin update, tamper/restart/failure tests and terminal preflight | old tool, old outbox and original failed receipts |
+| collection-tool/Evidence change | verify new bytes and affected contracts; retain an existing queue's tool; controlled queue rollover is not automated | old tool, old outbox and original failed receipts |
 | Hub/worker update | pause dispatch, verified private backup, exact source/lock/image, compatible schema, fresh service smoke | old image/config, closed snapshot, new load receipt |
 | failed upload | inspect typed incident; fix transport or owning verifier; explicit retry only where supported | original bytes, intent, receipt and error code |
 | native recording defect | report to Platform with exact version and private session evidence | original failed decision/lineage; no cloud-side repair of native truth |
