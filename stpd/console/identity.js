@@ -37,6 +37,8 @@ window.SpireIdentity = (() => {
   function topbar() {
     const target = document.getElementById("account-actions"); target.replaceChildren();
     const principal = identity?.principal;
+    const memberLink = document.querySelector('[data-view="members"]');
+    if (memberLink) memberLink.hidden = principal?.role !== "admin";
     if (principal && (!local || identity.status === "signed_in")) {
       target.append(el("span", principal.email, "account-label"));
       target.append(action("退出账号", async () => {
@@ -62,7 +64,7 @@ window.SpireIdentity = (() => {
     select.replaceChildren();
     if (local) { const option = el("option", "这台电脑 · 本地记录与队列"); option.value = "local"; select.append(option); }
     if (principal) {
-      const option = el("option", "项目 · 全部授权电脑"); option.value = "project"; select.append(option);
+      const option = el("option", principal.project_shared ? "项目 · 全部共享数据" : "项目 · 获授权数据"); option.value = "project"; select.append(option);
       for (const device of identity.devices || []) {
         const option = el("option", device.name || device.device_id);
         option.value = device.device_id; select.append(option);
@@ -123,7 +125,7 @@ window.SpireIdentity = (() => {
   }
   function renderDevices() {
     const box = el("section", undefined, "panel onboarding"), who = identity?.principal;
-    box.append(el("h2", who ? "账号与我的电脑" : "接入 SpireAgent"));
+    box.append(el("h2", who ? "账号与项目电脑" : "接入 SpireAgent"));
     box.append(el("p", "使用项目邀请的邮箱接入；首次验证后自动建立项目账号，无需另设密码。"));
     if (local) {
       box.append(el("p", identity?.device_credential_present ?
@@ -160,6 +162,14 @@ window.SpireIdentity = (() => {
         row.append(el("span", device.active === true ? "设备上传授权有效" : device.active === false ? "设备上传授权已撤销" : "设备授权状态未知"));
         row.append(el("span", device.last_seen ? `最近联络：${new Date(device.last_seen).toLocaleString()}（不代表当前在线）` : "尚未收到设备联络；在线状态未知"));
         row.append(action("查看这台电脑的云端数据", async () => { scope = device.device_id; topbar(); history.pushState({}, "", "?view=collections"); refreshPage(); }));
+        row.append(el("span", device.ownership === "owned_by_you" ? "由你管理" : "项目共享信息"));
+        if (!local && device.can_revoke === true) row.append(action("撤销这台电脑授权", async () => {
+          if (!window.confirm("撤销后这台电脑不能继续上传，历史数据保留。恢复授权需要重新办理，确定撤销？")) return;
+          await request("/app/api/identity/devices/" + encodeURIComponent(device.device_id) + "/revoke",
+            {csrf_token: identity.csrf_token}, identity.csrf_token);
+          await refresh(true); refreshPage(true);
+        }));
+        if (local && device.can_revoke === true) row.append(el("span", "设备授权管理：打开云端 → 账号与电脑"));
         box.append(row);
       }
       if (!(identity.devices || []).length) box.append(el("p", "账号下尚无电脑。请在要采集的电脑上打开工作台并发起绑定。"));
@@ -193,6 +203,11 @@ window.SpireIdentity = (() => {
     return box;
   }
   return {refresh, api, renderDevices, renderConnect,
+    ensureProjectScope() {
+      if (scope === "local" && identity?.principal && identity.status === "signed_in") {
+        scope = "project"; epoch++; topbar();
+      }
+    },
     connect(fn) { refreshPage = fn; },
     isLocal() { return local && scope === "local"; },
     context() { return `${scope}:${identity?.principal?.subject || "anonymous"}:${epoch}`; },

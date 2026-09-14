@@ -250,7 +250,8 @@ class LocalIdentity:
     def read(self, route: str) -> dict[str, Any]:
         path, _, query = route.partition("?")
         if not re.fullmatch(
-            r"(?:overview|system|collections|datasets|models|jobs)(?:/[a-f0-9]{32,64})?", path
+            r"(?:overview|system|collections|datasets|models|jobs|statistics|training|evaluations|analyses)(?:/[a-f0-9]{32,64})?",
+            path,
         ):
             raise BoundaryError("identity", "invalid_console_route")
         values = parse_qs(query, strict_parsing=True, max_num_fields=3)

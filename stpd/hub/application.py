@@ -9,17 +9,29 @@ import re
 import secrets
 import time
 from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
 
+from ..console.page import CSP
 from ..json_boundary import BoundaryError, decode_json, json_bytes
-from .access import RESULT_KINDS
+from .access import require_artifact_access
 from .console_auth import AccessVerifier, ConsolePrincipal
 from .database import token_hash
 from .identity import PERSONAL_PREFIX, IdentityService, text
 from .identity import fields as identity_fields
 from .uploads import LocalStaging, UploadService
+
+
+@dataclass(frozen=True)
+class DownloadBody:
+    size: int
+    filename: str
+    chunks: Iterable[bytes]
+
+    def __iter__(self):
+        return iter(self.chunks)
 
 
 class HubApplication:
@@ -46,6 +58,12 @@ class HubApplication:
             hashlib.sha256(("personal-identity:" + admin_token).encode()).digest(),
             public_origin,
         )
+        from .member_routes import MemberAdministration
+
+        self.members = MemberAdministration(self.identity)
+        from .member_api import MemberApi
+
+        self.member_api = MemberApi(service, self.identity)
         from .console_routes import ConsoleRoutes
 
         self.console = ConsoleRoutes(
@@ -93,6 +111,17 @@ class HubApplication:
                 "identity_code_rejected": "403 Forbidden",
                 "identity_device_not_authorized": "403 Forbidden",
                 "invalid_identity_request": "400 Bad Request",
+                "membership_not_initialized": "503 Service Unavailable",
+                "membership_not_authorized": "403 Forbidden",
+                "admin_browser_required": "403 Forbidden",
+                "admin_required": "403 Forbidden",
+                "browser_identity_required": "403 Forbidden",
+                "member_not_found": "404 Not Found",
+                "invalid_member_email": "400 Bad Request",
+                "invalid_member_request": "400 Bad Request",
+                "invalid_member_pagination": "400 Bad Request",
+                "invalid_admin_query": "400 Bad Request",
+                "member_capacity": "429 Too Many Requests",
             }.get(error.code, "409 Conflict")
             kind, body = "application/json", json_bytes({"error": error.code})
         except (ValueError, KeyError, TypeError):
@@ -111,13 +140,16 @@ class HubApplication:
             ("Content-Type", kind),
             ("Cache-Control", "no-store"),
             ("X-Content-Type-Options", "nosniff"),
-            (
-                "Content-Security-Policy",
-                "default-src 'none'; script-src 'self'; style-src 'self'; "
-                "connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'",
-            ),
+            ("Content-Security-Policy", CSP),
             ("Referrer-Policy", "no-referrer"),
         ]
+        if isinstance(body, DownloadBody):
+            headers.extend(
+                [
+                    ("Content-Length", str(body.size)),
+                    ("Content-Disposition", 'attachment; filename="' + body.filename + '"'),
+                ]
+            )
         if isinstance(body, bytes):
             headers.append(("Content-Length", str(len(body))))
             start_response(status, headers)
@@ -146,7 +178,35 @@ class HubApplication:
             raise BoundaryError("identity", "unauthorized")
         return text(value[7:], 4096)
 
-    def personal_route(self, env: dict[str, Any]) -> tuple[str, str, bytes]:
+    def member_route(
+        self, env: dict[str, Any], principal: ConsolePrincipal, path: str, *, browser: bool
+    ) -> tuple[str, str, bytes | Iterable[bytes]]:
+        method = env["REQUEST_METHOD"]
+        query = env.get("QUERY_STRING", "")
+        if method == "GET":
+            payload = re.fullmatch(r"exports/([a-f0-9]{64})/files/([a-f0-9]{64})", path)
+            if payload:
+                if query:
+                    raise BoundaryError("member", "unexpected_query")
+                metadata, chunks = self.member_api.payload(payload[1], payload[2], principal)
+                return (
+                    "200 OK",
+                    "application/octet-stream",
+                    DownloadBody(metadata["size"], payload[2] + ".bin", chunks),
+                )
+            return self.response(self.member_api.read(path, query, principal))
+        if method == "POST" and not query:
+            value = self.body(env, maximum=65536)
+            if not isinstance(value, dict):
+                raise BoundaryError("member", "invalid_member_request")
+            if browser:
+                self.identity.check_browser_write(
+                    principal, env.get("HTTP_ORIGIN", ""), value.pop("csrf_token", None)
+                )
+            return self.response(self.member_api.write(path, value, principal))
+        return self.response({"error": "method_not_allowed"}, "405 Method Not Allowed")
+
+    def personal_route(self, env: dict[str, Any]) -> tuple[str, str, bytes | Iterable[bytes]]:
         method, path = env["REQUEST_METHOD"], env["PATH_INFO"]
         source = str(env.get("REMOTE_ADDR", "unknown"))[:128]
         identity = self.identity
@@ -170,6 +230,10 @@ class HubApplication:
         if path == "/v1/identity/logout" and method == "POST":
             return self.response(identity.logout(token))
         principal = identity.personal(token)
+        if path.startswith("/v1/identity/member/"):
+            return self.member_route(
+                env, principal, path.removeprefix("/v1/identity/member/"), browser=False
+            )
         if path == "/v1/identity/me" and method == "GET":
             return self.response(identity.me(principal))
         if path.startswith("/v1/identity/console/") and method == "GET":
@@ -230,6 +294,56 @@ class HubApplication:
             )
             if path == "/app/api/identity" and method == "GET":
                 return self.response(self.identity.me(principal, browser=True))
+            if path.startswith("/app/api/member/"):
+                return self.member_route(
+                    env, principal, path.removeprefix("/app/api/member/"), browser=True
+                )
+            device_revoke = re.fullmatch(
+                r"/app/api/identity/devices/([A-Za-z0-9_.-]{1,128})/revoke", path
+            )
+            if device_revoke and method == "POST" and not env.get("QUERY_STRING"):
+                value = identity_fields(self.body(env, maximum=1024), {"csrf_token"})
+                self.identity.check_browser_write(
+                    principal, env.get("HTTP_ORIGIN", ""), value["csrf_token"]
+                )
+                return self.response(
+                    self.identity.membership.revoke_device(principal, device_revoke[1])
+                )
+            if path.startswith("/app/api/admin/"):
+                resource = path.removeprefix("/app/api/admin/")
+                if method == "GET":
+                    return self.response(
+                        self.members.read(resource, env.get("QUERY_STRING", ""), principal)
+                    )
+                if method == "POST":
+                    if env.get("QUERY_STRING"):
+                        raise BoundaryError("membership", "invalid_admin_query")
+                    value = self.body(env, maximum=8192)
+                    if not isinstance(value, dict) or "csrf_token" not in value:
+                        raise BoundaryError("membership", "invalid_member_request")
+                    self.identity.check_browser_write(
+                        principal, env.get("HTTP_ORIGIN", ""), value.pop("csrf_token")
+                    )
+                    if resource == "campaigns":
+                        return self.response(
+                            self.member_api.admin_create_campaign(value, principal)
+                        )
+                    if resource == "statistics/refresh":
+                        from .statistics import refresh_decision_statistics
+
+                        with ops.transaction() as db:
+                            self.identity.membership.admin(db, principal)
+                        if set(value) - {"upload_ids", "dataset_ids"}:
+                            raise BoundaryError("statistics", "invalid_refresh_request")
+                        return self.response(
+                            refresh_decision_statistics(
+                                self.service,
+                                upload_ids=value.get("upload_ids", []),
+                                dataset_ids=value.get("dataset_ids", []),
+                            )
+                        )
+                    return self.response(self.members.write(resource, value, principal))
+                return self.response({"error": "method_not_allowed"}, "405 Method Not Allowed")
             flow = re.fullmatch(r"/app/api/identity/flows/([a-f0-9]{32})(?:/(approve|deny))?", path)
             if flow:
                 if method == "GET" and flow[2] is None:
@@ -272,10 +386,7 @@ class HubApplication:
             self.validate_capability(upload[1], env.get("HTTP_X_UPLOAD_CAPABILITY", ""))
             row = ops.upload(upload[1])
             with ops.transaction() as db:
-                active = db.execute(
-                    "SELECT active FROM devices WHERE id=?", (row["device"],)
-                ).fetchone()
-                if active is None or not active[0]:
+                if not ops.device_authorized(db, row["device"]):
                     raise BoundaryError("hub", "unauthorized")
             if not isinstance(self.service.staging, LocalStaging):
                 raise BoundaryError("hub", "direct_store_upload_required")
@@ -361,8 +472,9 @@ class HubApplication:
         artifact = re.fullmatch(r"/v1/artifacts/([a-f0-9]{64})(?:/payloads/([a-z0-9_]+))?", path)
         if artifact and method == "GET":
             manifest = self.service.store.get_manifest(artifact[1])
-            if not admin and manifest.kind not in RESULT_KINDS:
-                raise BoundaryError("hub", "unauthorized")
+            require_artifact_access(
+                manifest, project_member=admin, payload_role=artifact[2], store=self.service.store
+            )
             if artifact[2] is None:
                 return self.response(decode_json(manifest.to_bytes()))
             return (

@@ -14,7 +14,7 @@ function setup() {
   const calls = [];
   const context = vm.createContext({
     document: {body: {dataset: {mode: 'local'}}, getElementById: key => nodes.get(key),
-      createElement: tag => new Element(tag)}, window: {},
+      createElement: tag => new Element(tag), querySelector: () => null}, window: {},
     location: {assign() {}}, history: {pushState() {}}, Date, URLSearchParams, AbortSignal,
     setTimeout, clearTimeout,
     fetch: (url, options) => new Promise(resolve => calls.push({url, options,
@@ -70,7 +70,7 @@ function pageSetup(view, identity, connectContent = async () => 'connection fact
   const context = vm.createContext({
     document: {body: {dataset: {mode: 'cloud'}}, getElementById: get,
       createElement: element, querySelectorAll: () => [], addEventListener() {}},
-    window: {addEventListener() {}, SpireIdentity: {
+    window: {addEventListener() {}, SpireProject: {}, SpireIdentity: {
       context: () => scope, isLocal: () => false, refresh: async () => identity,
       renderDevices: () => 'account facts', renderConnect: connectContent, connect() {},
     }},

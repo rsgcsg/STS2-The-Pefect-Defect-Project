@@ -118,6 +118,11 @@ class MembershipService:
         with self.ops.transaction() as db:
             if self.initialized(db) or db.execute("SELECT 1 FROM identity_members").fetchone():
                 raise BoundaryError("membership", "membership_already_initialized")
+            fresh = not any(
+                db.execute("SELECT 1 FROM " + table + " LIMIT 1").fetchone()
+                for table in ("identity_users", "devices", "identity_sessions")
+            )
+            bootstrap_admin = None
             for email, entry in entries.items():
                 rows = db.execute(
                     "SELECT * FROM identity_users WHERE issuer=? AND lower(email)=?",
@@ -140,9 +145,16 @@ class MembershipService:
                     "device_quota": 3,
                 }
                 identity = self.insert(db, value, issuer, profile=profile, access_subject=required)
+                if email == administrator and profile is None:
+                    bootstrap_admin = identity
                 for device in entry["devices"]:
                     db.execute("INSERT INTO identity_claim_scopes VALUES(?,?)", (identity, device))
             db.execute("INSERT INTO settings VALUES('membership_initialized','1')")
+            if fresh and bootstrap_admin and len(entries) == 1:
+                db.execute(
+                    "INSERT INTO settings VALUES('membership_bootstrap_pending_admin',?)",
+                    (bootstrap_admin,),
+                )
             self.ops._event(
                 db, "operator", "membership_bootstrapped", "project", {"members": len(entries)}
             )
@@ -182,6 +194,11 @@ class MembershipService:
                     (principal.subject, principal.access_subject, time.time(), row["id"]),
                 )
                 self.ops._event(db, principal.subject, "membership_activated", row["id"], {})
+                db.execute(
+                    "DELETE FROM settings WHERE key='membership_bootstrap_pending_admin' "
+                    "AND value=?",
+                    (row["id"],),
+                )
                 row = self.member(db, row["id"])
             else:
                 row = None

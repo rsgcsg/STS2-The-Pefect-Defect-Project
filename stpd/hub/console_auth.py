@@ -51,7 +51,9 @@ class ConsolePrincipal:
             "role": self.role,
             "device_ids": list(self.devices),
             "research_metadata": self.research,
-            "read_only": True,
+            "project_shared": self.project_shared,
+            "member_actions": self.project_shared,
+            "admin_browser_actions": self.role == "admin" and bool(self.session_binding),
             "subject": self.subject,
             "email": self.email,
             "enroll_devices": self.enroll_devices,
@@ -59,7 +61,6 @@ class ConsolePrincipal:
             "owned_device_ids": list(self.owned_devices),
             "member_id": self.member_id,
             "membership_status": self.membership_status,
-            "project_shared": self.project_shared,
         }
 
 
@@ -166,7 +167,7 @@ def verified_identity(issuer: str, subject: str, email: str) -> ConsolePrincipal
 
 def configured_access(environment: Mapping[str, str]) -> AccessVerifier | None:
     # The former file is migration input only, never a live fallback authority.
-    if environment.get("STPD_ACCESS_ALLOWLIST"):
+    if "STPD_ACCESS_ALLOWLIST" in environment:
         raise BoundaryError("console", "legacy_allowlist_requires_explicit_membership_import")
     issuer = environment.get("STPD_ACCESS_ISSUER", "")
     audience = environment.get("STPD_ACCESS_AUDIENCE", "")

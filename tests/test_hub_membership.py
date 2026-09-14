@@ -63,6 +63,44 @@ def test_no_implicit_bootstrap_and_identity_is_not_membership(tmp_path, signed):
         identity.membership.bootstrap(issuer=ISSUER, admin_email="owner@example.org")
 
 
+def test_first_admin_bootstrap_marker_is_exact_and_removed_on_activation(tmp_path, signed):
+    access, token, _ = signed
+    identity = IdentityService(Operations(tmp_path / "ops"), access, b"key")
+    identity.membership.bootstrap(issuer=ISSUER, admin_email="owner@example.org")
+    with identity.ops.transaction() as db:
+        marker = db.execute(
+            "SELECT value FROM settings WHERE key='membership_bootstrap_pending_admin'"
+        ).fetchone()[0]
+        assert (
+            db.execute("SELECT status FROM identity_members WHERE id=?", (marker,)).fetchone()[0]
+            == "invited"
+        )
+    with pytest.raises(BoundaryError):
+        identity.principal(access.authenticate(token(email="other@example.org")))
+    principal = identity.principal(access.authenticate(token()))
+    assert principal.member_id == marker and principal.membership_status == "active"
+    with identity.ops.transaction() as db:
+        assert (
+            db.execute(
+                "SELECT 1 FROM settings WHERE key='membership_bootstrap_pending_admin'"
+            ).fetchone()
+            is None
+        )
+
+
+def test_legacy_devices_do_not_create_first_admin_bootstrap_exception(tmp_path):
+    ops = Operations(tmp_path / "ops")
+    ops.register("legacy", "x" * 40)
+    MembershipService(ops).bootstrap(issuer=ISSUER, admin_email="owner@example.org")
+    with ops.transaction() as db:
+        assert (
+            db.execute(
+                "SELECT 1 FROM settings WHERE key='membership_bootstrap_pending_admin'"
+            ).fetchone()
+            is None
+        )
+
+
 def test_invite_binds_signed_subject_once_and_defaults_are_bounded(membership):
     identity, _, admin, access, token = membership
     invited = identity.membership.invite(admin, {"email": "Member@Example.org"})

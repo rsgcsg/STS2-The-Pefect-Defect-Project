@@ -13,6 +13,12 @@ const views = {
   jobs: ["作业", "查看真实执行状态与产物。此页面不会启动计算。"],
   models: ["模型与评估", "沿着数据与作业来源查看产物；下载不等于加载或运行。"],
   system: ["系统", "查看连接、版本与运维证据，区分已确认事实和未观测状态。"],
+  members: ["成员管理", "管理员管理成员；所有成员共享项目数据与研究能力。"],
+  statistics: ["数据统计", "总量、类别和摘要覆盖，按明确的数据范围统计。"],
+  downloads: ["数据下载", "固定下载清单和校验值；封存与未获共享授权的数据保持受限。"],
+  research: ["训练与分析", "查看真实训练产物、benchmark 和数据分析，区分尚未执行的计划。"],
+  "local-models": ["本机模型评估", "检查兼容性、加载模型，再明确开始真实游戏评估。"],
+  campaigns: ["采集活动", "选择活动和共享范围；本机配置与真人录制分别验证。"],
 };
 const labels = {
   verified: ["云端已验收", "good"],
@@ -938,7 +944,7 @@ function changePage(offset) {
   load(true);
 }
 async function load(manual = false) {
-  if (!manual && document.activeElement?.id === "device-name") return;
+  if (!manual && (document.activeElement?.id === "device-name" || document.activeElement?.closest("[data-editor], [data-project-editor]"))) return;
   if (state.busy && !manual) return;
   state.busy = true;
   const serial = ++state.serial;
@@ -970,10 +976,22 @@ async function load(manual = false) {
   try {
     const identity = await window.SpireIdentity.refresh(manual);
     if (serial !== state.serial) return;
+    if (["members", "statistics", "downloads", "research", "campaigns"].includes(view)) {
+      window.SpireIdentity.ensureProjectScope();
+    }
     const identityContext = window.SpireIdentity.context();
     context = `${pageContext}:${identityContext}`;
     if (renderedContext !== context) $("content").replaceChildren(empty("正在读取…", "当前账号与电脑范围"));
     local = window.SpireIdentity.isLocal();
+    if (["members", "statistics", "downloads", "research", "local-models", "campaigns"].includes(view)) {
+      const content = await window.SpireProject.render(view, identity);
+      if (serial !== state.serial || identityContext !== window.SpireIdentity.context()) return;
+      $("content").replaceChildren(content);
+      renderedContext = context;
+      $("updated").textContent = "当前账号下的服务观测";
+      $("connection").textContent = identity?.status === "signed_in" ? "已通过身份验证" : "本机工作台";
+      return;
+    }
     if (view === "devices" || view === "connect") {
       const content = view === "devices" ? window.SpireIdentity.renderDevices() :
         await window.SpireIdentity.renderConnect();
@@ -1089,7 +1107,8 @@ document.querySelectorAll("[data-view]").forEach((item) =>
 $("refresh").addEventListener("click", () => load(true));
 $("lifecycle-note").textContent = localShell
   ? "关闭网页 ≠ 停止后台投递"
-  : "只读团队视图 · 原始数据不公开";
+  : "邀请制项目 · 共享数据按权限访问";
+window.SpireProject.reload = () => load(true);
 window.addEventListener("popstate", () => {
   readLocation();
   load(true);

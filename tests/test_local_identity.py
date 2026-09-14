@@ -241,6 +241,7 @@ def test_browser_identity_response_races_use_real_presentation_module():
 
 
 def test_local_bff_uses_actual_hub_dtos_and_preserves_legacy_upload_identity(tmp_path, monkeypatch):
+    from dataclasses import replace
     from io import BytesIO
     from urllib.parse import urlsplit
 
@@ -249,12 +250,34 @@ def test_local_bff_uses_actual_hub_dtos_and_preserves_legacy_upload_identity(tmp
     from test_hub_identity import request as hub_request
 
     from stpd.hub.application import HubApplication
-    from stpd.hub.console_auth import AccessVerifier, ConsolePrincipal
+    from stpd.hub.console_auth import AccessVerifier, verified_identity
 
     access = AccessVerifier(
         "https://team.cloudflareaccess.com",
         "a" * 64,
-        [
+    )
+    principal = replace(
+        verified_identity(access.issuer, "native-sub", "owner@example.test"),
+        expires_at=time.time() + 3600,
+        session_binding="session",
+    )
+    monkeypatch.setattr(access, "authenticate", lambda token: principal)
+    owner = service(tmp_path / "hub")
+    with owner.operations.transaction() as db:
+        db.execute("DELETE FROM identity_claim_scopes")
+        db.execute("DELETE FROM identity_members")
+        db.execute("DELETE FROM identity_users")
+        db.execute("DELETE FROM settings WHERE key LIKE 'membership_%'")
+    app = HubApplication(
+        owner,
+        "admin" * 16,
+        browser_access=access,
+        public_origin="https://hub.example",
+    )
+    app.identity.membership.bootstrap(
+        issuer=access.issuer,
+        admin_email="owner@example.test",
+        legacy_principals=[
             {
                 "email": "owner@example.test",
                 "role": "reviewer",
@@ -262,25 +285,6 @@ def test_local_bff_uses_actual_hub_dtos_and_preserves_legacy_upload_identity(tmp
                 "enroll_devices": True,
             }
         ],
-    )
-    principal = ConsolePrincipal(
-        "reviewer",
-        ("one",),
-        "stable",
-        "owner@example.test",
-        access.issuer,
-        "native-sub",
-        time.time() + 3600,
-        "session",
-        True,
-    )
-    monkeypatch.setattr(access, "authenticate", lambda token: principal)
-    monkeypatch.setattr(access, "member", lambda *a: principal)
-    app = HubApplication(
-        service(tmp_path / "hub"),
-        "admin" * 16,
-        browser_access=access,
-        public_origin="https://hub.example",
     )
     account = LocalIdentity(config(tmp_path / "local"))
     monkeypatch.setenv("STPD_HUB_TOKEN", "one" * 16)

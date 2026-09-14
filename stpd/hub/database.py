@@ -100,6 +100,9 @@ class Operations:
             for name, kind in (("name", "TEXT"), ("owner_subject", "TEXT"), ("last_seen", "REAL")):
                 if name not in device_columns:
                     db.execute(f"ALTER TABLE devices ADD COLUMN {name} {kind}")
+            from .campaigns import create_campaign_tables
+
+            create_campaign_tables(db)
             db.execute(f"PRAGMA user_version={CURRENT_SCHEMA}")
 
     @contextmanager

@@ -19,7 +19,7 @@ from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, cast
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 from urllib.request import ProxyHandler, Request, build_opener
 
 from ..console.page import CSP, asset, render_shell
@@ -29,6 +29,8 @@ from .dashboard import _safe_value
 from .developer import ROOT, ProjectConfig, atomic_json, doctor, tool_identity
 from .hub_client import HubClient
 from .identity import LocalIdentity
+from .local_models import LocalModelService
+from .member_client import MemberClient
 
 
 @contextlib.contextmanager
@@ -169,6 +171,7 @@ class Application:
         self.control_token = secrets.token_hex(32)
         self.identity = tool_identity()
         self.account = LocalIdentity(config)
+        self.members = MemberClient(self.account)
         self.delivery: subprocess.Popen[bytes] | None = None
         self.delivery_log: Any = None
         self.operation_lock = threading.Lock()
@@ -180,6 +183,7 @@ class Application:
         self.console = LocalConsole(
             config, self.hub, self.delivery_environment, self.delivery_process, self.identity
         )
+        self.models = LocalModelService(config, hub=self.hub)
 
     def delivery_process(self) -> str:
         if self.delivery is None:
@@ -226,7 +230,7 @@ class Application:
             )
             if observed.get("device_id") != device["device_id"]:
                 raise BoundaryError("project", "device_identity_changed")
-            self.close()
+            self.close_delivery()
             self.delivery, self.delivery_log = None, None
             try:
                 result = subprocess.run(
@@ -299,6 +303,11 @@ class Application:
         }
 
     def close(self) -> None:
+        self.members.close()
+        self.models.close()
+        self.close_delivery()
+
+    def close_delivery(self) -> None:
         if self.delivery is not None and self.delivery.poll() is None:
             self.delivery.terminate()
             try:
@@ -326,6 +335,45 @@ def create_server(app: Application) -> ThreadingHTTPServer:
             cookie.load(self.headers.get("Cookie", ""))
             value = cookie.get("spireagent_local")
             return bool(value and hmac.compare_digest(value.value, app.account.cookie))
+
+        def control_client(self) -> bool:
+            return self.local_host() and hmac.compare_digest(
+                self.headers.get("Authorization", ""), "Bearer " + app.control_token
+            )
+
+        def browser_write(self) -> bool:
+            origin = "http://127.0.0.1:" + str(cast(ThreadingHTTPServer, self.server).server_port)
+            return (
+                self.local_host()
+                and self.authenticated_browser()
+                and self.headers.get("Origin") == origin
+                and hmac.compare_digest(self.headers.get("X-CSRF-Token", ""), app.account.csrf)
+            )
+
+        def json_body(self, maximum: int = 65536) -> dict[str, Any]:
+            length = int(self.headers.get("Content-Length", "0"))
+            if (
+                not 0 < length <= maximum
+                or self.headers.get("Content-Type") != "application/json"
+                or self.headers.get("Transfer-Encoding")
+            ):
+                raise ValueError
+            raw = self.rfile.read(length)
+            body = json.loads(raw)
+            if len(raw) != length or not isinstance(body, dict):
+                raise ValueError
+            return body
+
+        def model_action(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
+            if path == "/api/local-models/start" and set(body) == {"selection_id"}:
+                return app.models.start(body["selection_id"])
+            if path == "/api/local-models/download" and set(body) == {"artifact_id"}:
+                return app.models.prepare(body["artifact_id"])
+            if path == "/api/local-models/command" and set(body) == {"action"}:
+                return app.models.command(body["action"])
+            if path == "/api/local-models/install-runtime" and not body:
+                return app.models.install_runtime()
+            raise BoundaryError("local_model", "invalid_local_command")
 
         def respond(self, code: int, value: bytes, content_type: str = "application/json") -> None:
             self.send_response(code)
@@ -357,6 +405,39 @@ def create_server(app: Application) -> ThreadingHTTPServer:
                 self.respond(200, json.dumps({"instance_id": app.instance_id}).encode())
             elif parsed.path == "/api/status":
                 self.respond(200, json.dumps(_safe_value(app.snapshot())).encode())
+            elif parsed.path.startswith(("/api/member/", "/api/local-models")):
+                if not self.authenticated_browser() and not (
+                    parsed.path.startswith("/api/local-models") and self.control_client()
+                ):
+                    self.respond(401, b'{"error":"browser_session_required"}')
+                    return
+                try:
+                    if parsed.path.startswith("/api/member/"):
+                        route = parsed.path.removeprefix("/api/member/")
+                        if route == "download-status" and not parsed.query:
+                            value = app.members.download_status()
+                        else:
+                            value = app.members.request(
+                                route + ("?" + parsed.query if parsed.query else "")
+                            )
+                    elif parsed.path == "/api/local-models/readiness":
+                        query = parse_qs(parsed.query, strict_parsing=True, max_num_fields=1)
+                        if set(query) != {"selection_id"} or len(query["selection_id"]) != 1:
+                            raise ValueError
+                        value = app.models.readiness(query["selection_id"][0])
+                    elif parsed.query:
+                        raise ValueError
+                    elif parsed.path == "/api/local-models":
+                        value = app.models.catalog()
+                    elif parsed.path == "/api/local-models/status":
+                        value = app.models.status()
+                    else:
+                        raise BoundaryError("member", "route_not_found")
+                    self.respond(200, json.dumps(value, ensure_ascii=False).encode())
+                except BoundaryError as error:
+                    self.respond(409, json.dumps({"error": error.code}).encode())
+                except (OSError, ValueError, KeyError):
+                    self.respond(400, b'{"error":"invalid_member_request"}')
             elif parsed.path == "/api/identity" or parsed.path.startswith("/api/project/"):
                 if not self.authenticated_browser():
                     self.respond(401, b'{"error":"browser_session_required"}')
@@ -403,6 +484,34 @@ def create_server(app: Application) -> ThreadingHTTPServer:
                 self.respond(404, b"{}")
 
         def do_POST(self) -> None:
+            if self.path.startswith(("/api/member/", "/api/local-models/")):
+                if not self.browser_write() and not (
+                    self.path.startswith("/api/local-models/") and self.control_client()
+                ):
+                    self.respond(403, b'{"error":"browser_action_denied"}')
+                    return
+                try:
+                    body = self.json_body()
+                    if self.path.startswith("/api/local-models/"):
+                        value = self.model_action(self.path, body)
+                    else:
+                        import re
+
+                        route = self.path.removeprefix("/api/member/")
+                        download = re.fullmatch(r"exports/([a-f0-9]{64})/download", route)
+                        prepare = re.fullmatch(r"campaigns/([a-f0-9]{32})/prepare", route)
+                        if download and not body:
+                            value = app.members.download(download[1])
+                        elif prepare and not body:
+                            value = app.members.prepare_campaign(prepare[1])
+                        else:
+                            value = app.members.request(route, body)
+                    self.respond(200, json.dumps(value, ensure_ascii=False).encode())
+                except BoundaryError as error:
+                    self.respond(409, json.dumps({"error": error.code}).encode())
+                except (OSError, ValueError, KeyError, TypeError):
+                    self.respond(400, b'{"error":"invalid_member_action"}')
+                return
             if self.path.startswith("/api/identity/"):
                 origin = "http://127.0.0.1:" + str(
                     cast(ThreadingHTTPServer, self.server).server_port
@@ -438,6 +547,7 @@ def create_server(app: Application) -> ThreadingHTTPServer:
                     elif action == "resume-uploads" and not body:
                         value = app.resume_auth()
                     elif action == "logout" and not body:
+                        app.members.close()
                         value = app.account.logout()
                         with app.console.cloud_cache.lock:
                             app.console.cloud_cache.values.clear()

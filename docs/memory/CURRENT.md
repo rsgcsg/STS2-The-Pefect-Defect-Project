@@ -5,7 +5,9 @@ approved exact release combination -> one Platform Mod/fixed collection tool -> 
 workbench -> invited account and explicit device binding -> dedicated attested campaign ->
 Recorder Close -> durable local outbox -> independently verified cloud receipt. The shared
 [console](../PROJECT_CONSOLE.md) shows the same authorized project views in both shells;
-the local queue remains local. Models are separate downloads. No floating sibling imports.
+the local queue remains local. [ADR-0006](../adr/0006-project-members-and-local-models.md) defines
+the member/admin candidate: Hub-owned roster, explicit sharing grants and supported local
+model controls. Deploy and Human qualification remain separate. No floating sibling imports.
 
 The [unified workflow report](../evidence/B_UNIFIED_WORKFLOW_RELEASE_2026-09-13.md) records
 bounded Human approval at 974c770 and retained account/device/receipt continuity at 3555f09.
