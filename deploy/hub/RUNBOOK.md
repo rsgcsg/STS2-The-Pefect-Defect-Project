@@ -604,7 +604,7 @@ Retirement disables the backup timer, stops services and confirms no paid comput
 images/config references and recovery material according to retention policy. Do not delete
 state volumes or immutable evidence merely to remove stopped containers.
 
-### Source-only image refresh with an unchanged dependency lock
+### Refresh from a qualified image
 
 A full worker build temporarily retains downloaded, compressed and unpacked training
 libraries. Measure free disk before building on a small Hub; keep the running/rollback
@@ -612,9 +612,9 @@ image and all operational/evidence state. Disposable build cache and unreference
 image copies may be removed; their public immutable registry objects are separate.
 
 For a source-only update, `deploy/cloud-worker/refresh.Dockerfile` can reuse a previously
-qualified exact worker image. It checks a clean parent checkout, an exact new Git revision,
-an unchanged `uv.lock`, locked offline synchronization and a clean resulting source. It
-fails closed on a dependency change; use the normal full Dockerfile in that case.
+qualified exact worker image. With no new-lock argument it checks a clean parent checkout,
+an exact new Git revision, an unchanged `uv.lock`, locked offline synchronization, installed
+dependency consistency and a clean resulting source. An unexpected lock change fails closed.
 
 ```bash
 docker build -f deploy/cloud-worker/refresh.Dockerfile \
@@ -623,6 +623,30 @@ docker build -f deploy/cloud-worker/refresh.Dockerfile \
   -t ghcr.io/rsgcsg/stpd-worker:EXACT_NEW_HEAD .
 ```
 
+For a reviewed small dependency change, such as an exact Platform Evidence update, the same
+recipe accepts an explicit **old source + old lock + new lock** tuple. All three must match
+the actual parent checkout and new source. It then runs the ordinary online
+`uv sync --locked --all-extras` and `uv pip check`. Existing matching dependency layers can be
+reused; changed packages are resolved and installed from the new lock. This does not claim an
+unchanged lock or bypass dependency installation. Do not use manual `pip --no-deps` replacement.
+
+```bash
+docker build -f deploy/cloud-worker/refresh.Dockerfile \
+  --build-arg QUALIFIED_WORKER_IMAGE=ghcr.io/rsgcsg/stpd-worker@sha256:EXACT_PARENT_DIGEST \
+  --build-arg QUALIFIED_SOURCE_REVISION=EXACT_PARENT_SOURCE \
+  --build-arg QUALIFIED_LOCK_SHA256=EXACT_PARENT_LOCK_SHA256 \
+  --build-arg STPD_SOURCE_REVISION=EXACT_NEW_HEAD \
+  --build-arg EXPECTED_NEW_LOCK_SHA256=EXACT_NEW_LOCK_SHA256 \
+  -t ghcr.io/rsgcsg/stpd-worker:EXACT_NEW_HEAD .
+```
+
+Review the package delta and measure capacity before choosing this path. It is not a disk
+reservation: a large Torch/CUDA change may still require the normal full build on a host
+with more free space. A changed Python/base-system/toolchain requirement uses the normal
+Dockerfile and a reviewed base image. Preserve the running image, a compatible rollback
+image and their operations backups; do not use broad pruning to make a build fit.
+
 Record parent digest and recipe with the resulting digest. Rerun latest-head source/CI
-checks and independently verify fresh-container source/lock/assets, public service,
+checks and independently verify fresh-container source/lock/assets and the actual installed
+dependency inventory (including the Evidence direct-source revision), public service,
 R2 and backup/restore. Parent qualification never qualifies changed source automatically.
