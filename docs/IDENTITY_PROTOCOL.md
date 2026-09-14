@@ -21,6 +21,21 @@ The local workbench keeps credentials outside browser JavaScript and calls these
   project views and supported member operations. It cannot upload recordings, grant itself
   administrator rights, impersonate a device heartbeat or make browser-admin mutations.
 
+A device identifies one registered local Workbench profile, not a hardware serial number.
+Two accounts may use the same physical computer through separate project/state directories;
+each registration has its own owner and counts against that owner's device quota. Reconnecting
+an existing device requires its original owner and credential. Logout does not transfer that
+device, its queue or historical uploads to the next account. Prefer one ordinary profile per
+collector; use separate profiles when deliberately testing or sharing a computer. Profiles
+are not an OS security boundary: use separate OS accounts when people must not read each
+other's local files.
+
+Local browser cookie names are scoped to the resolved project state directory, since cookies
+share a host across ports. Their secret values still rotate with each running instance.
+Opening a second profile does not replace the first profile's cookie, and a restart rejects
+the previous instance's value. Exact Host, Origin and CSRF checks remain independent. Neither
+the cookie scope nor its name grants Hub membership or replaces device credentials.
+
 ## Hub membership and first login
 
 There are two Human console roles. Members can inspect shared project data, select explicitly

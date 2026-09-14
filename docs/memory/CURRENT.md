@@ -14,6 +14,9 @@ bounded Human approval at 974c770 and retained account/device/receipt continuity
 Resolve current remote refs, release combination, CI and service receipts before promotion;
 historical source-bound evidence does not qualify a changed candidate. Actual logout/relogin,
 new-user/new-device Human usability and whole-host disaster recovery remain distinct gates.
+The [multi-profile review](../evidence/B_MULTI_PROFILE_REVIEW_2026-09-14.md) records the new
+member's login/logout/reconnect and follow-up cookie/Runtime ownership fixes; it does not qualify
+a new collection activity or replace exact final package/service receipts.
 
 Platform owns recording/Close/native authority and immutable delivery verification. STPD
 owns projection/admission/Dataset/model views/features/training/evaluation. Preserve H != S,

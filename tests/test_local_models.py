@@ -62,7 +62,8 @@ def status():
 
 
 @pytest.fixture
-def runtime_http():
+def runtime_http(request):
+    legacy = getattr(request, "param", "current") == "legacy"
     state = status()
     requests = []
 
@@ -77,17 +78,32 @@ def runtime_http():
         def do_POST(self):
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             requests.append((self.path, body))
-            if self.path == "/mode":
+            prefix = "" if legacy else "/v2"
+            if self.path not in {prefix + route for route in ("/mode", "/tick", "/stop")}:
+                self.send_response(404)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            if not legacy and self.headers.get("X-STS2-Policy-Run-ID") != state["run_id"]:
+                self.send_response(409)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            route = self.path.removeprefix(prefix) if prefix else self.path
+            if route == "/mode":
                 state["mode"] = body["mode"]
-            if self.path == "/tick":
+            if route == "/tick":
                 state["mode"] = "human"
-            if self.path == "/stop":
+            if route == "/stop":
                 state["lifecycle"] = "stopped"
             self.respond()
 
         def respond(self):
-            value = {"schema": "sts2.policy-runtime/http-1", "status": state}
-            if self.path == "/tick":
+            value = {
+                "schema": "sts2.policy-runtime/http-1" if legacy else "sts2.policy-runtime/http-2",
+                "status": state,
+            }
+            if self.path in {"/tick", "/v2/tick"}:
                 value["schema"] += "/tick-1"
                 value["results"] = []
             raw = json.dumps(value).encode()
@@ -147,6 +163,116 @@ def test_runtime_client_accepts_current_environment_and_binds_exact_identity(run
     assert all(body is None for _, body in requests)
 
 
+@pytest.mark.parametrize(
+    "route,body", [("/mode", {"mode": "human"}), ("/tick", {"max_ticks": 1}), ("/stop", {})]
+)
+def test_runtime_command_fences_replaced_process_before_effect(runtime_http, route, body):
+    client, runtime, requests = runtime_http
+    assert client.request("/status")["status"]["run_id"] == startup()["run_id"]
+    # The same listening address now belongs to another process, after the GET.
+    runtime.update(run_id="replacement-runtime", mode="auto")
+    before = copy.deepcopy(runtime)
+    with pytest.raises(BoundaryError, match="runtime_command_unknown"):
+        client.request(route, body)
+    assert runtime == before
+    assert [request for request in requests if request[1] is not None] == [("/v2" + route, body)]
+
+
+@pytest.mark.parametrize("runtime_http", ["legacy"], indirect=True)
+@pytest.mark.parametrize(
+    "route,body", [("/mode", {"mode": "human"}), ("/tick", {"max_ticks": 1}), ("/stop", {})]
+)
+def test_runtime_command_cannot_mutate_legacy_server_at_reused_address(runtime_http, route, body):
+    client, runtime, requests = runtime_http
+    runtime["mode"] = "auto"
+    before = copy.deepcopy(runtime)
+    with pytest.raises(BoundaryError, match="runtime_command_unknown"):
+        client.request(route, body)
+    assert runtime == before
+    assert [request for request in requests if request[1] is not None] == [("/v2" + route, body)]
+
+
+def test_closing_old_workbench_cannot_stop_replacement_runtime(service, runtime_http, monkeypatch):
+    client, runtime, requests = runtime_http
+    service.client = client
+    service.state.update(status="loaded", loaded=True, startup=startup())
+    # This HTTP fixture has no Agent evidence; the real verifier is covered separately.
+    monkeypatch.setattr(service, "_evaluation_handoff", lambda: None)
+    runtime["run_id"] = "replacement-runtime"
+    service.close()
+    assert runtime["lifecycle"] == "running"
+    assert [request for request in requests if request[1] is not None] == [("/v2/stop", {})]
+    restarted = LocalModelService(service.config)
+    assert restarted.state["status"] == "recovery_required"
+    assert restarted.state["previous_session"]["startup"] == startup()
+
+
+@pytest.mark.parametrize("lost_stop", [False, True])
+def test_recovered_runtime_shutdown_requires_confirmation(
+    service, runtime_http, monkeypatch, lost_stop
+):
+    from urllib.error import URLError
+
+    client, runtime, _ = runtime_http
+    manifest = {"manifest_id": "fixture-policy", "artifact": {"sha256": "a" * 64}}
+    exact = {
+        **startup(),
+        "address": "http://127.0.0.1:15527",
+        "policy_manifest_sha256": hashlib.sha256(canonical_json(manifest).encode()).hexdigest(),
+    }
+    service.state["previous_session"] = {"startup": exact, "selection_id": "fixture"}
+    with monkeypatch.context() as recovery:
+        recovery.setattr(service, "selection", lambda _: {"id": "fixture", "manifest": "fixture"})
+        recovery.setattr(local_models, "_object_file", lambda _: manifest)
+        recovery.setattr(
+            service,
+            "_runtime_package",
+            lambda: {
+                "version": exact["runtime_version"],
+                "code_sha256": exact["runtime_code_sha256"],
+            },
+        )
+        recovery.setattr(local_models, "RuntimeClient", lambda *_: client)
+        service._recover("human")
+    assert service.client is client and service.process is None
+    if lost_stop:
+        # A real recovered HTTP client loses its Stop response; no local Popen
+        # exists to supply alternative proof that the process terminated.
+        def lost(*args, **kwargs):
+            raise URLError("lost response")
+
+        monkeypatch.setattr(client.opener, "open", lost)
+    monkeypatch.setattr(service, "_evaluation_handoff", lambda: None)
+    service.close()
+    assert service.state["status"] == ("command_unknown" if lost_stop else "stopped")
+    assert runtime["lifecycle"] == ("running" if lost_stop else "stopped")
+    restarted = LocalModelService(service.config)
+    assert restarted.state["status"] == ("recovery_required" if lost_stop else "idle")
+    if lost_stop:
+        assert restarted.state["previous_session"]["startup"] == exact
+        restarted.close()
+        again = LocalModelService(service.config)
+        assert again.state["previous_session"]["startup"] == exact
+        with monkeypatch.context() as recovery:
+            recovery.setattr(again, "selection", lambda _: {"id": "fixture", "manifest": "fixture"})
+            recovery.setattr(local_models, "_object_file", lambda _: manifest)
+            recovery.setattr(
+                again,
+                "_runtime_package",
+                lambda: {
+                    "version": exact["runtime_version"],
+                    "code_sha256": exact["runtime_code_sha256"],
+                },
+            )
+            recovery.setattr(local_models, "RuntimeClient", lambda *_: client)
+            again.command("human")
+            assert finished(again)["status"] == "recovery_required"
+        final = LocalModelService(service.config)
+        assert final.state["previous_session"]["startup"] == exact
+        with pytest.raises(BoundaryError, match="requires_recovery"):
+            final.start("s1-human-combat-v4")
+
+
 @pytest.mark.parametrize("session_status", ["loaded", "command_unknown"])
 def test_recovered_exact_observation_clears_only_observation_error(
     service, runtime_http, session_status
@@ -183,8 +309,8 @@ def test_one_step_is_exact_owner_mode_and_one_tick(service, runtime_http):
     assert initial["operation"]["action"] == "one_step"
     finished(service)
     assert [r for r in requests if r[1] is not None] == [
-        ("/mode", {"mode": "one_step"}),
-        ("/tick", {"max_ticks": 1}),
+        ("/v2/mode", {"mode": "one_step"}),
+        ("/v2/tick", {"max_ticks": 1}),
     ]
     assert service.state["runtime"]["mode"] == "human"
 

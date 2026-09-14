@@ -118,10 +118,15 @@ class RuntimeClient:
     def request(self, route: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
         if route not in {"/status", "/mode", "/tick", "/stop"}:
             raise BoundaryError("local_model", "invalid_runtime_route")
+        headers = {"Accept": "application/json", "Content-Type": "application/json"}
+        if body is not None:
+            # The endpoint can be reused by a different Runtime process between
+            # observation and dispatch. The server must reject before any effect.
+            headers["X-STS2-Policy-Run-ID"] = self.startup["run_id"]
         request = Request(
-            self.address + route,
+            self.address + ("/v2" if body is not None else "") + route,
             data=canonical_json(body).encode() if body is not None else None,
-            headers={"Accept": "application/json", "Content-Type": "application/json"},
+            headers=headers,
         )
         try:
             with self.opener.open(request, timeout=45 if body is not None else 2) as response:
@@ -129,7 +134,7 @@ class RuntimeClient:
             if len(raw) > JSON_LIMIT:
                 raise ValueError
             value = decode_json(raw)
-            expected = "sts2.policy-runtime/http-1" + ("/tick-1" if route == "/tick" else "")
+            expected = "sts2.policy-runtime/http-2" + ("/tick-1" if route == "/tick" else "")
             if not isinstance(value, dict) or value.get("schema") != expected:
                 raise ValueError
             status = value.get("status")
@@ -189,7 +194,7 @@ class LocalModelService:
                 if old.get("status") not in {"stopped", "idle", "failed"}:
                     self.state.update(
                         status="recovery_required",
-                        previous_session=old,
+                        previous_session=old.get("previous_session") or old,
                         error_code="previous_runtime_not_confirmed_stopped",
                     )
             except (OSError, ValueError, BoundaryError):
@@ -474,11 +479,14 @@ class LocalModelService:
                             if isinstance(error, BoundaryError)
                             else "local_operation_failed"
                         )
-                        if self.state["operation"] is current:
+                        if self.state["operation"] is current and not self.closed:
+                            pending_runtime = self.client is not None or bool(
+                                self.state.get("previous_session")
+                            )
                             self.state.update(
                                 status="command_unknown"
                                 if code == "runtime_command_unknown"
-                                else "failed",
+                                else ("recovery_required" if pending_runtime else "failed"),
                                 error_code=code,
                             )
                         current["status"] = (
@@ -672,7 +680,7 @@ class LocalModelService:
                 if action == "one_step":
                     runtime = client.request("/tick", {"max_ticks": 1})["status"]
             with self.lock:
-                if self.state["status"] != "stopped":
+                if not self.closed and self.state["status"] != "stopped":
                     self.state.update(runtime=runtime, status="loaded", error_code=None)
             if action == "stop":
                 self._stop_process()
@@ -790,11 +798,12 @@ class LocalModelService:
         with self.lock:
             self.closed = True
             client = self.client
-        # Human is the only requested state during application shutdown. Do not
-        # wait for a long scoring operation before asking the owner to stop.
+        # Stop only the exact Runtime. A recovered client has no owned process
+        # handle, so a lost reply cannot be turned into a confirmed shutdown.
+        observed = None
         try:
             if client is not None:
-                client.request("/stop", {})
+                observed = client.request("/stop", {})["status"]
         except BoundaryError:
             pass
         finally:
@@ -803,10 +812,22 @@ class LocalModelService:
             thread.join(timeout=1)
         with self.lock:
             if self.client is not None:
-                self.state.update(status="stopped", loaded=False)
-                try:
-                    self._evaluation_handoff()
-                except (OSError, ValueError, ImportError):
-                    self.state["evidence_status"] = "verification_unavailable"
+                confirmed = (observed is not None and observed["lifecycle"] == "stopped") or (
+                    self.process is not None and self.process.poll() is not None
+                )
+                if confirmed:
+                    self.state.update(status="stopped", loaded=False)
+                    if observed is not None:
+                        self.state["runtime"] = observed
+                    try:
+                        self._evaluation_handoff()
+                    except (OSError, ValueError, ImportError):
+                        self.state["evidence_status"] = "verification_unavailable"
+                else:
+                    self.state.update(
+                        status="command_unknown",
+                        loaded=False,
+                        error_code="runtime_command_unknown",
+                    )
                 self.client = None
             self._save()

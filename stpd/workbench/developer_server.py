@@ -333,7 +333,7 @@ def create_server(app: Application) -> ThreadingHTTPServer:
 
             cookie = SimpleCookie()
             cookie.load(self.headers.get("Cookie", ""))
-            value = cookie.get("spireagent_local")
+            value = cookie.get(app.account.cookie_name)
             return bool(value and hmac.compare_digest(value.value, app.account.cookie))
 
         def control_client(self) -> bool:
@@ -388,7 +388,8 @@ def create_server(app: Application) -> ThreadingHTTPServer:
             if content_type == "text/html":
                 self.send_header(
                     "Set-Cookie",
-                    "spireagent_local="
+                    app.account.cookie_name
+                    + "="
                     + app.account.cookie
                     + "; HttpOnly; SameSite=Strict; Path=/",
                 )

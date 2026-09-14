@@ -4,6 +4,7 @@ import json
 import os
 import threading
 import time
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from http.cookiejar import CookieJar
 from urllib.error import HTTPError
@@ -170,6 +171,87 @@ def test_http_local_csrf_and_personal_boundary(tmp_path, monkeypatch):
         server.server_close()
         thread.join(timeout=3)
         app.close()
+
+
+def test_two_local_profiles_share_browser_without_replacing_each_others_cookie(
+    tmp_path, monkeypatch
+):
+    @contextmanager
+    def profile(name):
+        app = Application(config(tmp_path / name))
+        monkeypatch.setattr(app.account, "begin", lambda device: {"profile": name})
+        server = create_server(app)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            yield app, f"http://127.0.0.1:{server.server_port}"
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=3)
+            app.close()
+
+    client = build_opener(HTTPCookieProcessor(CookieJar()))
+    with profile("second") as (second, second_url):
+        with profile("first") as (first, first_url):
+            with client.open(first_url + "/") as response:
+                first_cookie = response.headers["Set-Cookie"].split(";", 1)[0]
+            client.open(second_url + "/").close()
+            # A real browser cookie jar shares cookies across localhost ports.
+            for app, root, name in ((first, first_url, "first"), (second, second_url, "second")):
+                with client.open(root + "/api/identity") as response:
+                    assert json.load(response)["csrf_token"] == app.account.csrf
+                headers = {
+                    "Content-Type": "application/json",
+                    "Origin": root,
+                    "X-CSRF-Token": app.account.csrf,
+                }
+                with client.open(
+                    Request(
+                        root + "/api/identity/login", data=b'{"device_name":"PC"}', headers=headers
+                    )
+                ) as response:
+                    assert json.load(response) == {"profile": name}
+            for changed in (
+                {"Origin": second_url},
+                {"X-CSRF-Token": second.account.csrf},
+            ):
+                with pytest.raises(HTTPError) as denied:
+                    client.open(
+                        Request(
+                            first_url + "/api/identity/login",
+                            data=b'{"device_name":"PC"}',
+                            headers={
+                                "Content-Type": "application/json",
+                                "Origin": first_url,
+                                "X-CSRF-Token": first.account.csrf,
+                                **changed,
+                            },
+                        )
+                    )
+                assert denied.value.code == 403
+            # Retired unscoped cookies must not become an authentication fallback.
+            with pytest.raises(HTTPError) as denied:
+                build_opener().open(
+                    Request(
+                        first_url + "/api/identity",
+                        headers={"Cookie": "spireagent_local=" + first.account.cookie},
+                    )
+                )
+            assert denied.value.code == 401
+        with profile("first") as (restarted, restarted_url):
+            with pytest.raises(HTTPError) as denied:
+                build_opener().open(
+                    Request(restarted_url + "/api/identity", headers={"Cookie": first_cookie})
+                )
+            assert denied.value.code == 401
+            with client.open(restarted_url + "/") as response:
+                refreshed = response.headers["Set-Cookie"].split(";", 1)[0]
+            assert refreshed.split("=", 1)[0] == first_cookie.split("=", 1)[0]
+            assert refreshed != first_cookie
+            for app, root in ((restarted, restarted_url), (second, second_url)):
+                with client.open(root + "/api/identity") as response:
+                    assert json.load(response)["csrf_token"] == app.account.csrf
 
 
 def test_credential_replacement_preserves_device_and_local_identity(tmp_path, monkeypatch):

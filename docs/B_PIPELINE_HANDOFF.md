@@ -65,6 +65,10 @@ research gates below remain explicit, with compute launch budget zero until auth
    appears at verified login, independently of device approval. Public self-signup is disabled.
    Hub is the only project membership roster. Login authorizes account views; the separate device grant permits background
    upload even after personal logout. It does not authorize recording or attest Human origin.
+   A device is one Workbench registration, not a hardware fingerprint. Normally reuse one
+   config on a computer. To use another account on the same physical computer, choose a
+   separate private config/state directory and a distinguishable device name; do not copy
+   device credentials or reuse another owner's recording/outbox paths.
 5. Select the approved activity and complete the dedicated campaign preparation below. Native
    Mod installation and the current exact recording-root activation gate remain operator responsibilities. Save the approved
    launcher command with its exact `--config` path as this terminal's normal entry. Each new

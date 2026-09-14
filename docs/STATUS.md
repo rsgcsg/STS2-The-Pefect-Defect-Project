@@ -6,8 +6,10 @@ Current source adds Hub-owned `member`/`admin` membership (Operations schema 4),
 activity consent and fresh local preparation, immutable sharing-gated exports, actual summary
 coverage statistics, and optional local model catalog/Runtime controls. The
 [account protocol](IDENTITY_PROTOCOL.md), [console guide](PROJECT_CONSOLE.md) and
-[ADR-0006](adr/0006-project-members-and-local-models.md) describe that candidate. This is not yet
-a claim of deployed schema-4 migration or a passed new-member/browser/Human gate. Select a
+[ADR-0006](adr/0006-project-members-and-local-models.md) describe that candidate. The
+[multi-profile review](evidence/B_MULTI_PROFILE_REVIEW_2026-09-14.md) records the deployed
+schema-4 account readback and a new member's login/logout/reconnect at `a5593758`;
+new browser-cookie and Runtime instance fixes require their own final service receipts. Select a
 published exact combination and its own current service receipts before adoption. Predecessor
 service evidence below cannot qualify these changes. S1 remains a narrow historical combat
 adapter; Full-Run online input parity and compatible model evaluation remain **BLOCKED**.

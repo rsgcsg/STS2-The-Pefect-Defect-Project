@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import platform
@@ -61,6 +62,12 @@ class LocalIdentity:
         self.opener = build_opener(NoRedirect())
         self.csrf = secrets.token_urlsafe(32)
         self.cookie = secrets.token_urlsafe(32)
+        # Cookies share a host across ports. Scope the name to this durable local
+        # project; the value still rotates with each running Workbench instance.
+        self.cookie_name = (
+            "spireagent_local_"
+            + hashlib.sha256(str(config.state_dir.resolve()).encode()).hexdigest()
+        )
 
     def request(
         self, route: str, *, body: dict[str, Any] | None = None, token: str | None = None

@@ -127,6 +127,7 @@ window.SpireIdentity = (() => {
     const box = el("section", undefined, "panel onboarding"), who = identity?.principal;
     box.append(el("h2", who ? "账号与项目电脑" : "接入 SpireAgent"));
     box.append(el("p", "使用项目邀请的邮箱接入；首次验证后自动建立项目账号，无需另设密码。"));
+    box.append(el("p", "每条电脑记录对应一份工作台配置；同一台电脑可以有多份。退出登录不会转移设备归属或已有数据。"));
     if (local) {
       box.append(el("p", identity?.device_credential_present ?
         "这台电脑已保存上传凭据；是否有效以 Hub 最近验证为准。个人退出不会删除它。" :

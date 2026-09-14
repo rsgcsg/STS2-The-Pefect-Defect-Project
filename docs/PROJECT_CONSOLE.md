@@ -59,6 +59,14 @@ the [Hub runbook](../deploy/hub/RUNBOOK.md). A running API does not prove a succ
 
 ## Pages and interpretation
 
+In **账号与电脑**, a computer entry means a registered Workbench profile. Two entries can
+come from one physical Mac or PC when it deliberately uses two independent configurations.
+Use distinct names and private config/state directories for different accounts. Each owner
+uses their own device quota; signing out does not transfer a device or its existing data.
+The local queue belongs to that profile, while shared project views follow its signed-in
+account. Multiple profiles can stay open in one browser. They do not isolate files from other
+processes running as the same OS user; separate OS accounts provide that boundary.
+
 | Page | Purpose |
 |---|---|
 | 概览 | local/authorized cloud counts, known quality totals and the latest collections |
@@ -165,6 +173,14 @@ use typed Platform Runtime requests; deliberate execution is distinct from loadi
 never start a local game. An uncertain effectful response is not automatically resent. A workbench
 restart requires exact instance recovery before new execution. Local Agent evidence and bounded
 operation reports remain separate from Human collection, win-rate evaluation and scientific results.
+
+Runtime commands use the versioned HTTP/2 mutation routes and the process run ID captured at
+startup. The Runtime checks that ID before any command, including Stop during Workbench shutdown.
+A different process reusing the same port cannot receive the old Workbench's command. An older
+HTTP/1 server rejects the new routes; reconnect or upgrade explicitly instead of retrying delivery.
+If Stop cannot be confirmed and the Workbench has no owned process handle that proves exit,
+shutdown preserves the previous Runtime identity and requires recovery after restart. A failed
+recovery observation also retains that requirement; it never turns an uncertain process into idle.
 
 The system page is not an outside-host alerting service. A backup status is not the backup bytes,
 and an SQLite restore is not whole-host disaster recovery. Missing evidence is displayed explicitly.
