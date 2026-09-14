@@ -132,20 +132,38 @@ def package(
     owner = CollectionTool(collection_tool, tool_release_id)
     tool_manifest = owner.manifest
     tool_manifest_raw = read_regular(collection_tool / "collection-tool.json")
-    if (
-        decode_json(tool_manifest_raw) != tool_manifest
-        or set(tool_manifest) != {"schema", "release_id", "identity"}
-    ):
+    if decode_json(tool_manifest_raw) != tool_manifest or set(tool_manifest) != {
+        "schema",
+        "release_id",
+        "identity",
+    }:
         raise BoundaryError("developer_kit", "tool_manifest_changed_or_unexpected_fields")
     for row in tool_manifest["identity"]["files"]:
         raw = PinnedFile(collection_tool / row["path"], row["sha256"]).read()
         if len(raw) != row["bytes"]:
             raise BoundaryError("developer_kit", "tool_file_size_changed")
         files[f"collection-tool/{row['path']}"] = raw
+    identity = tool_manifest["identity"]
+    setup = "setup/apps/game-mod/collection-setup.mjs"
+    provenance = "game-mod/build-provenance.json"
+    if (
+        identity.get("collection_setup_entrypoint") != setup
+        or identity.get("collection_setup_provenance") != provenance
+        or f"collection-tool/{setup}" not in files
+        or f"collection-tool/{provenance}" not in files
+    ):
+        raise BoundaryError("developer_kit", "collection_setup_capability_required")
+    native = decode_json(files[f"collection-tool/{provenance}"])
+    if (
+        not isinstance(native, dict)
+        or native.get("schema") != "sts2.platform/game-mod-build-provenance-1"
+        or not isinstance(native.get("artifact"), dict)
+        or native["artifact"].get("sha256") != mod_dll.sha256
+    ):
+        raise BoundaryError("developer_kit", "collection_setup_mod_identity_mismatch")
     files["collection-tool/collection-tool.json"] = tool_manifest_raw
     if owner.verify() != tool_manifest:
         raise BoundaryError("developer_kit", "tool_changed_during_packaging")
-    identity = tool_manifest["identity"]
     manifest = {
         "schema": "spireagent/developer-kit-v1",
         "stpd_source_revision": producer.source_revision,
@@ -198,7 +216,9 @@ def main() -> int:
     parser.add_argument("--collection-tool", required=True, type=Path)
     parser.add_argument("--tool-release-id", required=True)
     parser.add_argument(
-        "--output", required=True, type=Path,
+        "--output",
+        required=True,
+        type=Path,
         help="New ZIP in an existing directory outside Git or under ignored .local/",
     )
     args = parser.parse_args()

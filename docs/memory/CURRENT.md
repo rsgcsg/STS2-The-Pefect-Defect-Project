@@ -2,12 +2,21 @@
 
 The default cross-repository developer workflow is [B_PIPELINE_HANDOFF](../B_PIPELINE_HANDOFF.md):
 approved exact release combination -> one Platform Mod/fixed collection tool -> one STPD
-workbench -> invited account and explicit device binding -> dedicated attested campaign ->
+workbench -> invited account and explicit device binding -> daily recording consent and preparation ->
 Recorder Close -> durable local outbox -> independently verified cloud receipt. The shared
 [console](../PROJECT_CONSOLE.md) shows the same authorized project views in both shells;
 the local queue remains local. [ADR-0006](../adr/0006-project-members-and-local-models.md) defines
 the member/admin candidate: Hub-owned roster, explicit sharing grants and supported local
 model controls. Deploy and Human qualification remain separate. No floating sibling imports.
+
+Daily settings use immutable collection-activity-v2 purpose/consent records; optional topic
+activities remain in advanced settings. Preparation, current Platform-owned native binding,
+and upload activation are distinct persistent stages. Actual software identities remain in
+the fixed tool/native evidence, with no game-version pin in daily consent. Historical v1
+constraints and each existing outbox's exact tool identity remain unchanged. Registration
+of a new tool is not a queue migration; automated software rollover is outside this closeout.
+The new setup candidate must pass its own clean package, service and new-member Close-to-receipt
+gate before promotion. Earlier receipts do not satisfy that gate.
 
 The [unified workflow report](../evidence/B_UNIFIED_WORKFLOW_RELEASE_2026-09-13.md) records
 bounded Human approval at 974c770 and retained account/device/receipt continuity at 3555f09.
