@@ -231,8 +231,10 @@ explicit operator re-delivery resets the counter. Quarantine is a separate dispo
 
 Use the exact developer combination selected in reviewed release notes. Git, Python 3.11 with uv,
 Node 20+ and the qualified Mod/fixed collection tool remain explicit prerequisites. The
-workbench setup installs the locked `cloud` profile; collector computers do not need Torch,
-Transformers, model weights, a Platform checkout, R2 keys or a Cloudflare account.
+workbench setup installs the locked `cloud` profile; daily collection needs no Torch,
+Transformers, model weights, R2 keys or Cloudflare account. It uses the fixed collection tool.
+Initial native installation and rollback still use an operator-retained Platform checkout on
+the game computer; see [developer kit installation](DEVELOPER_KIT_INSTALL.md).
 Full research/CI environments continue to use `--all-extras`.
 
 1. From the approved STPD checkout run the launch command in the

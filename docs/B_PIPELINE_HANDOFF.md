@@ -61,8 +61,9 @@ research gates below remain explicit, with compute launch budget zero until auth
 
    The launcher installs the locked `cloud` profile and exact Node dependencies. It does not
    select a Git revision, install the game Mod, attach a recording directory or authorize a
-   recording scope. It preserves existing configuration. Collectors need no model weights, Torch,
-   Platform checkout, R2 keys, Cloudflare account or admin token.
+   recording scope. It preserves existing configuration. Everyday collection uses the fixed tool;
+   it does not read Platform source. Keep the operator's installation checkout for native lifecycle
+   and rollback. Collectors need no model weights, Torch, R2 keys, Cloudflare account or admin token.
 4. An administrator first adds the member email in the cloud **成员管理** page; no invitation
    mail is sent automatically. Open **账号与电脑 → 登录并绑定这台电脑**. Use that email and verification code,
    compare the displayed computer name/pairing code and approve in the cloud. Return to the
@@ -166,9 +167,11 @@ Do not put private payloads in image layers and then delete them in a later laye
 
 ## Release builder and operator responsibilities
 
-B remains a developer distribution, not a one-click player installer. A Platform clone is
-needed only by Platform developers or the release builder. Both repositories retain independent
-versions and source authority. The approved combination links their artifacts; it does not
+B remains a developer distribution, not a one-click player installer. Platform developers and
+release builders need its source; the operator also retains an exact Platform checkout on the
+game computer for initial binary installation, lifecycle and rollback. The daily workbench uses
+the fixed tool without reading that checkout. Both repositories retain independent versions and
+source authority. The approved combination links their artifacts; it does not
 create a third source repository or a floating sibling dependency.
 
 The release builder produces the fixed collection-tool directory once, from a clean exact
