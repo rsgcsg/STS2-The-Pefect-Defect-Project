@@ -104,6 +104,20 @@ def test_member_file_http_auth_framing_and_storage_truncation(
             assert denied.value.code == status
             denied.value.close()
         assert reads == []  # Rejected requests never enter the storage stream.
+        manifest_file = next(item for item in export["files"] if item["type"] == "manifest")
+        manifest_path = (
+            root
+            + "/app/api/member/exports/"
+            + export["export_id"]
+            + "/files/"
+            + manifest_file["file_id"]
+        )
+        with urlopen(Request(manifest_path, headers=headers), timeout=3) as response:
+            assert response.headers["Content-Disposition"] == (
+                'attachment; filename="' + manifest_file["filename"] + '"'
+            )
+            assert manifest_file["filename"].endswith(".json")
+            assert len(response.read()) == manifest_file["size"]
         with urlopen(Request(path, headers=headers), timeout=3) as response:
             assert response.status == 200
             assert response.headers["Content-Length"] == str(len(content)) == "6"

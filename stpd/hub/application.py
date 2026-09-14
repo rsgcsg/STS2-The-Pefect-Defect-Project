@@ -192,7 +192,7 @@ class HubApplication:
                 return (
                     "200 OK",
                     "application/octet-stream",
-                    DownloadBody(metadata["size"], payload[2] + ".bin", chunks),
+                    DownloadBody(metadata["size"], metadata["filename"], chunks),
                 )
             return self.response(self.member_api.read(path, query, principal))
         if method == "POST" and not query:
