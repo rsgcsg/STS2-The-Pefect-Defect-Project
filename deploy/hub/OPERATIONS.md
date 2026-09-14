@@ -142,7 +142,14 @@ to an SSH timeout. A restart can discard the only usable session without repairi
 
 ## Daily check and before any deployment or build
 
-Use the runbook's `dc` and `hubctl` helpers from the approved exact deployment checkout:
+For the normal daily check, open the cloud console as an administrator and inspect **System**:
+capacity, the last successful backup and its freshness, then any waiting/failed uploads. No
+SSH session or manual backup is needed for a healthy day. A missing/unreadable value is unknown,
+not PASS. If the page is unavailable, verify public `/health` and use the saved SSH connection.
+
+On an attention state or before maintenance, use the runbook's `dc` and `hubctl` helpers from
+the approved exact deployment checkout. These are diagnostic commands, not a daily checklist
+to run without a reason:
 
 ```bash
 hubctl status
