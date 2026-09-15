@@ -23,6 +23,7 @@ from ..json_boundary import BoundaryError, decode_json, digest, object_fields
 from .campaigns import Campaigns
 from .console_auth import ConsolePrincipal
 from .console_index import pagination, timestamp
+from .decision_jobs import DecisionJobs
 from .exports import ExportService
 from .identity import IdentityService
 from .statistics import refresh_decision_statistics
@@ -36,6 +37,7 @@ class MemberApi:
         self.service, self.identity = service, identity
         self.campaigns = Campaigns(service.operations, identity.membership)
         self.exports = ExportService(service)
+        self.decisions = DecisionJobs(service)
 
     def _principal(self, principal: ConsolePrincipal) -> ConsolePrincipal:
         with self.service.operations.transaction() as db:
@@ -44,6 +46,13 @@ class MemberApi:
 
     def read(self, route: str, query: str, principal: ConsolePrincipal) -> dict[str, Any]:
         current = self._principal(principal)
+        if route == "games" and not query:
+            return self.decisions.games(current)
+        if route == "datasets" and not query:
+            return self.decisions.list(current)
+        job = re.fullmatch(r"datasets/([a-f0-9]{32})", route)
+        if job and not query:
+            return self.decisions.read(current, job[1])
         if route == "collection-settings" and not query:
             return self.collection_settings(current)
         if route in {"campaigns", "campaigns/enrollments"}:
@@ -80,6 +89,11 @@ class MemberApi:
             )
         if route == "exports":
             return self.exports.create(current, body)
+        if route == "datasets":
+            return self.decisions.create(current, body)
+        retry = re.fullmatch(r"datasets/([a-f0-9]{32})/retry", route)
+        if retry:
+            return self.decisions.retry(current, retry[1], body)
         # No admin, compute, grants or implicit enrollment mutations on this surface.
         raise BoundaryError("member_api", "resource_not_found")
 

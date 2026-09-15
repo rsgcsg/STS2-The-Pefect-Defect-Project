@@ -61,3 +61,9 @@ The B lane also runs `python -m stpd.cloud_jobs.smoke` in the common gate: indep
 processes compile fake features, pause/resume and compare learned weights/dev metrics. True
 Platform-client/Hub HTTP tests cover pending/restart/receipt and Dataset reprojection. This
 is portable engineering evidence; it does not substitute for real R2/GPU/Human qualification.
+
+Decision-dataset regressions live in `tests/test_decision_dataset.py` and
+`tests/test_decision_store.py`. They must preserve partial versus complete claims, source-byte
+reprojection, parent context, duplicate accounting, immutable preview binding, revoked access,
+and read-only profile views. Use only synthetic bundles in portable CI. A real-source dry run
+is data-path evidence, not a new Human recording or model training result.

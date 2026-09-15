@@ -18,9 +18,7 @@ of a new tool is not a queue migration. Explicit stopped-workbench collection-up
 a fresh generation under the same v2 consent after Evidence proves old completion.
 Promotion requires this candidate's package, service and new-member Close-to-receipt gate.
 
-Historical [workflow](../evidence/B_UNIFIED_WORKFLOW_RELEASE_2026-09-13.md) and
-[multi-profile](../evidence/B_MULTI_PROFILE_REVIEW_2026-09-14.md) receipts retain their scope.
-Resolve live refs/package/CI before promotion; recording and whole-host recovery remain distinct.
+Resolve live refs/package/CI before promotion; historical receipts retain their original scope.
 
 Platform owns recording/Close/native authority and immutable delivery verification. STPD
 owns projection/admission/Dataset/model views/features/training/evaluation. Preserve H != S,
@@ -38,5 +36,8 @@ the locked cloud profile; research and CI use all extras. A first approved uploa
 a Dataset nor a training permit. Freeze the full v1 research protocol after measured real
 admission/profile and a separately budgeted worker canary, before selection training.
 
+Decision datasets: [ADR-0007](../adr/0007-fixed-decision-datasets.md).
 The B pipeline supplies no new model adapter, cloud game, inference service or RL.
 Source/test, service, Human, data, training and scientific qualification stay separate.
+
+Dataset verification: [2026-09-15 closeout](../evidence/DECISION_DATASETS_CLOSEOUT_2026-09-15.md).

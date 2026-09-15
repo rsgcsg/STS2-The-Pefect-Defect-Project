@@ -285,3 +285,26 @@ audits. Device token rotation never substitutes a new device ID or deletes trans
 Credential publication fsyncs the file and, on POSIX, its containing directory before
 acknowledging a pairing result. Windows retains atomic file replacement and process-restart
 recovery; arbitrary filesystem or power-loss survival is not a qualified claim.
+
+## Decision dataset candidate
+
+[ADR-0007](adr/0007-fixed-decision-datasets.md) adds **对局与片段** and dataset creation.
+After a shared verified upload, the bounded background worker prepares its run summary.
+The game page shows the latest 100 shared profiles, with incomplete/complete and unknown/win/loss
+separated. Failed profiles do not change receiver acceptance. It never calls uploads unique games.
+
+In **数据集**, select received recordings, keep permissive defaults or select optional filters,
+then **预览选定记录**. Refresh after background completion, inspect counts/exclusions/run facts,
+and use **按此预览生成固定数据集**. The resulting artifact ID identifies an immutable version.
+Use **数据下载** to select that artifact's Parquet and selection report. New uploads require a
+new preview/build. Existing artifact detail links remain valid. Collection sharing is checked
+again; revocation also blocks future downloads of derived decision bytes.
+
+This candidate does not start training. The strict old Full-Run loader remains unchanged;
+training integration must explicitly select the new decision-dataset contract.
+
+Member data calls have bounded transport deadlines (10 seconds for reads, 20 seconds
+for submissions), separate from the four-second login polling deadline. Export creation
+checks remote source manifests and current sharing grants. A lost submission response is
+reported as **result unknown**, not a rejected operation; the client never automatically
+resubmits it. These deadlines do not weaken source authorization or byte verification.

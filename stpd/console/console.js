@@ -9,6 +9,7 @@ const views = {
   connect: ["确认电脑接入", "核对名称与配对码，批准刚刚发起的请求。"],
   overview: ["概览", "采集、上传与研究进展，一处查看。"],
   collections: ["采集记录", "每份录制的质量、投递和研究使用，分别查看。"],
+  games: ["对局与片段", "按原生边界整理；完整性、胜负与记录质量分别统计。"],
   datasets: ["数据集", "固定来源与版本；新上传的数据不会自动改变已有训练集。"],
   jobs: ["作业", "查看真实执行状态与产物。此页面不会启动计算。"],
   models: ["模型与评估", "沿着数据与作业来源查看产物；下载不等于加载或运行。"],
@@ -1004,14 +1005,14 @@ async function load(manual = false) {
   try {
     const identity = await window.SpireIdentity.refresh(manual);
     if (serial !== state.serial) return;
-    if (["members", "statistics", "downloads", "research", "campaigns"].includes(view)) {
+    if (["members", "statistics", "downloads", "research", "campaigns"].includes(view) || (["datasets", "games"].includes(view) && !id)) {
       window.SpireIdentity.ensureProjectScope();
     }
     const identityContext = window.SpireIdentity.context();
     context = `${pageContext}:${identityContext}`;
     if (renderedContext !== context) $("content").replaceChildren(empty("正在读取…", "当前账号与电脑范围"));
     local = window.SpireIdentity.isLocal();
-    if (["members", "statistics", "downloads", "research", "local-models", "campaigns"].includes(view)) {
+    if (["members", "statistics", "downloads", "research", "local-models", "campaigns"].includes(view) || (["datasets", "games"].includes(view) && !id)) {
       const opened = [...document.querySelectorAll("details[open]")].map(item => item.dataset.preserve);
       const content = await window.SpireProject.render(view, identity);
       if (serial !== state.serial || identityContext !== window.SpireIdentity.context()) return;

@@ -437,3 +437,29 @@ def test_atomic_private_publication_flushes_directory_before_return(tmp_path, mo
     monkeypatch.setattr(os, "replace", replace)
     atomic_json(tmp_path / "credential.json", {"test": True})
     assert events == ["file", "replace", "directory"]
+
+
+@pytest.mark.parametrize(
+    "member,body,expected",
+    [
+        (False, None, 4),
+        (False, {}, 4),
+        (True, None, 10),
+        (True, {}, 20),
+    ],
+)
+def test_member_transport_deadline_and_unknown_submission(tmp_path, member, body, expected):
+    account = LocalIdentity(config(tmp_path))
+    calls = []
+
+    class TimeoutOpener:
+        def open(self, request, timeout):
+            calls.append(timeout)
+            raise TimeoutError()
+
+    account.opener = TimeoutOpener()
+    route = "/v1/identity/member/exports" if member else "/v1/identity/flows"
+    with pytest.raises(BoundaryError) as caught:
+        account.request(route, body=body)
+    assert calls == [expected]  # A lost acknowledgement must never auto-resubmit.
+    assert caught.value.code == ("request_unknown" if body is not None else "hub_unavailable")

@@ -85,7 +85,12 @@ class LocalIdentity:
             data=json.dumps(body).encode() if body is not None else None,
         )
         try:
-            with self.opener.open(request, timeout=4) as response:
+            # Member data requests can verify multiple remote immutable manifests.
+            # Stay below the browser's 15s read / 25s mutation deadlines; login
+            # polling retains its short timeout. Never retry a submitted mutation.
+            member = route.startswith("/v1/identity/member/")
+            timeout = (20 if body is not None else 10) if member else 4
+            with self.opener.open(request, timeout=timeout) as response:
                 raw = response.read(1048577)
             if len(raw) > 1048576:
                 raise ValueError
@@ -96,7 +101,9 @@ class LocalIdentity:
         except HTTPError as error:
             raise BoundaryError("identity", "http_" + str(error.code)) from None
         except (URLError, OSError, ValueError):
-            raise BoundaryError("identity", "hub_unavailable") from None
+            raise BoundaryError(
+                "identity", "request_unknown" if body is not None else "hub_unavailable"
+            ) from None
 
     def flow(self) -> dict[str, Any]:
         value = private_read(self.flow_path)

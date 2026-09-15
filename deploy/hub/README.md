@@ -28,8 +28,9 @@ Hub binds `127.0.0.1:8765`; Caddy owns public 80/443 and forwards to that loopba
 Both use Linux host networking deliberately: a container bound to its own loopback cannot
 be reached with ordinary bridge port mapping. This recipe is not a Docker Desktop/Windows
 runtime claim. The host must be trusted and dedicated enough that local untrusted processes
-cannot impersonate the loopback API. Host firewall exposes only SSH to administrators and
-80/443 publicly; it never exposes 8765.
+cannot impersonate the loopback API. The host exposes TCP/22 from all source networks, with host access authenticated by
+operator SSH keys (password SSH disabled), and public 80/443. It never exposes 8765.
+The default no longer binds maintenance access to a home or campus source IP.
 
 ## Files and operator ownership
 

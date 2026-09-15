@@ -80,6 +80,7 @@ def main() -> int:
     parser.add_argument("--device")
     parser.add_argument("--backup", type=Path)
     parser.add_argument("--job")
+    parser.add_argument("--decision-job")
     parser.add_argument("--upload")
     parser.add_argument("--received", action="append", default=[])
     parser.add_argument("--seed", type=int, default=0)
@@ -198,7 +199,12 @@ def main() -> int:
             )
             print(json.dumps({"upload_id": args.upload, "sharing_approved": args.approve_sharing}))
         elif args.command == "verify":
-            print(json.dumps({"processed": service.verify_pending(args.upload)}))
+            if args.decision_job:
+                from .decision_jobs import DecisionJobs
+
+                DecisionJobs(service).run(args.decision_job)
+            else:
+                print(json.dumps({"processed": service.verify_pending(args.upload)}))
         elif args.command == "retry-upload":
             if not args.upload:
                 raise BoundaryError("hub", "upload_required")
@@ -317,6 +323,23 @@ def main() -> int:
                 while not shutdown.is_set():
                     pending = ops.pending_upload(time.time())
                     if pending is None:
+                        from .decision_jobs import DecisionJobs
+                        from .verification_worker import VerifierCapacityDeferred, run_verifier
+
+                        jobs = DecisionJobs(service)
+                        job = jobs.pending()
+                        if job is not None:
+                            arguments = ["--root", str(args.root.resolve()),
+                                         "--state", str(args.state.resolve()),
+                                         "--store", args.store,
+                                         "--staging", args.staging, "--public-url", args.public_url,
+                                         "--decision-job", job]
+                            try:
+                                completed = run_verifier(arguments, shutdown=shutdown)
+                                if not completed and not shutdown.is_set():
+                                    jobs.fail(job, "worker_resource_or_process_limit")
+                            except VerifierCapacityDeferred:
+                                pass
                         shutdown.wait(5)
                         continue
                     arguments = [
