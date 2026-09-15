@@ -1,6 +1,6 @@
 # Python component: New Engineer Guide
 
-The [repository-wide guide](../../docs/../README.md) owns this process.
+The [complete member/Agent handoff](../../docs/NEW_MEMBER_HANDOFF.zh-CN.md) owns this process.
 This directory is not a second repository or a separate deployment authority.
 Use one topic PR to develop, normal merges, exact-head gates and root G0–G6 classes.
 
