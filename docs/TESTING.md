@@ -25,23 +25,35 @@ path-based review signals and never rewrites semantic truth.
 GitHub-hosted CI is intentionally a **source/test portability gate**, not an
 exact-game or runtime qualification environment.
 
-The workflow has three relevant jobs:
+The workflow always starts a `plan` job. The same local router is available as:
 
-1. `linux-portability` runs the complete root `npm run check` on Ubuntu and, for
-   pull requests, dependency review;
-2. `windows-portability` runs the same complete root `npm run check` on
-   Windows, rather than maintaining a hand-picked Windows subset that can drift
-   behind the monorepo;
-3. `portable` is the repository-ruleset status. It runs only after both OS lanes
-   finish and fails unless both succeeded.
+```bash
+npm run check:plan -- --base origin/develop
+npm run check:plan -- --base origin/develop --run
+```
 
-The ruleset can therefore continue to require the stable `portable` context
-while Windows is still a real merge gate. `portable` is not a Linux alias.
+The first rollout optimizes only modifications to the explicit editorial allowlist
+in `tools/check-plan.mjs`. `docs` runs `check:docs` (links, commands, routes,
+governance and patch hygiene) with Node alone; no Python/.NET installation.
+Governance/ADR/contract/CI/component paths, additions/deletions/type changes,
+unknown paths, dirty worktrees and unresolved Git refs select the full root suite
+on both Linux and Windows. A `.md` suffix alone never grants an exemption.
+For local uncommitted work the conservative result is full; inspect the exact
+committed diff for the lighter route. `npm run check` always means full.
 
-CI triggers on every pull request and on pushes to integration/release lines:
-`develop`, `main`, `release/**`, and `hotfix/**`. Topic-branch pushes do not also
-run a second push workflow when the pull-request workflow already covers them.
-Concurrency cancels stale runs for the same PR/ref.
+`portable` remains the required status and evaluates all job outcomes, including
+failure and cancellation. It passes only if the plan succeeded and every selected
+lane succeeded; unselected lanes must be skipped. Its summary identifies scope
+and exact base/tested checkout. A docs PASS is not full portability evidence.
+
+CI runs on every PR and pushes to `develop` and `main`. Release/hotfix branches
+use their PR run, avoiding duplicate push runs. Manual dispatch and weekly Sunday
+21:17 UTC runs retain full checks. Main/develop merge commits are tested in their
+own right. An executable release requires a full dual-OS result for its candidate;
+manual dispatch supplies it when needed. Scheduled results cover the default
+branch, so dispatch full checks on an unreleased active integration line before
+publication. Do not use whole-workflow path filters: required checks would remain
+Pending. Concurrency cancels superseded CI, never a production deployment.
 
 All third-party GitHub Actions are pinned by full commit SHA, checkout fetches
 full Git history because identity/history checks require it, and checkout does
@@ -108,7 +120,7 @@ not install, load, Live mutation, Human evidence, or qualification.
 
 Use the smallest evidence ladder required by the change:
 
-| Change class | Minimum additional evidence beyond `npm run check` |
+| Change class | Minimum additional evidence beyond the selected portable gate |
 | --- | --- |
 | docs / governance / pure portable tooling | normally none beyond `project:closeout` and `git diff --check` |
 | game-bound C# / native seam / unified Mod source | `npm run check:exact-game` plus a clean exact build and source/artifact identity |

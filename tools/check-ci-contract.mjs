@@ -29,13 +29,26 @@ export function ciWorkflowErrors(rawSource) {
   requireMatch(errors, "CI must trigger for pull requests", source, /^  pull_request:\s*$/mu);
   requireMatch(errors, "CI push trigger must be branch-scoped", source,
     /^  push:\s*\n    branches:\s*$/mu);
-  for (const branch of ["develop", "main", '"release/**"', '"hotfix/**"']) {
+  for (const branch of ["develop", "main"]) {
     if (!source.includes(`      - ${branch}`)) errors.push(`CI push trigger is missing ${branch}`);
   }
   requireMatch(errors, "CI must retain manual workflow_dispatch", source, /^  workflow_dispatch:\s*$/mu);
   requireMatch(errors, "CI must cancel stale runs", source, /^  cancel-in-progress:\s*true\s*$/mu);
   requireMatch(errors, "CI concurrency must distinguish PR/ref", source,
     /github\.event\.pull_request\.number\s*\|\|\s*github\.ref/u);
+
+  if (/"(?:release|hotfix)\/\*\*"/u.test(source)) errors.push("CI must avoid duplicate release/hotfix push runs");
+  if (/^\s+paths(?:-ignore)?:/mu.test(source)) errors.push("CI must not skip required workflows by path");
+  if (/continue-on-error:\s*true/u.test(source)) errors.push("CI must not ignore check failures");
+  const plan = jobBlock(source, "plan");
+  const docs = jobBlock(source, "docs");
+  if (!plan || !/run: node tools\/check-plan\.mjs\s*$/mu.test(plan)) errors.push("CI must use the shared check planner");
+  if (!docs || !docs.includes("run: npm run check:docs")) errors.push("CI must check editorial changes");
+  if (!/^  schedule:/mu.test(source)) errors.push("CI must retain periodic full checks");
+  for (const [name, scope] of [["docs", "docs"], ["linux-portability", "full"], ["windows-portability", "full"]]) {
+    const block = jobBlock(source, name) || "";
+    if (!block.includes("needs: plan") || !block.includes(`if: needs.plan.outputs.scope == '${scope}'`)) errors.push(`CI ${name} must use planned scope`);
+  }
 
   const linux = jobBlock(source, "linux-portability");
   const windows = jobBlock(source, "windows-portability");
@@ -72,14 +85,15 @@ export function ciWorkflowErrors(rawSource) {
     }
   }
   if (portable) {
-    requireMatch(errors, "portable must aggregate both OS lanes", portable,
-      /needs:\s*\[linux-portability, windows-portability\]/u);
+    requireMatch(errors, "portable must aggregate plan and selected lanes", portable,
+      /needs:\s*\[plan, docs, linux-portability, windows-portability\]/u);
     requireMatch(errors, "portable must evaluate failed/cancelled dependencies", portable,
       /if:\s*\$\{\{\s*always\(\)\s*\}\}/u);
-    requireMatch(errors, "portable must fail unless Linux succeeded", portable,
-      /test\s+"\$LINUX_RESULT"\s+=\s+"success"/u);
-    requireMatch(errors, "portable must fail unless Windows succeeded", portable,
-      /test\s+"\$WINDOWS_RESULT"\s+=\s+"success"/u);
+    requireMatch(errors, "portable must use the tested scope aggregate", portable,
+      /run:\s*node tools\/check-plan\.mjs aggregate\s*$/mu);
+    for (const name of ["CHECK_SCOPE", "PLAN_RESULT", "DOCS_RESULT", "LINUX_RESULT", "WINDOWS_RESULT"]) {
+      if (!portable.includes(`${name}:`)) errors.push(`portable missing ${name}`);
+    }
   }
 
   for (const line of source.split("\n")) {

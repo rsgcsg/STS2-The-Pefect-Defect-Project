@@ -5,10 +5,10 @@ on:
     branches:
       - develop
       - main
-      - "release/**"
-      - "hotfix/**"
   pull_request:
   workflow_dispatch:
+  schedule:
+    - cron: "17 21 * * 0"
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -18,7 +18,45 @@ permissions:
   contents: read
 
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      scope: ${{ steps.route.outputs.scope }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 20
+      - id: route
+        name: Select checks from actual Git changes
+        env:
+          CHECK_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          CHECK_FULL: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
+        run: node tools/check-plan.mjs
+
+  docs:
+    needs: plan
+    if: needs.plan.outputs.scope == 'docs'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 20
+      - name: Check editorial links, routes and governance
+        run: npm run check:docs
+
   linux-portability:
+    needs: plan
+    if: needs.plan.outputs.scope == 'full'
     runs-on: ubuntu-latest
     timeout-minutes: 55
     steps:
@@ -55,6 +93,8 @@ jobs:
         run: git diff --check
 
   windows-portability:
+    needs: plan
+    if: needs.plan.outputs.scope == 'full'
     runs-on: windows-latest
     timeout-minutes: 55
     steps:
@@ -86,15 +126,22 @@ jobs:
 
   portable:
     if: ${{ always() }}
-    needs: [linux-portability, windows-portability]
+    needs: [plan, docs, linux-portability, windows-portability]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Require both portability lanes
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 20
+      - name: Require every selected check; skipped is not a full PASS
         env:
+          CHECK_SCOPE: ${{ needs.plan.outputs.scope }}
+          PLAN_RESULT: ${{ needs.plan.result }}
+          DOCS_RESULT: ${{ needs.docs.result }}
           LINUX_RESULT: ${{ needs.linux-portability.result }}
           WINDOWS_RESULT: ${{ needs.windows-portability.result }}
-        run: |
-          printf 'linux=%s windows=%s\n' "$LINUX_RESULT" "$WINDOWS_RESULT"
-          test "$LINUX_RESULT" = "success"
-          test "$WINDOWS_RESULT" = "success"
+        run: node tools/check-plan.mjs aggregate

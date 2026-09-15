@@ -27,11 +27,12 @@ second governance system. A PR may cross components when one causal change requi
 1. Create a topic branch from current origin/develop; record exact base/head and owner.
    Implement the first owning correction, add the cheapest faithful regression, run the
    relevant component/root gates, closeout and diff review. Open a PR to develop.
-2. Review the latest head and its Linux/Windows/portable CI. If integration requires a
+2. Review the latest head and its selected CI scope/portable result. If integration requires a
    newer base, merge that base into the topic branch, review conflicts and revalidate.
    Use a normal merge commit for any component source change; docs-only squash remains
    permitted by root policy. Preserve path-scoped component provenance.
-3. Merge the reviewed PR to develop and verify the actual merge-head CI. No service is
+3. Merge the reviewed PR to develop and verify the actual merge-head CI.
+   This completes an ordinary task unless publication/deployment is explicitly in scope. No service is
    deployed merely because that merge happened. Several compatible improvements may be
    grouped into one intentional release; do not make every commit a user update.
 4. When promotion is intended, create a temporary release branch from the exact selected
@@ -143,7 +144,9 @@ advances; operators consult the approved current runbook and actual deployment i
 
 ## Checks, cleanup and traceability
 
-From root: npm ci, npm ci --prefix python, npm run setup:python, npm run check.
+For initial/full environment validation: npm ci, npm ci --prefix python, npm run setup:python, npm run check.
+For subsequent tasks use npm run check:plan -- --base origin/develop --run;
+TESTING.md defines the editorial route and all remaining full/native gates.
 Run npm run project:closeout and git diff --check; match higher gates to TESTING.md.
 Review contracts/BOM/pins/version/ADR/docs only where affected. Record exact tested head,
 actual evidence, rollback and non-claims in the PR. Source merge never creates Human or
