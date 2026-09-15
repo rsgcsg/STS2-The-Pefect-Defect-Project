@@ -51,7 +51,7 @@ changes while checks run. For a reviewed exact-source readiness receipt after ho
 
 ```bash
 uv run --locked python tools/qualify_prefullrun.py --ci-run <exact-ci-run-id>
-uv run --locked python -m stpd.workbench readiness --evidence .local/qualification.json
+uv run --locked python -m spireagent.workbench readiness --evidence .local/qualification.json
 ```
 
 The capture tool reads current GitHub CI head/jobs, reruns the full local closeout gate and

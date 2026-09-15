@@ -53,6 +53,14 @@ export function ciWorkflowErrors(rawSource) {
     requireMatch(errors, "Dependency review must remain on pull requests", linux,
       /if:\s*github\.event_name == 'pull_request'/u);
   }
+  for (const [label, lane] of [["Linux", linux], ["Windows", windows]]) {
+    if (!lane) continue;
+    requireMatch(errors, `${label} must install the locked Python component`, lane,
+      /run:\s*uv sync --project python --locked --all-extras\s*$/mu);
+    requireMatch(errors, `${label} must install Python consumer packages`, lane,
+      /run:\s*npm ci --prefix python\s*$/mu);
+  }
+
   if (windows) {
     requireMatch(errors, "Windows portability must use windows-latest", windows, /runs-on:\s*windows-latest/u);
     requireMatch(errors, "Windows portability must run the root check", windows, /run:\s*npm run check\s*$/mu);

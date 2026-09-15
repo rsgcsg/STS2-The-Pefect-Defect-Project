@@ -20,9 +20,9 @@ from typing import Any
 
 from sts2_platform_evidence.collection_tool import CollectionTool
 
-from stpd.json_boundary import BoundaryError, decode_json, digest, json_bytes
-from stpd.workbench.control import source_identity
-from stpd.workbench.developer import combination
+from spireagent.json_boundary import BoundaryError, decode_json, digest, json_bytes
+from spireagent.source import source_identity
+from spireagent.workbench.developer import combination
 
 ROOT = Path(__file__).resolve().parents[1]
 README = """# SpireAgent developer kit
@@ -33,10 +33,10 @@ supported systems, actual qualification gates and rollback before installing.
 
 Install Git, Python 3.11 with uv, Node 20+ and the collection tool's declared .NET runtime.
 Node and .NET must stay on PATH: the fixed tool uses them for native setup and packaging.
-Clone https://github.com/rsgcsg/STS2-The-Perfect-Defect.git and check out the exact
+Clone https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project.git and check out the exact
 stpd_source_revision from combination.json. Model weights are not needed for collection.
-Initial Mod installation is operator-assisted: the operator also retains the exact Platform
-checkout specified by the release and follows docs/DEVELOPER_KIT_INSTALL.md. The ZIP has no
+Initial Mod installation uses the same repository at the release commit. Enter python/
+and follow docs/DEVELOPER_KIT_INSTALL.md. The ZIP has no
 standalone installer. Everyday member collection uses the fixed tool without a Platform clone.
 Install mod/ with the game closed; retain the previous compatible Mod/tool pair. Keep
 collection-tool/ complete, including its setup helper and provenance. Verify its embedded BOM
@@ -45,8 +45,8 @@ separately from the kit root's pinned distribution BOM; the two may have identic
 Use one private absolute --config path for this computer on every command. The launcher default
 is %LOCALAPPDATA%/spireagent/workbench/project.json on Windows, or
 ~/.local/share/spireagent/workbench/project.json elsewhere. Use its resolved absolute path;
-other accounts need separate private directories. From the exact STPD checkout, replace
-/ABS/project.json and /ABS/kit below with your chosen locations and quote paths with spaces:
+other accounts need separate private directories. From python/ in the exact project checkout,
+replace /ABS/project.json and /ABS/kit below with your chosen locations and quote paths with spaces:
 
 ```bash
 python tools/open_workbench.py --config /ABS/project.json --hub-url https://hub.2-fire-2.com
@@ -58,10 +58,10 @@ Then stop the workbench, register the complete tool with its independently appro
 and reopen. Closing a browser tab alone does not release the registration lock.
 
 ```bash
-uv run --locked python -m stpd.workbench project stop --config /ABS/project.json
-uv run --locked python -m stpd.workbench project collection-tool --config /ABS/project.json \\
+uv run --locked python -m spireagent.workbench project stop --config /ABS/project.json
+uv run --locked python -m spireagent.workbench project collection-tool --config /ABS/project.json \\
   --tool-directory /ABS/kit/collection-tool --tool-release-id EXACT_APPROVED_ID
-uv run --locked python -m stpd.workbench project open --config /ABS/project.json
+uv run --locked python -m spireagent.workbench project open --config /ABS/project.json
 ```
 
 Open 录制与上传. Review the daily default and explicitly confirm Human origin, upload and

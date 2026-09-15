@@ -11,9 +11,10 @@ import numpy as np
 import torch
 from torch import Tensor, nn
 
+from spireagent.json_boundary import BoundaryError
+
 from ..canonical import semantic_hash
 from ..fullrun.features import LoadedFeatures
-from ..json_boundary import BoundaryError
 from .checkpoint_codec import decode_checkpoint, encode_checkpoint
 from .contracts import TrainingConfig
 

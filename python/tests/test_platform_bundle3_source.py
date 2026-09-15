@@ -8,11 +8,11 @@ from pathlib import Path
 import pytest
 from platform_bundle3_fixture import bundle3, load, rows, seal, stream, write
 
+from spireagent.json_boundary import BoundaryError
 from stpd.fullrun.contracts import ResearchTransitionV1, ResearchTransitionV2
 from stpd.fullrun.data import admit, load_dataset, publish_dataset, publish_source
 from stpd.fullrun.platform_bundle3 import PlatformBundle3SourceAdapter, archive_bundle
 from stpd.fullrun.representation import FullRunSerializer
-from stpd.json_boundary import BoundaryError
 
 
 def test_verified_bundle3_parent_read_and_strict_dataset_roundtrip(tmp_path: Path) -> None:
@@ -159,7 +159,7 @@ def test_archive_symlink_is_rejected() -> None:
 def test_native_execution_catalog_stays_distinct_from_public_catalog(tmp_path: Path) -> None:
     import hashlib
 
-    from stpd.json_boundary import json_bytes
+    from spireagent.json_boundary import json_bytes
 
     bundle = bundle3(tmp_path)
     raw = bundle / "raw"
@@ -279,9 +279,9 @@ def test_unordered_pile_cards_and_runtime_ids_do_not_enter_model_order() -> None
 def test_received_bundle_keeps_transport_parent_and_reverifies_bytes(tmp_path: Path) -> None:
     from test_artifact_store_v1 import PRODUCER, store
 
-    from stpd.artifact_contracts import Manifest
+    from spireagent.artifact_contracts import Manifest
+    from spireagent.json_boundary import FrozenObject
     from stpd.fullrun.data import publish_received_source
-    from stpd.json_boundary import FrozenObject
 
     target = store(tmp_path / "store")
     content = archive_bundle(bundle3(tmp_path))

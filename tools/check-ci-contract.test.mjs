@@ -56,3 +56,14 @@ test("CI contract rejects unpinned GitHub Actions", () => {
   );
   assert.ok(ciWorkflowErrors(source).some((error) => error.includes("actions/setup-node@v7")));
 });
+
+// Same root contract covers both language stacks after consolidation.
+
+test("both language environments remain required on both OS lanes", () => {
+  for (const command of ["uv sync --project python --locked --all-extras", "npm ci --prefix python"]) {
+    const source = currentSource().replaceAll(`run: ${command}`, "run: echo omitted");
+    const errors = ciWorkflowErrors(source);
+    assert.ok(errors.some((error) => error.startsWith("Linux must install")));
+    assert.ok(errors.some((error) => error.startsWith("Windows must install")));
+  }
+});

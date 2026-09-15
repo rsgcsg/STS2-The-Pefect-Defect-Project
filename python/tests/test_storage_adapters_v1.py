@@ -8,12 +8,12 @@ from typing import Any
 import pytest
 from test_artifact_store_v1 import PRODUCER, store
 
-from stpd.artifact_contracts import Manifest, Parent
-from stpd.json_boundary import BoundaryError
-from stpd.storage.blobs import StoreError
-from stpd.storage.registry import SQLiteRegistry, sync_registry
-from stpd.storage.s3 import S3BlobStore, S3Config
-from stpd.storage.store import ManifestArtifactStore, copy_artifact
+from spireagent.artifact_contracts import Manifest, Parent
+from spireagent.json_boundary import BoundaryError
+from spireagent.storage.blobs import StoreError
+from spireagent.storage.registry import SQLiteRegistry, sync_registry
+from spireagent.storage.s3 import S3BlobStore, S3Config
+from spireagent.storage.store import ManifestArtifactStore, copy_artifact
 
 
 class FakeS3Error(Exception):
@@ -189,7 +189,7 @@ def test_retry_copy_does_not_redownload_existing_verified_payloads(tmp_path: Pat
             self.reads += 1
             yield from super().read_payload(payload)
 
-    from stpd.storage.local import LocalBlobStore
+    from spireagent.storage.local import LocalBlobStore
 
     source = Source(LocalBlobStore(tmp_path / "source"))
     target = store(tmp_path / "target")

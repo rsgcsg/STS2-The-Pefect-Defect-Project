@@ -8,10 +8,11 @@ import tempfile
 from collections import defaultdict
 from dataclasses import dataclass
 
-from ..artifact_contracts import Manifest, Parent, Producer
+from spireagent.artifact_contracts import Manifest, Parent, Producer
+from spireagent.json_boundary import BoundaryError, FrozenObject, decode_json, json_bytes, unsigned
+from spireagent.storage.store import ArtifactStore
+
 from ..canonical import canonical_json, semantic_hash
-from ..json_boundary import BoundaryError, FrozenObject, decode_json, json_bytes, unsigned
-from ..storage.store import ArtifactStore
 from .contracts import ResearchTransitionV1, ResearchTransitionV2, SourceAdapter, SourceProjection
 from .representation import decision_fingerprint
 

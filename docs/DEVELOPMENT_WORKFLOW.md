@@ -1,197 +1,54 @@
-# Platform Development Workflow
+# Project Development Workflow
 
-This document governs changes to the Platform Foundation repository. It is the
-canonical Git and collaboration workflow for humans and agents.
+The single active development repository is rsgcsg/STS2-The-Pefect-Defect-Project.
+Platform components, project applications and STPD research share one PR workflow.
 
-## Project position
+## Branches and merge
 
-```text
-STS2 AI Platform
-├── Platform Foundation (this repository)
-│   ├── Host Runtime and exact identity
-│   ├── Connector / Player Environment
-│   ├── Human Annotator and Evidence
-│   ├── model-neutral Policy Runtime
-│   └── Workbench, Live UI and unified Mod
-└── Research Projects
-    └── STPD (independent research repository and consumer)
-```
+Start from current origin/develop after fetch/prune. Use one short-lived topic
+branch/worktree per writer. Normal changes target develop through a PR. Release
+and hotfix branches target main, then synchronize back into develop. Main and
+develop are the only long-lived branches. Do not force-push or bypass required CI.
+Use normal merge commits: component provenance must survive integration.
 
-Platform is the shared, model-neutral foundation. STPD is an independently
-versioned research project built on Platform public contracts; it is not a peer
-platform. Platform must not depend on STPD checkpoints, rewards, training,
-research projections or policy semantics. The repositories are not submodules
-and do not share branches.
+The empty destination has one controlled history-import bootstrap. That exception
+creates main/develop once and does not permit future protected direct pushes.
+Old repositories remain available until the new release/service/Human gates pass.
 
-## Governance migration
+## One change, explicit owners
 
-The original 2026-08-27 `main` at
-`5604050ef0e0f55f13bf2fdb720e5c215d774fd5` is retained as
-`baseline/pre-governance-platform-20260827`. That tag is historical evidence;
-it does not describe the current main tip. Recovery/hotfix and governed release
-history is preserved without rewriting it. `develop` is the normal integration line.
+A PR may span native, application and research code where one change requires it.
+Record base/head, owning fact, affected contracts/components, source identity,
+actual evidence, rollback and non-claims. Root Engineering Governance owns G0-G6;
+add research/data/model tags when applicable. Old STPD classifications are historical.
+Keep source import and behavior refactoring in separate commits.
 
-Current main releases follow:
+## Checks and promotion
 
-```text
-develop -> release/<version> -> release gates -> main -> version tag
-```
+From the root: npm ci, npm ci --prefix python, npm run setup:python, npm run check.
+Use npm run project:closeout before PR review. All affected tests run; Linux and
+Windows must both pass the full portable aggregate. Native/build/install changes
+add the local exact-game and runtime gates from TESTING.md. Human/scientific
+claims require their own evidence. Source merge never promotes evidence.
 
-A release's advertised scope and qualification come from its exact immutable assets,
-notes and receipts. The branch name alone does not certify native or scientific readiness.
+## Dependencies and delivery
 
-## Branches
+Consume declared package APIs. Same-repository development may use qualified local
+workspace packages; installed distributions bind exact artifacts. Do not import
+another component's private source or alter its database. Preserve historical
+released dependencies needed to read old data; current installation must have one
+reviewed release composition. Replacing a pin requires consumer compatibility tests.
 
-- `main`: stable release landing line; accepts only `release/*` and urgent
-  `hotfix/*` pull requests.
-- `develop`: the single long-lived integration line and normal PR target.
-- `feature|fix|refactor|evidence|experiment|docs|chore/<scope>/<name>`:
-  short-lived topic branches from current `develop`.
-- `release/<version>`: release stabilization, identity, BOM, documentation and
-  blocker fixes only.
-- `hotfix/<name>`: urgent stable-line fix from `main`; merge the same fix back
-  into `develop` and any active release branch.
+Build an immutable candidate, verify it, promote the same bytes, and retain the
+previous image/config. Keep a running collector in a separate checkout at the sealed
+release commit; do development and merges in another worktree. Never move the live
+collector checkout underneath a recording or upload process. Rebuilds are new artifacts.
+One production scheduler owns
+operations state; backup/restore remains independent of rebuildable indexes.
 
-Scopes normally name an owning component: `native-foundation`, `connector`, `host-runtime`,
-`annotator`, `evidence`, `policy-runtime`, `game-mod`, `live-ui`, `workbench` or
-`platform`. Do not create permanent component develop branches.
+## Retirement
 
-## Work and pull requests
-
-Before editing:
-
-1. fetch and prune `origin`;
-2. inspect `origin/develop`, recent commits and open PRs;
-3. record the base SHA and check for overlapping files/contracts;
-4. create one topic branch and, for concurrent agents, one worktree;
-5. keep one primary responsibility per PR.
-
-Normal topic PRs target `develop`; release and hotfix PRs follow the branch
-rules above. Refactors and behavior changes should be separate when either is
-substantial.
-
-### Merge method and component provenance
-
-Current component `source_revision` is path-scoped commit provenance. The
-component-identity suite proves that a normal merge commit preserves the topic
-component revision, while squash/rebase integration rewrites it even when the
-component tree and source digest are unchanged.
-
-Therefore:
-
-- **any PR that changes a component source path uses a normal merge commit**;
-- do not use `Squash and merge` or `Rebase and merge` for such a PR;
-- docs/governance-only PRs that do not change component source may be squashed;
-- if a source branch needs history cleanup, do it before the final exact-head CI
-  and then treat that rewritten head as a new source identity;
-- never repair a post-squash BOM failure by weakening identity/BOM validation.
-
-This rule remains until the source-provenance/BOM schema is deliberately
-changed. The exact testing rationale is in [Testing and Evidence](TESTING.md).
-
-Every PR records repository, base branch/SHA, workstream, owner, scope,
-non-goals, affected contract, cross-repository dependencies, exact identities,
-evidence level, rollback and remaining non-claims. CI green proves source/test
-only. It never promotes build, installed, loaded, runtime, Human or
-qualification evidence.
-
-## Multi-human and multi-agent work
-
-One writer owns one topic branch/worktree. A handoff records repository,
-branch, base SHA, HEAD, task/non-goals, changed files, checks, pending work and
-risks. Never overwrite a changed `develop`, BOM, manifest or contract merely to
-make a stale branch pass. Rebase or merge only after understanding the new
-facts.
-
-Active workstreams belong in pull requests and the bounded
-[Current Context](memory/CURRENT.md), not in this durable workflow.
-
-## Cross-repository dependencies
-
-STPD consumes a released Platform package or an explicitly non-stable candidate
-pinned by exact source SHA, artifact/package digest, protocol and manifest.
-Floating `Platform/develop` is forbidden. A cross-repository change uses two
-independent PRs:
-
-```text
-Platform contract/candidate PR and exact identity
-  -> STPD manifest/config pin PR
-  -> STPD adapter/admission/research verification
-```
-
-Platform release does not depend on STPD model quality. STPD qualification may
-depend on one exact Platform release/candidate.
-
-## Evidence and release gates
-
-The owning component determines checks. At minimum:
-
-```bash
-npm ci
-npm run check
-npm run project:closeout
-git diff --check
-```
-
-Game-bound changes also run `npm run check:exact-game`, an exact build and the
-required exact-runtime gates. Raw sessions, local artifacts, installed files,
-game binaries, decompiled source, secrets and model weights stay outside Git.
-Reviewed evidence documents contain exact identity, aggregate results,
-reproducible commands, rollback and non-claims.
-
-GitHub-hosted CI deliberately stops at source/test portability. Exact-game
-build/install/load/Human gates remain local or otherwise explicitly controlled
-because they require an exact STS2 installation and admitted runtime identity.
-See [Testing and Evidence](TESTING.md) for the gate matrix.
-
-Release branches may change only release blockers, versions, packages,
-manifests, BOM, release notes and exact closeout evidence. A release reaches
-`main` only when its advertised scope is internally consistent and rollback is
-available. Component version, protocol, SDK/package version, Platform BOM and
-artifact identity remain separate.
-
-## GitHub enforcement
-
-`main` and `develop` require pull requests, the `portable` status and resolved
-conversations, and block deletion and force pushes. Temporary `release/*` branches retain
-the same PR/check/non-fast-forward protection in a separate ruleset, but may be deleted
-after verified main integration and stabilization synchronization. This exception does
-not permit deleting main/develop or bypassing a merge gate. The `portable` workflow
-status is an aggregate: it succeeds only when both the Linux and Windows full
-portable root suites succeed. It must not be redefined as a Linux-only alias.
-
-CI runs for every pull request, and push CI is limited to integration/release
-branches so an open topic PR does not create a redundant second push run.
-Concurrency cancels stale runs for the same PR/ref. Third-party Actions remain
-commit-SHA pinned and checkout remains read-only with full history for identity
-and migration checks.
-
-Approval requirements may be raised as the reviewer pool grows; an owner must
-not use administrator bypass as the normal workflow. Repository settings and
-their actual enforcement state are audited separately from this document.
-
-This workflow combines short-lived branches and small self-contained changes
-with an explicit integration line and release stabilization because Platform
-runtime evidence often matures after source tests. It intentionally does not
-copy heavyweight GitFlow. See [GitHub PR standardization](https://docs.github.com/en/pull-requests/reference/managing-and-standardizing-pull-requests),
-[short-lived feature branches](https://trunkbaseddevelopment.com/short-lived-feature-branches/)
-and [Google's small-change guidance](https://google.github.io/eng-practices/review/developer/small-cls.html).
-
-## Release handoff and branch retirement
-
-The default SpireAgent collection distribution is a versioned developer combination; see
-[collection workflow](ANNOTATOR_COLLECTION.md#default-project-workflow). Release notes bind
-both repository refs, current Platform component/BOM and consumer pin, exact Mod/tool bytes,
-STPD source/lock and deployed image, actual gates, rollback and remaining non-claims.
-Publish immutable checksummed assets after the corresponding main/CI/service checks; do not
-replace an old asset or point daily users at a floating topic branch. A release includes
-operator installation instructions and a bounded first-terminal check. Scientific gates
-are separate from a developer workflow release.
-
-After integration, resolve remote refs again. Delete only reviewed retired branches. Preserve
-non-ancestor historical tips in explicit archive tags and verify their remote identity before
-branch deletion; do not merge obsolete snapshots merely to make Git call them merged. Record
-patch equivalence and the reason for archiving. Keep worktrees with local modifications or
-ignored runtime/evidence as detached checkouts at their original HEAD, with a private diff/file
-inventory. Never reset, clean or remove their data during branch cleanup. Only main/develop
-remain long-lived branches; tags preserve released and historical identities.
+After exact candidate acceptance and main/develop CI, mark old repository READMEs
+as historical, stop duplicate deployment workflows and preserve releases/tags.
+Archive old repositories only after retained links/dependencies are verified.
+Delete merged topic branches; keep detached worktrees containing private evidence.

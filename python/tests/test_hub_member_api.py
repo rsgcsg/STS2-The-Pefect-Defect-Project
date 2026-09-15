@@ -15,15 +15,15 @@ from test_campaign_onboarding import campaign as campaign
 from test_hub_console import service
 from test_hub_console import signed as signed
 
-from stpd.artifact_contracts import Manifest
+from spireagent.artifact_contracts import Manifest
+from spireagent.hub.campaigns import create_campaign_tables
+from spireagent.hub.console_auth import ConsolePrincipal
+from spireagent.hub.exports import REQUEST_SCHEMA
+from spireagent.hub.identity import IdentityService
+from spireagent.hub.member_api import MemberApi, grant_collection_sharing
+from spireagent.json_boundary import BoundaryError, json_bytes
 from stpd.collection_activity import CONSENT_FIELDS
 from stpd.fullrun.platform_bundle3 import archive_bundle
-from stpd.hub.campaigns import create_campaign_tables
-from stpd.hub.console_auth import ConsolePrincipal
-from stpd.hub.exports import REQUEST_SCHEMA
-from stpd.hub.identity import IdentityService
-from stpd.hub.member_api import MemberApi, grant_collection_sharing
-from stpd.json_boundary import BoundaryError, json_bytes
 
 
 @pytest.fixture
@@ -229,7 +229,10 @@ def test_receiver_automatically_grants_only_exact_verified_enrollment(api, tmp_p
     row = owner.operations.upload(upload)
     receipt_before = row["receipt"]
     assert row["status"] == "verified"
-    assert router.exports.collection_access([upload])[upload]["availability"] == "available"
+    assert (
+        router.exports.collections.collection_access([upload])[upload]["availability"]
+        == "available"
+    )
     result = router.write(
         "exports", {"schema": REQUEST_SCHEMA, "collections": [upload], "artifacts": []}, member
     )
@@ -256,7 +259,10 @@ def test_receiver_automatically_grants_only_exact_verified_enrollment(api, tmp_p
         owner, upload_id=upload, approved=False, evidence_ref="e" * 64, actor="owner"
     )
     assert owner.associate_verified_bundle(upload, bundle)["availability"] == "not_granted"
-    assert router.exports.collection_access([upload])[upload]["availability"] == "not_granted"
+    assert (
+        router.exports.collections.collection_access([upload])[upload]["availability"]
+        == "not_granted"
+    )
     assert owner.operations.upload(upload)["receipt"] == receipt_before
 
 
@@ -275,11 +281,17 @@ def test_receiver_wrong_device_and_missing_enrollment_do_not_grant(api, tmp_path
             (upload,),
         ).fetchone()[0]
         assert json.loads(detail)["reason"] == "verified_bundle_identity_mismatch"
-    assert router.exports.collection_access([upload])[upload]["availability"] == "not_granted"
+    assert (
+        router.exports.collections.collection_access([upload])[upload]["availability"]
+        == "not_granted"
+    )
     with pytest.raises(BoundaryError, match="verified_bundle_identity_mismatch"):
         owner.associate_verified_bundle(upload, bundle)
     with owner.operations.transaction() as db:
         db.execute("UPDATE uploads SET device='one' WHERE id=?", (upload,))
         db.execute("DELETE FROM collection_enrollments")
     assert owner.associate_verified_bundle(upload, bundle)["reason"] == "enrollment_not_found"
-    assert router.exports.collection_access([upload])[upload]["availability"] == "not_granted"
+    assert (
+        router.exports.collections.collection_access([upload])[upload]["availability"]
+        == "not_granted"
+    )

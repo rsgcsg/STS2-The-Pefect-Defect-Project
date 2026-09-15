@@ -9,9 +9,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from stpd.json_boundary import BoundaryError, decode_json
-from stpd.workbench.control import REPOSITORY, source_identity
-from stpd.workbench.readiness import readiness
+from spireagent.json_boundary import BoundaryError, decode_json
+from spireagent.source import source_identity
+from spireagent.workbench.control import REPOSITORY
+from spireagent.workbench.readiness import readiness
 
 ROOT = Path(__file__).resolve().parents[1]
 

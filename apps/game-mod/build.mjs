@@ -9,6 +9,7 @@ import {
   resolveWorkstationInstallation
 } from "../../components/annotator/tools/workstation-platform.mjs";
 import { sourceSetIdentity } from "./source-identity.mjs";
+import { publicAssemblyIdentity } from "./public-provenance.mjs";
 
 const appRoot = import.meta.dirname;
 const platformRoot = path.resolve(appRoot, "../..");
@@ -47,7 +48,7 @@ function exactIdentity(file) {
     encoding: "utf8"
   });
   if (result.status !== 0) throw new Error(result.stderr || `identity tool exited with ${result.status}`);
-  return JSON.parse(result.stdout);
+  return publicAssemblyIdentity(JSON.parse(result.stdout));
 }
 
 const hostApi = await loadHostRuntimeWorkstationApi(

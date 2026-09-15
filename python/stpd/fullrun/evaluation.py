@@ -12,9 +12,10 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from ..artifact_contracts import Manifest, Parent, Producer
-from ..json_boundary import BoundaryError, FrozenObject, decode_json, json_bytes, unsigned
-from ..storage.store import ArtifactStore
+from spireagent.artifact_contracts import Manifest, Parent, Producer
+from spireagent.json_boundary import BoundaryError, FrozenObject, decode_json, json_bytes, unsigned
+from spireagent.storage.store import ArtifactStore
+
 from .features import ModelSample, load_model_view
 
 EVALUATION_SCHEMA = "stpd/offline-ranking-evaluation-v1"

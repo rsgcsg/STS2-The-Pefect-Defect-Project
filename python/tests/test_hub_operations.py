@@ -7,13 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from stpd.artifact_contracts import Manifest, Producer
-from stpd.hub.application import HubApplication
-from stpd.hub.database import Operations
-from stpd.hub.uploads import LocalStaging, UploadService
-from stpd.json_boundary import BoundaryError
-from stpd.storage.local import LocalBlobStore
-from stpd.storage.store import ManifestArtifactStore
+from spireagent.artifact_contracts import Manifest, Producer
+from spireagent.hub.application import HubApplication
+from spireagent.hub.database import Operations
+from spireagent.hub.uploads import LocalStaging, UploadService
+from spireagent.json_boundary import BoundaryError
+from spireagent.storage.local import LocalBlobStore
+from spireagent.storage.store import ManifestArtifactStore
 
 
 def test_lease_is_exclusive_and_expiry_never_proves_stopped(tmp_path: Path) -> None:

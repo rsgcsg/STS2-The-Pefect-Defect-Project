@@ -21,7 +21,7 @@ function setup() {
     fetch: (url, options) => new Promise(resolve => calls.push({url, options,
       answer: body => resolve({ok:true, json: async () => body})})),
   });
-  vm.runInContext(readFileSync(new URL('../stpd/console/identity.js', import.meta.url), 'utf8'), context);
+  vm.runInContext(readFileSync(new URL('../spireagent/console/identity.js', import.meta.url), 'utf8'), context);
   return {ui: context.window.SpireIdentity, nodes, calls};
 }
 const person = (subject = 'one') => ({status: 'signed_in', csrf_token: 'csrf',
@@ -79,7 +79,7 @@ function pageSetup(view, identity, connectContent = async () => 'connection fact
     location: {search: '?view=' + view + (flow ? '&flow=' + flow : '')}, history: {}, Date, URLSearchParams,
     setInterval() {},
   });
-  vm.runInContext(readFileSync(new URL('../stpd/console/console.js', import.meta.url), 'utf8'), context);
+  vm.runInContext(readFileSync(new URL('../spireagent/console/console.js', import.meta.url), 'utf8'), context);
   return {get, context, changeScope: () => {scope = 'other';}};
 }
 const settled = () => new Promise(resolve => setImmediate(resolve));

@@ -11,7 +11,7 @@ from pathlib import Path
 import preflight
 import pytest
 
-from stpd.hub.database import Operations, create_private_database
+from spireagent.hub.database import Operations, create_private_database
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="Linux host POSIX permission contract")
 
@@ -29,7 +29,7 @@ def test_real_fresh_cli_bootstrap_and_snapshot_are_private_before_preflight(
     state.chmod(0o700)
     root = Path(__file__).resolve().parents[2]
     result = subprocess.run(
-        [sys.executable, "-m", "stpd.hub", "members-bootstrap", "--state", str(state)],
+        [sys.executable, "-m", "spireagent.hub", "members-bootstrap", "--state", str(state)],
         cwd=root,
         env={
             **os.environ,
@@ -58,7 +58,7 @@ def test_real_fresh_cli_bootstrap_and_snapshot_are_private_before_preflight(
         [
             sys.executable,
             "-c",
-            "from pathlib import Path; from stpd.hub.database import Operations; "
+            "from pathlib import Path; from spireagent.hub.database import Operations; "
             "import sys; Operations(Path(sys.argv[1])).backup(Path(sys.argv[2]))",
             str(path),
             str(snapshot),

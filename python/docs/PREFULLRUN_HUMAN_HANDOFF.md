@@ -12,7 +12,7 @@ Provision an S3-compatible bucket/prefix, configure endpoint/bucket/prefix/regio
 provider. Do not send, commit or paste credentials into manifests or launch packets.
 
 ```bash
-uv run --locked python -m stpd.workbench doctor --store s3 --smoke
+uv run --locked python -m spireagent.workbench doctor --store s3 --smoke
 ```
 
 Retain its actual provider result as separate qualification. It tests conditional writes,
@@ -26,8 +26,8 @@ exact prepared Run lineage, generate the launch packet and execute its commands 
 host with scoped storage credentials. The packet pins Git SHA, uv.lock and exact Worker Run.
 
 ```bash
-uv run --locked python -m stpd.workbench push --artifact <run-id> --other-store s3
-uv run --locked python -m stpd.workbench launch --run <run-id> --output .local/launch.json
+uv run --locked python -m spireagent.workbench push --artifact <run-id> --other-store s3
+uv run --locked python -m spireagent.workbench launch --run <run-id> --output .local/launch.json
 ```
 
 Use the same worker protocol on every provider. Recovery explicitly names the exact durable

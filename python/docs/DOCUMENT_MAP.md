@@ -50,8 +50,8 @@ stpd/data/human_annotator.py consumes it without making this map a second schema
 [Latest Handoff](memory/HANDOFF.md), and [Machine Contracts](../schemas/README.md).
 
 Platform owns model-neutral environment/runtime/evidence contracts. STPD owns research,
-data, representation, training and evaluation. External repositories are exact dependencies,
-not copied source trees, shared branches or submodules.
+data, representation, training and evaluation. Components share a repository and use declared package APIs. Historical release
+pins retain their exact identities; they are not private cross-component imports.
 
 [Local-First manifest ADR](adr/0003-local-first-manifest-research.md)
 

@@ -10,14 +10,14 @@ import pytest
 from test_campaign_onboarding import campaign as campaign
 from test_campaign_onboarding import enroll
 
+from spireagent.json_boundary import BoundaryError
+from spireagent.workbench.campaign_prepare import prepare_campaign, read_preparation
+from spireagent.workbench.collection_setup import CollectionSetup
+from spireagent.workbench.collection_tool_registration import register_collection_tool
+from spireagent.workbench.developer import atomic_json
+from spireagent.workbench.identity import LocalIdentity
+from spireagent.workbench.member_client import MemberClient
 from stpd.collection_activity import CONSENT_FIELDS
-from stpd.json_boundary import BoundaryError
-from stpd.workbench.campaign_prepare import prepare_campaign, read_preparation
-from stpd.workbench.collection_setup import CollectionSetup
-from stpd.workbench.collection_tool_registration import register_collection_tool
-from stpd.workbench.developer import atomic_json
-from stpd.workbench.identity import LocalIdentity
-from stpd.workbench.member_client import MemberClient
 
 
 def daily(campaign):
@@ -90,7 +90,7 @@ def test_current_registration_never_relabels_existing_queue(campaign, monkeypatc
     selected = daily(campaign)
     prepared = prepare_campaign(campaign[4], selected, campaign[5])
     monkeypatch.setattr(
-        "stpd.workbench.collection_tool_registration.current_collection_tool",
+        "spireagent.workbench.collection_tool_registration.current_collection_tool",
         lambda config: pytest.fail("Existing queue must keep its exact tool"),
     )
     assert prepare_campaign(campaign[4], selected, Path("/different-new-release")) == prepared
@@ -108,7 +108,7 @@ def test_legacy_identity_checked_against_current_owner_report(campaign, monkeypa
     elif change == "mod":
         result["installed_artifact"]["module_version_id"] = "wrong"
     monkeypatch.setattr(
-        "stpd.workbench.collection_setup.CollectionTool.setup_status",
+        "spireagent.workbench.collection_setup.CollectionTool.setup_status",
         lambda self, **kwargs: result,
         raising=False,
     )
@@ -136,7 +136,7 @@ def test_saved_flags_cannot_manufacture_readiness_and_active_entry_survives_pagi
     reply = owner_reply(prepared)
     reply.update(status="blocked", bound=False, next_action="launch_game")
     monkeypatch.setattr(
-        "stpd.workbench.collection_setup.CollectionTool.setup_status",
+        "spireagent.workbench.collection_setup.CollectionTool.setup_status",
         lambda self, **kwargs: reply,
         raising=False,
     )
@@ -186,8 +186,8 @@ def test_activation_persists_only_after_fresh_checks_and_rolls_back_failed_write
     monkeypatch,
     failure,
 ):
-    from stpd.workbench import developer_server as module
-    from stpd.workbench.developer import combination
+    from spireagent.workbench import developer_server as module
+    from spireagent.workbench.developer import combination
 
     selected = daily(campaign)
     config = replace(campaign[4], combination=combination())

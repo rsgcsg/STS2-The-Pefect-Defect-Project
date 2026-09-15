@@ -16,8 +16,8 @@ from typing import Any
 
 from preflight import IMAGE_PATTERN, PreflightError, check_backup
 
-from stpd.storage.blobs import BlobStore
-from stpd.storage.s3 import S3BlobStore, S3Config
+from spireagent.storage.blobs import BlobStore
+from spireagent.storage.s3 import S3BlobStore, S3Config
 
 CHUNK_BYTES = 4 * 1024 * 1024
 MAX_SNAPSHOT_BYTES = 512 * 1024 * 1024
@@ -116,7 +116,7 @@ def load_manifest(store: BlobStore, receipt_id: str, schema_version: int) -> dic
         or re.fullmatch(IMAGE_PATTERN, value["worker_image"]) is None
     ):
         raise BackupError("backup_manifest_contract_invalid")
-    from stpd.artifact_contracts import Producer
+    from spireagent.artifact_contracts import Producer
 
     Producer.decode(value["producer"])
     datetime.fromisoformat(value["created_at"])
@@ -198,8 +198,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="remove only this invocation's snapshot after off-host readback")
     args = parser.parse_args(argv)
     try:
-        from stpd.hub.database import CURRENT_SCHEMA, Operations
-        from stpd.workbench.control import source_identity
+        from spireagent.hub.database import CURRENT_SCHEMA, Operations
+        from spireagent.source import source_identity
 
         producer = source_identity(args.root)
         store = configured_store()

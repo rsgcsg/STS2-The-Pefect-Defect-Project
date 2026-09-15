@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
-from stpd.package_identity import directory_sha256
+from spireagent.package_identity import directory_sha256
 
 
 def test_os_path_order_is_not_an_artifact_identity() -> None:

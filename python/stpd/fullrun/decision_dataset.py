@@ -13,8 +13,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from spireagent.json_boundary import BoundaryError, FrozenObject, object_fields, unsigned
+
 from ..canonical import semantic_hash
-from ..json_boundary import BoundaryError, FrozenObject, object_fields, unsigned
 from .contracts import ResearchTransitionV2, SourceProjection
 from .data import split_whole_runs
 from .platform_bundle3 import PlatformBundle3SourceAdapter, _extract

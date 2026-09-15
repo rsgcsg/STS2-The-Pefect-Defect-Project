@@ -9,10 +9,12 @@ export const AGENT_CHAIN_BUDGET_BYTES = 16 * 1024;
 export const CONTEXT_BUDGET_BYTES = 8 * 1024;
 
 const ignoredDirectories = new Set([
-  ".git", ".local", "bin", "dist", "node_modules", "obj", "out"
+  ".git", ".local", ".venv", ".pytest_cache", ".mypy_cache", ".ruff_cache", "__pycache__", "bin", "dist", "node_modules", "obj", "out"
 ]);
 
 const componentRoutes = [
+  { id: "project-apps", prefix: "python/spireagent/", guide: "docs/MONOREPO_MIGRATION.md", check: "npm run check:python" },
+  { id: "research", prefix: "python/stpd/", guide: "python/docs/FULLRUN_RESEARCH.md", check: "npm run check:python" },
   {
     id: "native-foundation",
     prefix: "components/native-foundation/",
@@ -513,7 +515,7 @@ export function formatContext(workspaceRoot = root, options = {}) {
   const lines = [
     "# Platform task context",
     "",
-    `- Repository: rsgcsg/STS2-AI-PLATFORM`,
+    `- Repository: rsgcsg/STS2-The-Pefect-Defect-Project`,
     `- Branch: ${branch}`,
     `- HEAD: ${sha}`,
     `- Known integration base: origin/develop at ${base}`,

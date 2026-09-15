@@ -12,10 +12,10 @@ from urllib.request import HTTPCookieProcessor, Request, build_opener
 
 import pytest
 
-from stpd.json_boundary import BoundaryError
-from stpd.workbench.developer import ProjectConfig, atomic_json, combination
-from stpd.workbench.developer_server import Application, create_server
-from stpd.workbench.identity import LocalIdentity, private_read
+from spireagent.json_boundary import BoundaryError
+from spireagent.workbench.developer import ProjectConfig, atomic_json, combination
+from spireagent.workbench.developer_server import Application, create_server
+from spireagent.workbench.identity import LocalIdentity, private_read
 
 
 def config(path):
@@ -331,8 +331,8 @@ def test_local_bff_uses_actual_hub_dtos_and_preserves_legacy_upload_identity(tmp
     from test_hub_identity import decision
     from test_hub_identity import request as hub_request
 
-    from stpd.hub.application import HubApplication
-    from stpd.hub.console_auth import AccessVerifier, verified_identity
+    from spireagent.hub.application import HubApplication
+    from spireagent.hub.console_auth import AccessVerifier, verified_identity
 
     access = AccessVerifier(
         "https://team.cloudflareaccess.com",

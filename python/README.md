@@ -10,9 +10,8 @@ projection, datasets, model representations, learning, evaluation, and experimen
 provenance. It does **not** own game rules, legality, RNG, effects, or execution.
 
 Within the wider project system, STS2 AI Platform is the upper-level foundation
-and STPD is an independently versioned research project mounted on its public
-contracts. Repository independence isolates research lifecycle; it does not
-make STPD a peer platform or transfer environment authority to it.
+and STPD is the research component in this repository, consuming versioned public
+contracts. Sharing a repository does not transfer environment authority to it.
 
 ```text
 shipped STS2 / qualified Platform Host Runtime
@@ -38,7 +37,7 @@ It is the canonical everyday procedure, including the exact release combination 
 one-time recording consent/configuration and recovery when a step fails. Choose a reviewed
 release or explicitly non-stable candidate; do not infer a supported build from a branch name.
 
-From that approved STPD checkout, the collector entry is:
+From python/ in the approved project checkout, the collector entry is:
 
 ```bash
 python tools/open_workbench.py --config /ABS/project.json --hub-url https://hub.2-fire-2.com

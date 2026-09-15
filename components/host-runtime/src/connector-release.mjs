@@ -16,7 +16,7 @@ export const CONNECTOR_RELEASE = Object.freeze({
   artifactMvid: "9476e499-efe8-4167-9614-8c66322677b7",
   archive: "STS2-Connector-1.2.0-rc.5-host.tar.gz",
   archiveSha256: "a0bc1985995806a93498949b213972504d73c2f4b8d52f299c1356ecec34b908",
-  baseUrl: "https://github.com/rsgcsg/STS2-AI-PLATFORM/releases/download/connector/v1.2.0-rc.5"
+  baseUrl: "https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project/releases/download/compat/platform-import-v1"
 });
 
 export function assertConnectorReleaseIdentity(identity, release = CONNECTOR_RELEASE) {

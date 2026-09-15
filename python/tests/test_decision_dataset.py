@@ -5,9 +5,9 @@ from pathlib import Path
 import pytest
 from platform_bundle3_fixture import bundle3, rows, seal, stream
 
+from spireagent.json_boundary import BoundaryError, FrozenObject
 from stpd.fullrun.decision_dataset import SelectionRules, select_decisions
 from stpd.fullrun.platform_bundle3 import archive_bundle
-from stpd.json_boundary import BoundaryError, FrozenObject
 
 
 def test_partial_native_run_keeps_proved_decisions(tmp_path: Path) -> None:

@@ -1,6 +1,7 @@
 """Experimental, fail-closed live policy execution."""
 
-from ..package_identity import directory_sha256
+from spireagent.package_identity import directory_sha256
+
 from .s1 import (
     ConnectorSdkBridge,
     HandoffManager,

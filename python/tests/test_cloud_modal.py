@@ -6,9 +6,9 @@ from types import SimpleNamespace
 import pytest
 from test_artifact_store_v1 import PRODUCER
 
+from spireagent.json_boundary import BoundaryError
 from stpd.cloud_jobs.contracts import ComputeReceipt, ComputeRequest
 from stpd.cloud_jobs.modal import ModalCall, ModalProvider, ModalTarget, credential_presence
-from stpd.json_boundary import BoundaryError
 
 
 def target() -> ModalTarget:

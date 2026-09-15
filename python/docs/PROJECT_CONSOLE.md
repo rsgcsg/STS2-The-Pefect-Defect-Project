@@ -20,8 +20,8 @@ collection or make historical receipts current evidence.
 Run the approved developer combination through the existing entry:
 
 ```bash
-uv run --locked python -m stpd.workbench project doctor --config /ABS/project.json
-uv run --locked python -m stpd.workbench project open --config /ABS/project.json
+uv run --locked python -m spireagent.workbench project doctor --config /ABS/project.json
+uv run --locked python -m spireagent.workbench project open --config /ABS/project.json
 ```
 
 The browser shows the actual loopback address. Device and personal tokens stay in private local files; the device token is injected only
@@ -144,7 +144,7 @@ The Hub operator uses `console-refresh` to index existing verified artifacts. Br
 perform this work. Updating code or an index is not permission to enroll historical Human data
 in a new consent scope. Upgrade the exact developer combination, never just a sibling import.
 
-Category profiles are explicit, bounded owner work. Use `python -m stpd.hub statistics-refresh
+Category profiles are explicit, bounded owner work. Use `python -m spireagent.hub statistics-refresh
 --upload EXACT_UPLOAD_ID` (or repeat `--dataset-id EXACT_DATASET_ID`), together with the deployed
 state/store arguments, to materialize up to ten sources. The result distinguishes available
 profiles from failed projections. It changes no receipt, Dataset admission or source artifact.
@@ -153,7 +153,7 @@ The administrator API `POST /app/api/admin/statistics/refresh` accepts the same 
 is not called by page refresh. No UI request infers categories from action labels.
 
 New consented enrollments bind sharing only after exact receiver verification. For a historical
-upload, an owner can use `python -m stpd.hub collection-sharing --upload EXACT_UPLOAD_ID
+upload, an owner can use `python -m spireagent.hub collection-sharing --upload EXACT_UPLOAD_ID
 --evidence APPROVAL_SHA256 --approve-sharing` only after reviewing its explicit scoped approval;
 `--revoke-sharing` prevents subsequent export reads. Neither action rewrites old consent or
 deletes data already downloaded. An automatic verifier retry never overwrites a revoked grant.
@@ -272,8 +272,8 @@ operator rotates that device in Hub and supplies a private replacement JSON cont
 `hub_url`, `device_id`, `token`. Stop the workbench, then run:
 
 ```bash
-uv run --locked python -m stpd.workbench project credential --config /ABS/project.json --credential-file /PRIVATE/replacement.json
-uv run --locked python -m stpd.workbench project open --config /ABS/project.json
+uv run --locked python -m spireagent.workbench project credential --config /ABS/project.json --credential-file /PRIVATE/replacement.json
+uv run --locked python -m spireagent.workbench project open --config /ABS/project.json
 ```
 
 Choose **恢复已修正授权的上传** in **账号与电脑**. The workbench validates the actual Hub device,

@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import io
 
-from ..artifact_contracts import Manifest, Parent, Producer
+from spireagent.artifact_contracts import Manifest, Parent, Producer
+from spireagent.json_boundary import BoundaryError, FrozenObject, decode_json, json_bytes
+from spireagent.storage.store import ArtifactStore
+
 from ..canonical import canonical_json
-from ..json_boundary import BoundaryError, FrozenObject, decode_json, json_bytes
-from ..storage.store import ArtifactStore
 from .decision_dataset import SCHEMA, DecisionDataset, SelectionRules, select_decisions
 from .platform_bundle3 import MAX_BYTES
 

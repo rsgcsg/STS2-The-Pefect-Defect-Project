@@ -13,9 +13,9 @@ import pytest
 from test_hub_console import service
 from test_hub_uploads import fixture
 
-from stpd.hub import capacity, verification_worker
-from stpd.hub.console_auth import ConsolePrincipal
-from stpd.hub.console_routes import ConsoleRoutes
+from spireagent.hub import capacity, verification_worker
+from spireagent.hub.console_auth import ConsolePrincipal
+from spireagent.hub.console_routes import ConsoleRoutes
 
 GIB = 1024**3
 Disk = namedtuple("Disk", "total used free")

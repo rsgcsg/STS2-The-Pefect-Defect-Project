@@ -186,8 +186,8 @@ def backup_command(config: Path, backup_env: Path, container: str) -> tuple[list
         "--mount",
         f"type=bind,src={state},dst=/var/lib/stpd",
         image,
-        "/opt/stpd/.venv/bin/python",
-        "/opt/stpd/deploy/hub/backup.py",
+        "/opt/stpd/python/.venv/bin/python",
+        "/opt/stpd/python/deploy/hub/backup.py",
         "backup",
         "--discard-local-after-verified",
     ], image

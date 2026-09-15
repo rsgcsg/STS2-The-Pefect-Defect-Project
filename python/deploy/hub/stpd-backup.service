@@ -12,7 +12,7 @@ Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=DOCKER_CONFIG=/var/lib/stpd-maintenance/docker-client
 StateDirectory=stpd-maintenance
 StateDirectoryMode=0700
-ExecStart=/usr/bin/flock -n /run/lock/stpd-backup.lock /usr/bin/python3 /opt/stpd-deploy/source/deploy/hub/maintenance.py backup
+ExecStart=/usr/bin/flock -n /run/lock/stpd-backup.lock /usr/bin/python3 /opt/stpd-deploy/source/python/deploy/hub/maintenance.py backup
 TimeoutStartSec=20min
 Nice=10
 NoNewPrivileges=true

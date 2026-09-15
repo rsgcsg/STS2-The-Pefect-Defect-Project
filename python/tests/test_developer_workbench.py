@@ -21,10 +21,10 @@ import pytest
 from jsonschema import Draft202012Validator
 from test_artifact_store_v1 import PRODUCER
 
-from stpd.artifact_contracts import Manifest, Parent, Payload
-from stpd.json_boundary import BoundaryError
-from stpd.workbench.__main__ import main
-from stpd.workbench.developer import (
+from spireagent.artifact_contracts import Manifest, Parent, Payload
+from spireagent.json_boundary import BoundaryError
+from spireagent.workbench.__main__ import main
+from spireagent.workbench.developer import (
     PUBLIC_REPOSITORY,
     ROOT,
     ProjectConfig,
@@ -34,8 +34,8 @@ from stpd.workbench.developer import (
     evidence_identity,
     setup,
 )
-from stpd.workbench.developer_cli import inspect_policy
-from stpd.workbench.developer_server import (
+from spireagent.workbench.developer_cli import inspect_policy
+from spireagent.workbench.developer_server import (
     Application,
     configuration_id,
     create_server,
@@ -44,7 +44,7 @@ from stpd.workbench.developer_server import (
     status_project,
     stop_project,
 )
-from stpd.workbench.hub_client import HubClient
+from spireagent.workbench.hub_client import HubClient
 
 
 @pytest.fixture
@@ -169,7 +169,7 @@ def test_doctor_rejects_import_shadow_even_with_verified_record(
         initial.state_dir, "https://hub.example", "", delivery_file, initial.combination
     )
     monkeypatch.setattr(
-        "stpd.workbench.developer.dependency_checks",
+        "spireagent.workbench.developer.dependency_checks",
         lambda _: {"evidence": evidence_identity("1" * 40)},
     )
     report = doctor(config)
@@ -200,10 +200,10 @@ def test_doctor_delegates_delivery_readiness_to_isolated_platform_owner(
         initial.state_dir, "https://hub.example", "", delivery, initial.combination
     )
     monkeypatch.setattr(
-        "stpd.workbench.developer.dependency_checks",
+        "spireagent.workbench.developer.dependency_checks",
         lambda _: {"evidence": {"status": "PASS", "delivery_entrypoint_verified": True}},
     )
-    monkeypatch.setattr("stpd.workbench.developer.tool_identity", lambda: {})
+    monkeypatch.setattr("spireagent.workbench.developer.tool_identity", lambda: {})
     monkeypatch.setenv("STPD_HUB_ADMIN_TOKEN", "must-not-forward")
     monkeypatch.setenv("PYTHONPATH", "must-not-use")
 
@@ -233,7 +233,7 @@ def test_doctor_delegates_delivery_readiness_to_isolated_platform_owner(
             b"",
         )
 
-    monkeypatch.setattr("stpd.workbench.developer.subprocess.run", owner)
+    monkeypatch.setattr("spireagent.workbench.developer.subprocess.run", owner)
     report = doctor(config)
     assert report["status"] == owner_status
     assert report["checks"]["delivery_preflight"]["discovered_sessions"] == 7
@@ -250,12 +250,12 @@ def test_doctor_does_not_accept_missing_or_old_platform_preflight(
         initial.state_dir, "https://hub.example", "", delivery, initial.combination
     )
     monkeypatch.setattr(
-        "stpd.workbench.developer.dependency_checks",
+        "spireagent.workbench.developer.dependency_checks",
         lambda _: {"evidence": {"status": "PASS", "delivery_entrypoint_verified": True}},
     )
-    monkeypatch.setattr("stpd.workbench.developer.tool_identity", lambda: {})
+    monkeypatch.setattr("spireagent.workbench.developer.tool_identity", lambda: {})
     monkeypatch.setattr(
-        "stpd.workbench.developer.subprocess.run",
+        "spireagent.workbench.developer.subprocess.run",
         lambda *a, **k: subprocess.CompletedProcess(
             [], 0, response, b"private-diagnostic-must-not-return"
         ),
@@ -404,7 +404,15 @@ def test_project_status_cli_reads_composed_response_and_rejects_malformed(
     )
     try:
         result = subprocess.run(
-            [sys.executable, "-m", "stpd.workbench", "project", "status", "--config", str(path)],
+            [
+                sys.executable,
+                "-m",
+                "spireagent.workbench",
+                "project",
+                "status",
+                "--config",
+                str(path),
+            ],
             cwd=ROOT,
             capture_output=True,
             text=True,
@@ -449,7 +457,7 @@ def test_status_timeout_does_not_extend_health_stop_or_hide_errors(project, monk
                 raise TimeoutError("private diagnostic must not escape")
             return BytesIO(b'{"instance_id":"test-instance","status":"stopping"}')
 
-    monkeypatch.setattr("stpd.workbench.developer_server.build_opener", lambda *_: Opener())
+    monkeypatch.setattr("spireagent.workbench.developer_server.build_opener", lambda *_: Opener())
     assert main(["project", "status", "--config", str(path)]) == 1
     assert json.loads(capsys.readouterr().out) == {"status": "FAIL", "code": "TimeoutError"}
     assert stop_project(config)["status"] == "stopping"
@@ -497,7 +505,7 @@ def test_delivery_is_one_owned_public_tool_child(project, tmp_path, monkeypatch)
     monkeypatch.setenv("PYTHONHOME", str(tmp_path / "shadow-home"))
     monkeypatch.setenv("STPD_HUB_ADMIN_TOKEN", "test-admin")
     monkeypatch.setenv("STPD_HUB_TOKEN", "test-device")
-    monkeypatch.setattr("stpd.workbench.developer_server.subprocess.Popen", launch)
+    monkeypatch.setattr("spireagent.workbench.developer_server.subprocess.Popen", launch)
     app.start_delivery()
     assert len(commands) == 1
     assert commands[0][1:] == [
@@ -518,7 +526,7 @@ def test_delivery_is_one_owned_public_tool_child(project, tmp_path, monkeypatch)
         assert kwargs["cwd"] == config.state_dir and kwargs["env"] == environment
         return subprocess.CompletedProcess(command, 0, b'{"pending":1}')
 
-    monkeypatch.setattr("stpd.workbench.developer_server.subprocess.run", status)
+    monkeypatch.setattr("spireagent.workbench.developer_server.subprocess.run", status)
     assert app.delivery_status()["outbox"] == {"pending": 1}
     app.close()
     assert child.finished
@@ -629,7 +637,7 @@ def test_setup_bootstraps_without_research_dependencies(tmp_path):
             sys.executable,
             "-S",
             "-m",
-            "stpd.workbench",
+            "spireagent.workbench",
             "project",
             "setup",
             "--skip-install",
@@ -649,10 +657,10 @@ def test_setup_bootstraps_without_research_dependencies(tmp_path):
 
 
 def test_projection_public_exports_remain_available():
-    from stpd.workbench import analyze, project, render_html
-    from stpd.workbench.analysis import analyze as analysis
-    from stpd.workbench.dashboard import project as projection
-    from stpd.workbench.dashboard import render_html as renderer
+    from spireagent.workbench import analyze, project, render_html
+    from spireagent.workbench.analysis import analyze as analysis
+    from spireagent.workbench.dashboard import project as projection
+    from spireagent.workbench.dashboard import render_html as renderer
 
     assert analyze is analysis and project is projection and render_html is renderer
 
@@ -661,15 +669,23 @@ def test_invalid_owner_config_does_not_invent_endpoint_mismatch(project, tmp_pat
     _, initial = project
     delivery = tmp_path / "delivery.json"
     delivery.write_text("{}")
-    config = ProjectConfig(initial.state_dir, "https://hub.example", "", delivery,
-                           initial.combination)
-    monkeypatch.setattr("stpd.workbench.developer.dependency_checks", lambda _: {
-        "evidence": {"status": "PASS", "delivery_entrypoint_verified": True}})
-    monkeypatch.setattr("stpd.workbench.developer.tool_identity", lambda: {})
-    result = {"schema": "sts2.evidence/delivery-doctor-1", "status": "BLOCKED",
-              "checks": {"configuration": {"status": "INVALID"}}}
-    monkeypatch.setattr("stpd.workbench.developer.subprocess.run", lambda *a, **k:
-                        subprocess.CompletedProcess([], 1, json.dumps(result).encode(), b""))
+    config = ProjectConfig(
+        initial.state_dir, "https://hub.example", "", delivery, initial.combination
+    )
+    monkeypatch.setattr(
+        "spireagent.workbench.developer.dependency_checks",
+        lambda _: {"evidence": {"status": "PASS", "delivery_entrypoint_verified": True}},
+    )
+    monkeypatch.setattr("spireagent.workbench.developer.tool_identity", lambda: {})
+    result = {
+        "schema": "sts2.evidence/delivery-doctor-1",
+        "status": "BLOCKED",
+        "checks": {"configuration": {"status": "INVALID"}},
+    }
+    monkeypatch.setattr(
+        "spireagent.workbench.developer.subprocess.run",
+        lambda *a, **k: subprocess.CompletedProcess([], 1, json.dumps(result).encode(), b""),
+    )
     report = doctor(config)
     assert report["status"] == "BLOCKED"
     assert report["checks"]["delivery_hub"]["status"] == "NOT_CHECKED"

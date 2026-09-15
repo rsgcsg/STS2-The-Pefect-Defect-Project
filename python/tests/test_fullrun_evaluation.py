@@ -5,9 +5,9 @@ import math
 
 import pytest
 
+from spireagent.json_boundary import BoundaryError
 from stpd.fullrun.evaluation import candidate_metrics, evaluate_samples, summarize_rows
 from stpd.fullrun.features import ModelSample
-from stpd.json_boundary import BoundaryError
 
 
 def test_tie_metrics_are_permutation_neutral_and_probability_correct() -> None:
@@ -70,7 +70,7 @@ def test_metrics_preserve_probability_under_large_logit_translation() -> None:
 
     import pytest
 
-    from stpd.json_boundary import BoundaryError
+    from spireagent.json_boundary import BoundaryError
 
     assert candidate_metrics((1e308, 1e308), (0,))["nll"] == pytest.approx(math.log(2))
     assert candidate_metrics((-1e308, -1e308), (0,))["nll"] == pytest.approx(math.log(2))
