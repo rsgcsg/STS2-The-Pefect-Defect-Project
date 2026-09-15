@@ -40,4 +40,4 @@ Decision datasets: [ADR-0007](../adr/0007-fixed-decision-datasets.md).
 The B pipeline supplies no new model adapter, cloud game, inference service or RL.
 Source/test, service, Human, data, training and scientific qualification stay separate.
 
-Bounded dataset/service/member verification: [2026-09-15 closeout](../evidence/DECISION_DATASETS_CLOSEOUT_2026-09-15.md).
+Dataset verification: [2026-09-15 closeout](../evidence/DECISION_DATASETS_CLOSEOUT_2026-09-15.md).
