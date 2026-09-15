@@ -46,6 +46,8 @@ def compute(request: dict, target_id: str) -> dict:
     import subprocess
     import tempfile
 
+    if os.environ.get("STPD_IMAGE_PROFILE") != "worker":
+        raise ValueError("qualified_worker_image_required")
     if target_id != deployed_target_id:
         raise ValueError("deployed_target_mismatch")
     with tempfile.TemporaryDirectory(prefix="stpd-request-") as directory:

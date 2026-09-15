@@ -118,7 +118,7 @@ export function collectBoundaryErrors(workspaceRoot = root) {
     "utf8"
   ));
   const sdkDependency = hostPackage.dependencies?.["@rsgcsg/sts2-connector-client"];
-  if (!/^https:\/\/github\.com\/rsgcsg\/STS2-AI-PLATFORM\/releases\/download\/consumer-sdk\//u.test(
+  if (!/^https:\/\/github\.com\/rsgcsg\/STS2-The-Pefect-Defect-Project\/releases\/download\/compat\/platform-import-v1\//u.test(
     sdkDependency ?? ""
   )) {
     errors.push("Host Runtime must consume the versioned public Platform Connector SDK asset");
@@ -128,7 +128,7 @@ export function collectBoundaryErrors(workspaceRoot = root) {
     path.join(workspaceRoot, "components/host-runtime/src/connector-release.mjs"),
     "utf8"
   );
-  if (!/rsgcsg\/STS2-AI-PLATFORM\/releases\/download\/connector\//u.test(connectorRelease)) {
+  if (!/rsgcsg\/STS2-The-Pefect-Defect-Project\/releases\/download\/compat\/platform-import-v1/u.test(connectorRelease)) {
     errors.push("Host Runtime setup must consume the versioned Platform Connector Host asset");
   }
 

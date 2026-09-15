@@ -74,7 +74,7 @@ and [OTP setup](https://developers.cloudflare.com/cloudflare-one/integrations/id
 The exact edge change and negative origin checks are separate deployment gates in the
 [Hub runbook](../deploy/hub/RUNBOOK.md#browser-console-login-and-local-connection).
 
-The old `stpd/console-access-v1` file is archival/explicit migration input only.
+The old `spireagent/console-access-v1` file is archival/explicit migration input only.
 `STPD_ACCESS_ALLOWLIST` is rejected in runtime configuration. It cannot grant or revive
 membership. Current browser configuration uses only `STPD_ACCESS_ISSUER` and
 `STPD_ACCESS_AUDIENCE`; no Cloudflare administration credential is installed in the Hub.
@@ -159,7 +159,7 @@ current. Account email is private to its principal and authorized member adminis
 device metadata does not expose another owner's email.
 
 `GET /v1/identity/console/{overview|collections|collections/ID|datasets|datasets/ID|jobs|models|models/ID|system}`
-uses the same safe `stpd/console-v1` projections as the browser. Both personal and browser
+uses the same safe `spireagent/console-v1` projections as the browser. Both personal and browser
 console reads accept `device=DEVICE_ID`, which must be a subset of the current principal's
 project-visible computers; unknown/duplicate filters fail closed. Project members may view
 shared metadata beyond personally owned devices. Filters do not grant ownership, raw payload
@@ -197,7 +197,7 @@ Whole-host recovery includes the separately retained identity master key and dep
 A fresh explicit bootstrap's one-time pending-admin marker never substitutes for an existing
 site's administrator. Browser activation clears it; preflight cannot manufacture that event.
 
-`python -m stpd.hub rotate-device --device EXACT_DEVICE_ID` reads the replacement credential
+`python -m spireagent.hub rotate-device --device EXACT_DEVICE_ID` reads the replacement credential
 only from `STPD_DEVICE_TOKEN`. This explicit operator operation replaces the credential hash,
 restores device access, invalidates the old credential and appends an audit event, preserving
 ownership and all old upload identities. It cannot repair an existing Platform outbox incident;

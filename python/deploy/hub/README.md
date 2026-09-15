@@ -38,7 +38,7 @@ The default no longer binds maintenance access to a home or campus source IP.
 - `deployment.env.example`: non-secret fields copied to `/etc/stpd/deployment.env` and edited
   by the operator with exact worker/Caddy image digests, domain and private directories.
 - `runtime.env.example`: key inventory only; human/admin supplies actual values separately in
-  `/etc/stpd/hub-runtime.env`, mode 0600, outside Git. Do not source this file into a shell.
+  `/etc/spireagent/hub-runtime.env`, mode 0600, outside Git. Do not source this file into a shell.
 - `backup.py`, `backup.env.example`: explicit private operator backup/upload and new-path
   restore-check using the owning SQLite API and a separate credential/bucket; no live restore.
 - `maintenance.py`, `stpd-backup.service`, `stpd-backup.timer`: supported daily exact-image

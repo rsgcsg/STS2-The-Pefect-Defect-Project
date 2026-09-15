@@ -25,7 +25,7 @@ RUN set -eu; \
         test "$(git rev-parse HEAD)" = "$QUALIFIED_SOURCE_REVISION"; \
         test "$stpd_refresh_lock" = "$QUALIFIED_LOCK_SHA256"; \
     fi; \
-    test "$(git remote get-url origin)" = "https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project.git"; \
+    test "$(git config --get remote.origin.url)" = "https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project.git"; \
     git fetch origin "$STPD_SOURCE_REVISION"; \
     git checkout --detach "$STPD_SOURCE_REVISION"; \
     if test -n "$EXPECTED_NEW_LOCK_SHA256"; then \
