@@ -1,5 +1,8 @@
 # Testing and Evidence
 
+The repository-wide [testing guide](../../docs/TESTING.md) owns CI and promotion.
+Commands below run from `python/` and describe the Python component suite.
+
 ## Supported portable contract
 
 Bootstrap once with `uv sync --locked --all-extras` and `npm ci`, then:
@@ -15,13 +18,15 @@ credentials. Installed versioned Platform consumer packages are checked; they ar
 real-game installation. The lock may include GPU-capable framework wheels, but CI never
 requires GPU hardware or downloads model weights.
 
-The root gate validates repository/CI contracts, runs tools/doctor.py, Ruff on the whole tree,
+The Python component gate validates repository/CI contracts, runs tools/doctor.py, Ruff on the whole tree,
 Mypy on stpd/tools, the existing Connector SDK test, the complete Pytest suite, clean-source cross-process CPU E2E, compileall,
 `uv build`, working-tree and HEAD patch hygiene, and optional exact-base diff hygiene.
 Focused tests accelerate development but never replace this gate.
 
-Linux-portable and Windows-portable run the identical command. Required locked-python is
-successful only when both succeed. Exact head checkout, read-only permissions, immutable
+Root `linux-portability` and `windows-portability` run the same complete monorepo check,
+including this Python suite. Required `portable` succeeds only when both lanes succeed.
+The old `locked-python` aggregate belongs to archived STPD CI, not a second active workflow.
+Exact head checkout, read-only permissions, immutable
 Action pins and stale-run cancellation are checked structurally. Do not weaken a check to
 repair CI. A green result on an older SHA is not current-head evidence.
 
