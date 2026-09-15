@@ -1,6 +1,7 @@
 # ADR-0007: fixed decision datasets and compatible version mixing
 
-Status: accepted design; implementation candidate. Service/UI qualification is pending.
+Status: accepted and implemented. Bounded service, data-transfer and member UI qualification
+passed; see [closeout evidence](../evidence/DECISION_DATASETS_CLOSEOUT_2026-09-15.md).
 
 ## Context
 
