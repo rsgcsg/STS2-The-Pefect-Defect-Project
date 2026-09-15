@@ -1084,6 +1084,13 @@ window.SpireProject = (() => {
       if (job.result) {
         row.append(facts([["保留决策", job.result.selected ?? job.result.records],
           ["切分状态", job.result.split_status], ["去除精确重复决策", job.result.exact_duplicate_decisions ?? "见产物报告"]]));
+        if (job.result.selected_facets) {
+          const categories = panel("保留数据的分类", "未知单独保留；下次筛选可使用这里显示的类别值。");
+          for (const [key, facet] of Object.entries(job.result.selected_facets)) {
+            categories.append(el("p", `${labels[key] || key}：${facet.items.map(x => `${x.value} (${x.count})`).join("、") || "无已知值"}；未知 ${facet.unknown}`));
+          }
+          row.append(categories);
+        }
         if (job.result.runs) {
           row.append(table(["局 / 片段", "完整性", "胜负", "已录入 / 接受"], job.result.runs.map(r => [r.run_id, r.complete ? "完整" : "不完整", r.outcome === "win" ? "胜利" : r.outcome === "loss" ? "失败" : "未知", `${r.canonical} / ${r.accepted}`])));
         }

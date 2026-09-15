@@ -254,6 +254,42 @@ def select_decisions(
     return _select(projections, rules or SelectionRules(), versions)
 
 
+def _metadata(record: ResearchTransitionV2, versions: dict[str, Any]) -> dict[str, Any]:
+    environment = versions.get(record.provenance.environment_identity, {})
+    return {
+        "game_version": environment.get("game", {}).get("version"),
+        "connector_version": environment.get("connector", {}).get("version"),
+        "annotator_version": environment.get("annotator", {}).get("version"),
+        "character": record.state.run.value().get("character"),
+        "difficulty": record.state.run.value().get("ascension"),
+        "environment_identity": record.provenance.environment_identity,
+        "family": record.family,
+        "surface": record.surface,
+        "decision_kind": record.occurrence.value()["decision_kind"],
+    }
+
+
+def _facets(records: list[ResearchTransitionV2], versions: dict[str, Any]) -> dict[str, Any]:
+    result = {}
+    for key in sorted(FILTERS):
+        counts: Counter[Any] = Counter()
+        for record in records:
+            value = _metadata(record, versions)[key]
+            if (key == "difficulty" and type(value) is int and value >= 0) or (
+                key != "difficulty" and isinstance(value, str) and 0 < len(value) <= 256
+            ):
+                counts[value] += 1
+        result[key] = {
+            "known": sum(counts.values()),
+            "unknown": len(records) - sum(counts.values()),
+            "items": [
+                {"value": value, "count": count}
+                for value, count in sorted(counts.items(), key=lambda x: str(x[0]))
+            ],
+        }
+    return result
+
+
 def _select(
     projections: list[SourceProjection], rules: SelectionRules, versions: dict[str, Any]
 ) -> DecisionDataset:
@@ -352,18 +388,7 @@ def _select(
     chosen = []
     for identity, record in sorted(records.items()):
         run = runs[record.run_id]
-        environment = versions.get(record.provenance.environment_identity, {})
-        metadata = {
-            "game_version": environment.get("game", {}).get("version"),
-            "connector_version": environment.get("connector", {}).get("version"),
-            "annotator_version": environment.get("annotator", {}).get("version"),
-            "character": record.state.run.value().get("character"),
-            "difficulty": record.state.run.value().get("ascension"),
-            "environment_identity": record.provenance.environment_identity,
-            "family": record.family,
-            "surface": record.surface,
-            "decision_kind": record.occurrence.value()["decision_kind"],
-        }
+        metadata = _metadata(record, versions)
         reason = None
         if rules.complete_only and not run["complete"]:
             reason = "incomplete_run"
@@ -405,6 +430,7 @@ def _select(
         },
         "runs": list(runs.values()),
         "selected": len(chosen),
+        "selected_facets": _facets(chosen, versions),
         "excluded": excluded,
         "exclusion_counts": dict(Counter(e["reason"] for e in excluded)),
         "aliases": dict(aliases),

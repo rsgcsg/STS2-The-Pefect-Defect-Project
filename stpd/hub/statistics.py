@@ -154,9 +154,24 @@ def refresh_decision_statistics(
                         or sum(item.size for item in manifest.payloads) > MAX_PROFILE_BYTES
                     ):
                         raise BoundaryError("statistics", "dataset_size_or_kind_limit")
-                    manifest, dataset = load_dataset(service.store, identity)
-                    profile = decision_profile(dataset.records)
-                    profile.update(scope=dataset.scope, admission="owner_dataset_verified")
+                    if manifest.parameters.value().get("schema") == "stpd/decision-dataset-v1":
+                        from ..fullrun.decision_store import load as load_decisions
+
+                        manifest, decisions = load_decisions(service.store, identity)
+                        profile = decision_profile(decisions.records)
+                        facets = decisions.report.value()["selected_facets"]
+                        for name in DIMENSIONS:
+                            profile["facets"][name] = facets[
+                                "family" if name == "action_family" else name
+                            ]
+                        profile.update(
+                            scope="platform_verified_decisions",
+                            admission="owner_decision_dataset_verified",
+                        )
+                    else:
+                        manifest, dataset = load_dataset(service.store, identity)
+                        profile = decision_profile(dataset.records)
+                        profile.update(scope=dataset.scope, admission="owner_dataset_verified")
                 _persist(
                     service, identity, kind, source_id, {"availability": "available", **profile}
                 )

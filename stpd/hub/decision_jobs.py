@@ -244,10 +244,31 @@ class DecisionJobs:
             if request["expected"] is None:
                 dataset = preview(self.service.store, sources, rules)
                 report = dataset.report.value()
+                if row["owner"] == "receiver":
+                    from .statistics import DIMENSIONS, _persist, decision_profile
+
+                    profile = decision_profile(dataset.records)
+                    for name in DIMENSIONS:
+                        profile["facets"][name] = report["selected_facets"][
+                            "family" if name == "action_family" else name
+                        ]
+                    profile.update(
+                        availability="available",
+                        scope="source_projection",
+                        admission="not_evaluated",
+                    )
+                    _persist(
+                        self.service,
+                        request["uploads"][0],
+                        "collection",
+                        sources[0].artifact_id,
+                        profile,
+                    )
                 result = {
                     "logical_id": dataset.logical_id,
                     "selected": len(dataset.records),
                     "runs": report["runs"],
+                    "selected_facets": report["selected_facets"],
                     "exclusion_counts": report["exclusion_counts"],
                     "exact_duplicate_decisions": report["exact_duplicate_decisions"],
                     "split_status": report["split_status"],

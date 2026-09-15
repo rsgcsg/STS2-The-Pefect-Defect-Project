@@ -160,3 +160,14 @@ def test_explicit_retry_keeps_failed_attempt(tmp_path: Path) -> None:
     jobs.run(retry["id"])
     assert jobs.read(MEMBER, job["id"])["state"] == "failed"
     assert jobs.read(MEMBER, retry["id"])["state"] == "completed"
+
+
+def test_new_dataset_statistics_uses_its_own_loader(tmp_path: Path) -> None:
+    from stpd.hub.statistics import refresh_decision_statistics
+
+    owner, _, source, _ = setup(tmp_path)
+    rules = SelectionRules()
+    selected = preview(owner.store, (source,), rules)
+    manifest = publish(owner.store, (source,), rules, owner.producer, selected.logical_id)
+    result = refresh_decision_statistics(owner, dataset_ids=(manifest.artifact_id,))
+    assert result["items"][0]["availability"] == "available"
