@@ -21,18 +21,24 @@ def inputs(tmp_path, monkeypatch):
     (root / "uv.lock").write_bytes(b"synthetic locked dependencies\n")
     config = root / "configs/developer/combination-v1.json"
     config.parent.mkdir(parents=True)
-    config.write_text(json.dumps({
-        "schema": "stpd/developer-combination-v1",
-        "platform_repository": "https://github.com/rsgcsg/STS2-AI-PLATFORM.git",
-        "platform_source_revision": "a" * 40,
-        "evidence_source_revision": "b" * 40,
-        "policy_mode": "existing-adapter-only",
-        "node_packages": [],
-    }))
+    config.write_text(
+        json.dumps(
+            {
+                "schema": "stpd/developer-combination-v1",
+                "platform_repository": "https://github.com/rsgcsg/STS2-AI-PLATFORM.git",
+                "platform_source_revision": "a" * 40,
+                "evidence_source_revision": "b" * 40,
+                "policy_mode": "existing-adapter-only",
+                "node_packages": [],
+            }
+        )
+    )
     for command in (
-        ["init", "-q"], ["config", "user.name", "Synthetic Test"],
+        ["init", "-q"],
+        ["config", "user.name", "Synthetic Test"],
         ["config", "user.email", "test@example.invalid"],
-        ["add", "."], ["commit", "-qm", "synthetic packaging source"],
+        ["add", "."],
+        ["commit", "-qm", "synthetic packaging source"],
     ):
         subprocess.run(["git", *command], cwd=root, check=True, capture_output=True)
     # Exercise the real clean-source checks with an isolated installed-checkout location.
@@ -46,23 +52,53 @@ def inputs(tmp_path, monkeypatch):
     tool.mkdir()
     for name in ("sts2-human-annotator.dll", "platform-bom.json"):
         (tool / name).write_bytes(f"synthetic tool {name}".encode())
+    setup = "setup/apps/game-mod/collection-setup.mjs"
+    provenance = "game-mod/build-provenance.json"
+    (tool / setup).parent.mkdir(parents=True)
+    (tool / setup).write_text("// synthetic setup fixture; never executed")
+    (tool / provenance).parent.mkdir()
+    (tool / provenance).write_text(
+        json.dumps(
+            {
+                "schema": "sts2.platform/game-mod-build-provenance-1",
+                "artifact": {"sha256": explicit["mod_dll"].sha256},
+            }
+        )
+    )
     identity = {
-        "worktree": "clean", "source_revision": "c" * 40,
+        "worktree": "clean",
+        "source_revision": "c" * 40,
         "workspace_revision": "d" * 40,
         "entrypoint": "sts2-human-annotator.dll",
         "supported_recording_schema": "sts2.human-annotator/recording-manifest-2",
+        "collection_setup_entrypoint": setup,
+        "collection_setup_provenance": provenance,
         "files": [
-            {"path": path.name, "bytes": path.stat().st_size, "sha256": sha256(path.read_bytes())}
-            for path in sorted(tool.iterdir())
+            {
+                "path": path.relative_to(tool).as_posix(),
+                "bytes": path.stat().st_size,
+                "sha256": sha256(path.read_bytes()),
+            }
+            for path in sorted(tool.rglob("*"))
+            if path.is_file()
         ],
     }
     release_id = digest(identity)
-    (tool / "collection-tool.json").write_text(json.dumps({
-        "schema": "sts2.evidence/collection-tool-1", "release_id": release_id,
-        "identity": identity,
-    }, indent=2))
+    (tool / "collection-tool.json").write_text(
+        json.dumps(
+            {
+                "schema": "sts2.evidence/collection-tool-1",
+                "release_id": release_id,
+                "identity": identity,
+            },
+            indent=2,
+        )
+    )
     return {
-        **explicit, "root": root, "collection_tool": tool, "tool_release_id": release_id,
+        **explicit,
+        "root": root,
+        "collection_tool": tool,
+        "tool_release_id": release_id,
         "output": tmp_path / "first.zip",
     }
 
@@ -81,10 +117,17 @@ def test_deterministic_public_inventory_and_real_owner_verification(inputs, tmp_
     assert b"must-not-be-packaged" not in raw
     with zipfile.ZipFile(inputs["output"]) as archive:
         expected = {
-            "README.md", "mod/STS2_PLATFORM.dll", "mod/STS2_PLATFORM.json",
-            "platform-bom.json", "developer-combination.json", "combination.json",
-            "collection-tool/collection-tool.json", "collection-tool/platform-bom.json",
+            "README.md",
+            "mod/STS2_PLATFORM.dll",
+            "mod/STS2_PLATFORM.json",
+            "platform-bom.json",
+            "developer-combination.json",
+            "combination.json",
+            "collection-tool/collection-tool.json",
+            "collection-tool/platform-bom.json",
             "collection-tool/sts2-human-annotator.dll",
+            "collection-tool/setup/apps/game-mod/collection-setup.mjs",
+            "collection-tool/game-mod/build-provenance.json",
         }
         assert set(archive.namelist()) == expected
         manifest = json.loads(archive.read("combination.json"))
@@ -94,13 +137,33 @@ def test_deterministic_public_inventory_and_real_owner_verification(inputs, tmp_
         assert manifest["collection_tool_source_revision"] == "c" * 40
         assert manifest["collection_tool_workspace_revision"] == "d" * 40
         assert not {"status", "human_approval_source", "hub_image", "stpd_ci_run"} & set(manifest)
-        assert archive.read("collection-tool/collection-tool.json") == (
-            inputs["collection_tool"] / "collection-tool.json"
-        ).read_bytes()
+        assert (
+            archive.read("collection-tool/collection-tool.json")
+            == (inputs["collection_tool"] / "collection-tool.json").read_bytes()
+        )
         extracted = tmp_path / "extracted"
         # Only our generated archive, after exact path inventory verification.
         archive.extractall(extracted)
     CollectionTool(extracted / "collection-tool", inputs["tool_release_id"])
+
+
+@pytest.mark.parametrize("change", ["old_tool", "mismatched_mod"])
+def test_new_workflow_kit_requires_native_setup_and_same_mod(inputs, change):
+    tool = inputs["collection_tool"]
+    manifest_path = tool / "collection-tool.json"
+    value = json.loads(manifest_path.read_bytes())
+    if change == "old_tool":
+        del value["identity"]["collection_setup_entrypoint"]
+    else:
+        path = inputs["mod_dll"].path
+        path.write_bytes(b"another independently valid native candidate")
+        inputs["mod_dll"] = PinnedFile(path, sha256(path.read_bytes()))
+    value["release_id"] = digest(value["identity"])
+    manifest_path.write_text(json.dumps(value))
+    inputs["tool_release_id"] = value["release_id"]
+    with pytest.raises(BoundaryError, match="collection_setup_"):
+        package(**inputs)
+    assert not inputs["output"].exists()
 
 
 @pytest.mark.parametrize("field", ["mod_dll", "mod_manifest", "platform_bom"])

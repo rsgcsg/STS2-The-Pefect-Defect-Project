@@ -1,8 +1,8 @@
 {
   "schema": "stpd/developer-combination-v1",
   "platform_repository": "https://github.com/rsgcsg/STS2-AI-PLATFORM.git",
-  "platform_source_revision": "693336d7438cb24ecbbf0e90863966db89c40043",
-  "evidence_source_revision": "693336d7438cb24ecbbf0e90863966db89c40043",
+  "platform_source_revision": "3da01ecbd3b4da3c2651868f7de1ce6cad54510f",
+  "evidence_source_revision": "e26b7c76a3c007c63f7ae9eee285e6dc3d78cd73",
   "policy_mode": "existing-adapter-only",
   "node_packages": [
     {

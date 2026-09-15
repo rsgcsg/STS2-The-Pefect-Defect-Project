@@ -37,6 +37,8 @@ window.SpireIdentity = (() => {
   function topbar() {
     const target = document.getElementById("account-actions"); target.replaceChildren();
     const principal = identity?.principal;
+    const memberLink = document.querySelector('[data-view="members"]');
+    if (memberLink) memberLink.hidden = principal?.role !== "admin";
     if (principal && (!local || identity.status === "signed_in")) {
       target.append(el("span", principal.email, "account-label"));
       target.append(action("退出账号", async () => {
@@ -62,7 +64,7 @@ window.SpireIdentity = (() => {
     select.replaceChildren();
     if (local) { const option = el("option", "这台电脑 · 本地记录与队列"); option.value = "local"; select.append(option); }
     if (principal) {
-      const option = el("option", "项目 · 全部授权电脑"); option.value = "project"; select.append(option);
+      const option = el("option", principal.project_shared ? "项目 · 全部共享数据" : "项目 · 获授权数据"); option.value = "project"; select.append(option);
       for (const device of identity.devices || []) {
         const option = el("option", device.name || device.device_id);
         option.value = device.device_id; select.append(option);
@@ -123,12 +125,13 @@ window.SpireIdentity = (() => {
   }
   function renderDevices() {
     const box = el("section", undefined, "panel onboarding"), who = identity?.principal;
-    box.append(el("h2", who ? "账号与我的电脑" : "接入 SpireAgent"));
+    box.append(el("h2", who ? "账号与项目电脑" : "接入 SpireAgent"));
     box.append(el("p", "使用项目邀请的邮箱接入；首次验证后自动建立项目账号，无需另设密码。"));
+    box.append(el("p", "每条电脑记录对应一份工作台配置；同一台电脑可以有多份。退出登录不会转移设备归属或已有数据。"));
     if (local) {
       box.append(el("p", identity?.device_credential_present ?
         "这台电脑已保存上传凭据；是否有效以 Hub 最近验证为准。个人退出不会删除它。" :
-        "先登录并确认电脑名称。绑定成功后，还需配置采集活动与数据上传同意；登录不代表同意上传。"));
+        "先登录并确认电脑名称。绑定成功后，打开“录制与上传”确认日常录制授权并完成本机设置；登录不代表同意上传。"));
       if (!identity?.hub_configured) box.append(el("p", "尚未配置项目 Hub 地址。请使用项目提供的启动配置。"));
       else if (!who || identity.status !== "signed_in") {
         const label = el("label", "这台电脑的名称"), input = el("input");
@@ -149,10 +152,13 @@ window.SpireIdentity = (() => {
         refreshPage();
       }));
       box.append(el("p", identity?.delivery_configured ?
-        "采集活动已有配置；在“这台电脑”的采集记录中查看封装、排队、上传与云端收据。" :
-        "当前未配置采集活动，尚不会上传数据。向项目负责人领取活动配置后，用同一工作台打开。"));
+        "这台电脑已有投递配置；在“录制与上传”查看本机检查，在“这台电脑”的采集记录中查看上传与云端收据。" :
+        "当前尚未配置投递。打开“录制与上传”，确认日常录制授权并查看本机设置的下一步。"));
     }
     if (who) {
+      const recording = el("a", "继续录制与上传 →", "button");
+      recording.href = "?view=campaigns";
+      box.append(recording);
       box.append(el("p", `当前账号：${who.email} · ${who.role}`));
       for (const device of identity.devices || []) {
         const row = el("div", undefined, "device-row");
@@ -160,6 +166,14 @@ window.SpireIdentity = (() => {
         row.append(el("span", device.active === true ? "设备上传授权有效" : device.active === false ? "设备上传授权已撤销" : "设备授权状态未知"));
         row.append(el("span", device.last_seen ? `最近联络：${new Date(device.last_seen).toLocaleString()}（不代表当前在线）` : "尚未收到设备联络；在线状态未知"));
         row.append(action("查看这台电脑的云端数据", async () => { scope = device.device_id; topbar(); history.pushState({}, "", "?view=collections"); refreshPage(); }));
+        row.append(el("span", device.ownership === "owned_by_you" ? "由你管理" : "项目共享信息"));
+        if (!local && device.can_revoke === true) row.append(action("撤销这台电脑授权", async () => {
+          if (!window.confirm("撤销后这台电脑不能继续上传，历史数据保留。恢复授权需要重新办理，确定撤销？")) return;
+          await request("/app/api/identity/devices/" + encodeURIComponent(device.device_id) + "/revoke",
+            {csrf_token: identity.csrf_token}, identity.csrf_token);
+          await refresh(true); refreshPage(true);
+        }));
+        if (local && device.can_revoke === true) row.append(el("span", "设备授权管理：打开云端 → 账号与电脑"));
         box.append(row);
       }
       if (!(identity.devices || []).length) box.append(el("p", "账号下尚无电脑。请在要采集的电脑上打开工作台并发起绑定。"));
@@ -193,6 +207,11 @@ window.SpireIdentity = (() => {
     return box;
   }
   return {refresh, api, renderDevices, renderConnect,
+    ensureProjectScope() {
+      if (scope === "local" && identity?.principal && identity.status === "signed_in") {
+        scope = "project"; epoch++; topbar();
+      }
+    },
     connect(fn) { refreshPage = fn; },
     isLocal() { return local && scope === "local"; },
     context() { return `${scope}:${identity?.principal?.subject || "anonymous"}:${epoch}`; },

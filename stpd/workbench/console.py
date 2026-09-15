@@ -190,6 +190,7 @@ class LocalConsole:
             "available" if isinstance(row.get("summary"), dict) else "not_indexed"
         )
         item["research"] = {"status": "not_assessed"}
+        item["local_delivery"] = True
         return item
 
     def collections(self, limit: int, offset: int) -> dict[str, Any]:
@@ -239,6 +240,7 @@ class LocalConsole:
                 "research",
                 "evidence_id",
                 "archive_bytes",
+                "collection_context",
             ):
                 if name in remote_row:
                     row[name] = remote_row[name]

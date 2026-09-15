@@ -13,6 +13,12 @@ const views = {
   jobs: ["作业", "查看真实执行状态与产物。此页面不会启动计算。"],
   models: ["模型与评估", "沿着数据与作业来源查看产物；下载不等于加载或运行。"],
   system: ["系统", "查看连接、版本与运维证据，区分已确认事实和未观测状态。"],
+  members: ["成员管理", "管理员管理成员；所有成员共享项目数据与研究能力。"],
+  statistics: ["数据统计", "总量、类别和摘要覆盖，按明确的数据范围统计。"],
+  downloads: ["数据下载", "固定下载清单和校验值；封存与未获共享授权的数据保持受限。"],
+  research: ["训练与分析", "查看真实训练产物、benchmark 和数据分析，区分尚未执行的计划。"],
+  "local-models": ["本机模型评估", "检查兼容性、加载模型，再明确开始真实游戏评估。"],
+  campaigns: ["录制与上传", "完成一次本机设置，日常录制后查看上传；专题活动按需选择。"],
 };
 const labels = {
   verified: ["云端已验收", "good"],
@@ -172,6 +178,13 @@ function metric(title, value, note, tone = "") {
 function collectionId(row) {
   return row.id || row.upload_id;
 }
+function collectionContext(row) {
+  const context = row.collection_context;
+  if (context?.kind === "unlinked") return "未关联专题活动";
+  if (["default", "activity"].includes(context?.kind) && typeof context.name === "string" && context.name)
+    return `${context.kind === "default" ? "日常录制" : "专题活动"} · ${context.name}`;
+  return row.local_delivery ? "本机记录 · 云端归属见详情" : "录制用途尚未关联";
+}
 function summary(row) {
   return row.summary || {};
 }
@@ -217,6 +230,7 @@ function collectionTable(rows) {
     );
     first.append(
       action,
+      node("span", collectionContext(row), "subtext"),
       node(
         "span",
         `${row.device_id || record.worker_id || row.worker_id || "本机"} · ${short(record.session_id || row.session_id || collectionId(row))}`,
@@ -410,7 +424,7 @@ function collections(data) {
   const group = node("div", null, "toolbar-group");
   const search = node("input");
   search.type = "search";
-  search.placeholder = "筛选本页：记录 / 设备 / campaign";
+  search.placeholder = "筛选本页：记录 / 电脑 / 活动名称";
   search.value = state.search;
   search.setAttribute("aria-label", "筛选当前页采集");
   search.addEventListener("input", () => {
@@ -458,6 +472,8 @@ function renderCollectionRows(data) {
         row.device_id,
         row.worker_id,
         row.campaign_id,
+        row.collection_context?.name,
+        row.collection_context?.activity_id,
         row.session_id,
         summary(row).session_id,
         summary(row).campaign_id,
@@ -521,7 +537,8 @@ function detail(data) {
     facts([
       ["采集 ID", record.session_id || row.session_id],
       ["设备", row.device_id || record.worker_id || row.worker_id],
-      ["Campaign", record.campaign_id || row.campaign_id],
+      ["录制用途", collectionContext(row)],
+      ["录制配置 ID", record.campaign_id || row.campaign_id],
       ["被游戏接收", number(tally.accepted)],
       [
         "子决策 / canonical",
@@ -841,6 +858,8 @@ function system(data) {
     identity = data.identity || data.producer || {};
   const compute = data.compute || data.cloud?.compute || {},
     backup = data.backup || data.cloud?.backup || {};
+  const storage = data.storage || data.cloud?.storage || {},
+    capacity = storage.capacity || {};
   evidenceBody.append(
     facts([
       ["Source", identity.source_revision],
@@ -877,10 +896,25 @@ function system(data) {
           "此接口尚未观测；查看运维收据",
       ],
       ["最近成功备份", date(backup.last_success_at)],
+      ["备份新鲜度", {ok: "在有效期内", attention: "需要检查", unknown: "未观测"}[backup.freshness] || "未观测"],
+      ["距成功备份", Number.isFinite(backup.age_seconds) ? `${(backup.age_seconds / 3600).toFixed(1)} 小时` : "未观测"],
       ["外部告警", "未在此界面验证"],
       ["完整主机恢复", "不由数据库备份或页面可用推断"],
     ]),
   );
+  if (storage.capacity) {
+    opsBody.append(
+      node("h3", "Hub 数据所在文件系统"),
+      facts([
+        ["容量状态", {ok: "运行余量充足", attention: "容量不足 · 暂缓新部署和批量处理", unknown: "容量未完整观测"}[capacity.status] || "未观测"],
+        ["可用 / 总容量", `${bytes(storage.free_bytes)} / ${bytes(storage.total_bytes)}`],
+        ["运行保留空间", bytes(capacity.reserve_bytes)],
+        ["可用 inode / 保留", `${number(capacity.free_inodes)} / ${number(capacity.reserve_inodes)}`],
+        ["观测时间", date(capacity.observed_at)],
+      ]),
+      node("p", "此处仅观察 Hub 数据所在文件系统。Docker 镜像若在其他盘，需运行主机容量检查；未统计可回收缓存，不会自动删除数据或镜像。", "small muted"),
+    );
+  }
   const list = node("ul", null, "help-list");
   for (const text of [
     "关闭浏览器不停止本机后台；project stop 才停止该项目服务。",
@@ -938,7 +972,7 @@ function changePage(offset) {
   load(true);
 }
 async function load(manual = false) {
-  if (!manual && document.activeElement?.id === "device-name") return;
+  if (!manual && (document.activeElement?.id === "device-name" || document.activeElement?.closest("[data-editor], [data-project-editor]"))) return;
   if (state.busy && !manual) return;
   state.busy = true;
   const serial = ++state.serial;
@@ -970,10 +1004,26 @@ async function load(manual = false) {
   try {
     const identity = await window.SpireIdentity.refresh(manual);
     if (serial !== state.serial) return;
+    if (["members", "statistics", "downloads", "research", "campaigns"].includes(view)) {
+      window.SpireIdentity.ensureProjectScope();
+    }
     const identityContext = window.SpireIdentity.context();
     context = `${pageContext}:${identityContext}`;
     if (renderedContext !== context) $("content").replaceChildren(empty("正在读取…", "当前账号与电脑范围"));
     local = window.SpireIdentity.isLocal();
+    if (["members", "statistics", "downloads", "research", "local-models", "campaigns"].includes(view)) {
+      const opened = [...document.querySelectorAll("details[open]")].map(item => item.dataset.preserve);
+      const content = await window.SpireProject.render(view, identity);
+      if (serial !== state.serial || identityContext !== window.SpireIdentity.context()) return;
+      $("content").replaceChildren(content);
+      document.querySelectorAll("details[data-preserve]").forEach(item => {
+        item.open = opened.includes(item.dataset.preserve);
+      });
+      renderedContext = context;
+      $("updated").textContent = "当前账号下的服务观测";
+      $("connection").textContent = identity?.status === "signed_in" ? "已通过身份验证" : "本机工作台";
+      return;
+    }
     if (view === "devices" || view === "connect") {
       const content = view === "devices" ? window.SpireIdentity.renderDevices() :
         await window.SpireIdentity.renderConnect();
@@ -1014,7 +1064,7 @@ async function load(manual = false) {
     const selection = focusedSearch
       ? document.activeElement.selectionStart
       : null;
-    const content =
+    let content =
       view === "overview"
         ? overview(data)
         : view === "collections"
@@ -1026,6 +1076,13 @@ async function load(manual = false) {
             : view === "system"
               ? system(data)
               : catalog(data, view);
+    if (view === "overview") {
+      const setup = await window.SpireProject.render("collection-overview", identity);
+      if (serial !== state.serial || identityContext !== window.SpireIdentity.context()) return;
+      const page = document.createDocumentFragment();
+      page.append(setup, content);
+      content = page;
+    }
     $("content").replaceChildren(content);
     renderedContext = context;
     document.querySelectorAll("details[data-preserve]").forEach((item) => {
@@ -1089,7 +1146,9 @@ document.querySelectorAll("[data-view]").forEach((item) =>
 $("refresh").addEventListener("click", () => load(true));
 $("lifecycle-note").textContent = localShell
   ? "关闭网页 ≠ 停止后台投递"
-  : "只读团队视图 · 原始数据不公开";
+  : "邀请制项目 · 共享数据按权限访问";
+window.SpireProject.reload = () => load(true);
+window.SpireProject.navigate = (view, id = null) => navigate(view, id);
 window.addEventListener("popstate", () => {
   readLocation();
   load(true);

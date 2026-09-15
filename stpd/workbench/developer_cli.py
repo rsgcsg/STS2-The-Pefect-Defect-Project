@@ -58,7 +58,10 @@ def main(argv: list[str] | None = None) -> int:
             "serve",
             "download",
             "policy",
+            "model",
             "credential",
+            "collection-tool",
+            "collection-upgrade",
         ),
     )
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
@@ -82,7 +85,43 @@ def main(argv: list[str] | None = None) -> int:
         "--role", action="append", help="own payload role, repeat for multiple roles"
     )
     parser.add_argument("--manifest", type=Path)
+    parser.add_argument("--selection", help="reviewed local policy registry selection")
+    parser.add_argument(
+        "--runtime-archive",
+        type=Path,
+        help="explicit local pinned Runtime archive; close workbench first",
+    )
+    parser.add_argument(
+        "--action",
+        default="catalog",
+        choices=(
+            "catalog",
+            "status",
+            "readiness",
+            "download",
+            "install-runtime",
+            "start",
+            "human",
+            "shadow",
+            "one_step",
+            "auto",
+            "stop",
+        ),
+        help="local model action; requires an open workbench",
+    )
     parser.add_argument("--credential-file", type=Path)
+    parser.add_argument(
+        "--tool-directory", type=Path, help="absolute public CollectionTool directory"
+    )
+    parser.add_argument("--tool-release-id", help="exact trusted CollectionTool release ID")
+    parser.add_argument(
+        "--replace-tool",
+        action="store_true",
+        help="explicitly replace a previous private CollectionTool registration",
+    )
+    parser.add_argument("--enrollment-id")
+    parser.add_argument("--phase", choices=("prepare", "activate"))
+    parser.add_argument("--game-directory", type=Path)
     args = parser.parse_args(argv)
     try:
         result: Any
@@ -107,7 +146,37 @@ def main(argv: list[str] | None = None) -> int:
             config = ProjectConfig.load(
                 args.config, require_current_combination=args.command not in {"status", "stop"}
             )
-            if args.command == "credential":
+            if args.command == "model":
+                from .local_model_cli import model_command
+
+                result = model_command(
+                    config,
+                    args.action,
+                    selection=args.selection,
+                    artifact=args.artifact,
+                    runtime_archive=args.runtime_archive,
+                )
+            elif args.command == "collection-upgrade":
+                from .collection_upgrade import upgrade
+
+                if not args.enrollment_id or not args.tool_release_id or not args.phase:
+                    raise BoundaryError("collection_upgrade", "enrollment_tool_and_phase_required")
+                result = upgrade(
+                    args.config,
+                    args.enrollment_id,
+                    args.tool_release_id,
+                    phase=args.phase,
+                    game_directory=args.game_directory,
+                )
+            elif args.command == "collection-tool":
+                from .collection_tool_registration import register_collection_tool
+
+                if args.tool_directory is None or args.tool_release_id is None:
+                    raise BoundaryError("collection_tool", "tool_directory_and_release_id_required")
+                result = register_collection_tool(
+                    config, args.tool_directory, args.tool_release_id, replace=args.replace_tool
+                )
+            elif args.command == "credential":
                 if args.credential_file is None:
                     raise BoundaryError("identity", "private_credential_file_required")
                 with instance_lock(config.state_dir / "instance.lock"):
@@ -119,7 +188,7 @@ def main(argv: list[str] | None = None) -> int:
             elif args.command == "stop":
                 result = stop_project(config)
             elif args.command == "serve":
-                result = serve(config)
+                result = serve(config, config_path=args.config)
             elif args.command == "status":
                 result = status_project(config)
             else:
