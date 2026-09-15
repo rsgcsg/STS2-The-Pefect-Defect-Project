@@ -16,6 +16,8 @@ window.SpireProject = (() => {
     "local-models",
     "campaigns",
     "collection-overview",
+    "datasets",
+    "games",
   ]);
   let current = null;
   let account = null;
@@ -1012,6 +1014,102 @@ window.SpireProject = (() => {
     box.append(technical(value, "实际下载回执与观测"));
     return box;
   }
+  async function gamesPage(ctx) {
+    const data = await request(ctx, member("games"));
+    const box = panel("对局与片段", `最近 ${data.profile_limit} 份获共享授权的录制。待整理 ${data.pending_profiles}，整理失败 ${data.failed_profiles}。上传次数不等于独立局数。`);
+    box.append(table(["局身份", "完整性", "胜负", "录入 / 接受", "上传来源数"], (data.items || []).map(r => [r.run_id, r.coverage_status || (r.complete ? "完整" : "不完整"), r.outcome === "win" ? "胜利" : r.outcome === "loss" ? "失败" : "未知", `${r.canonical} / ${r.accepted}`, r.uploads.length])));
+    for (const failed of data.failures || []) {
+      box.append(el("p", `整理失败：${failed.error}`), command(ctx, `retry-profile-${failed.id}`, "重试此整理任务", async () => {
+        await request(ctx, member(`datasets/${failed.id}/retry`), {}); await reload(ctx);
+      }));
+    }
+    box.append(link("筛选并建立数据集", route("datasets")), technical(data));
+    return box;
+  }
+  async function decisionDatasets(ctx) {
+    const box = panel("建立固定版本数据集", "默认保留可靠决策，允许不完整局和不同环境身份。整包损坏不能跳过校验；失败决策仍保留在报告中。");
+    const draft = drafts.get("decision-dataset") || {name: "人类决策数据集", uploads: [], complete: false, wins: false, filters: {}};
+    const name = input(box, "数据集名称", "dataset-name", draft.name);
+    const complete = input(box, "仅完整局（默认关闭）", "complete-only", draft.complete, "checkbox");
+    const noFailures = input(box, "仅无真实记录失败的局（默认关闭）", "no-failures", draft.noFailures, "checkbox");
+    const wins = input(box, "仅已确认胜利（未知结果不算胜利）", "wins-only", draft.wins, "checkbox");
+    const advanced = el("details");
+    advanced.append(el("summary", "可选筛选"));
+    const fields = {};
+    for (const [key, title] of [["game_version", "游戏版本"], ["connector_version", "连接器版本"], ["annotator_version", "采集器版本"], ["character", "角色"], ["difficulty", "难度"], ["family", "动作类别"], ["surface", "界面"], ["decision_kind", "决策类型"], ["environment_identity", "精确环境身份"]]) {
+      fields[key] = input(advanced, `${title}（留空不限，多个值用逗号分隔）`, key, (draft.filters[key] || []).join(","));
+    }
+    box.append(advanced);
+    function save() {
+      draft.name = name.value;
+      draft.complete = complete.checked;
+      draft.wins = wins.checked;
+      draft.noFailures = noFailures.checked;
+      draft.filters = {};
+      for (const [key, field] of Object.entries(fields)) {
+        const values = field.value.split(",").map(v => v.trim()).filter(Boolean);
+        if (values.length) draft.filters[key] = key === "difficulty" ? values.map(Number) : values;
+      }
+      drafts.set("decision-dataset", draft);
+    }
+    for (const field of [name, complete, wins, noFailures, ...Object.values(fields)]) field.onchange = save;
+    const listing = await request(ctx, project(`collections?limit=25&offset=${offsets.get("dataset-sources") || 0}`));
+    const selection = new Set(draft.uploads);
+    for (const item of listing.items || []) {
+      const id = item.upload_id || item.id;
+      if (!hex(id, 32)) continue;
+      const choice = input(box, `${item.summary?.session_id || id} · ${show(item.status)}`, `source-${id}`, selection.has(id), "checkbox");
+      choice.disabled = item.status !== "verified";
+      choice.onchange = () => {
+        if (choice.checked) selection.add(id); else selection.delete(id);
+        draft.uploads = [...selection].sort(); save();
+      };
+    }
+    box.append(pager(ctx, "dataset-sources", listing));
+    box.append(command(ctx, "preview-dataset", "预览选定记录", async () => {
+      save();
+      await request(ctx, member("datasets"), {name: draft.name, uploads: draft.uploads,
+        rules: {schema: "stpd/decision-selection-v1", complete_only: draft.complete,
+          wins_only: draft.wins, no_failures_only: draft.noFailures, filters: draft.filters, seed: 0}, preview_id: null});
+      await reload(ctx);
+    }));
+    const jobs = await request(ctx, member("datasets"));
+    const history = panel("预览与生成记录", "后台处理，可离开页面。刷新查看状态。每次生成都是固定产物；新上传不自动加入。");
+    for (const job of jobs.items || []) {
+      const row = panel(job.request.name, `${show(job.state)} · ${job.request.preview_id ? "生成数据集" : "预览"}`);
+      if (job.error) row.append(el("p", `原因：${job.error}。可核对来源后重新预览。`, "banner"));
+      if (job.state === "failed") row.append(command(ctx, `retry-dataset-${job.id}`, "重试此任务", async () => {
+        await request(ctx, member(`datasets/${job.id}/retry`), {}); await reload(ctx);
+      }));
+      if (job.result) {
+        row.append(facts([["保留决策", job.result.selected ?? job.result.records],
+          ["切分状态", job.result.split_status], ["去除精确重复决策", job.result.exact_duplicate_decisions ?? "见产物报告"]]));
+        if (job.result.runs) {
+          row.append(table(["局 / 片段", "完整性", "胜负", "已录入 / 接受"], job.result.runs.map(r => [r.run_id, r.complete ? "完整" : "不完整", r.outcome === "win" ? "胜利" : r.outcome === "loss" ? "失败" : "未知", `${r.canonical} / ${r.accepted}`])));
+        }
+        if (job.state === "completed" && !job.request.preview_id) {
+          row.append(command(ctx, `build-${job.id}`, "按此预览生成固定数据集", async () => {
+            await request(ctx, member("datasets"), {name: job.request.name, uploads: job.request.uploads,
+              rules: job.request.rules, preview_id: job.id});
+            await reload(ctx);
+          }));
+        }
+        if (job.result.artifact_id) row.append(link("查看数据集文件", route("datasets", job.result.artifact_id)), link("下载数据", route("downloads")));
+        row.append(technical(job.result, "查看筛选报告与身份"));
+      }
+      history.append(row);
+    }
+    box.append(history);
+    const catalog = await request(ctx, project(`datasets?limit=25&offset=${offsets.get("dataset-catalog") || 0}`));
+    const published = panel("项目已发布数据集", "所有获授权成员可查看，包括原有严格 Full-Run 数据集。具体契约和切分状态见产物详情。");
+    for (const item of catalog.items || []) {
+      if (hex(item.artifact_id)) published.append(link(item.artifact_id, route("datasets", item.artifact_id)));
+    }
+    published.append(pager(ctx, "dataset-catalog", catalog));
+    box.append(published);
+    return box;
+  }
+
   async function exportsPage(ctx) {
     const box = el("div", null, "project-page");
     const requested = new URLSearchParams(location.search).get("id");
@@ -2052,6 +2150,8 @@ window.SpireProject = (() => {
         return await {
           members: admin,
           statistics,
+          datasets: decisionDatasets,
+          games: gamesPage,
           downloads: exportsPage,
           research,
           "local-models": localModels,

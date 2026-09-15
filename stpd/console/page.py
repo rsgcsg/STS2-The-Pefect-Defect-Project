@@ -55,6 +55,7 @@ def render_shell(mode: str, api_base: str, cloud_url: str = "") -> str:
             ("campaigns", "录制与上传", "◉"),
             ("collections", "采集记录", "▤"),
             ("statistics", "数据统计", "▥"),
+            ("games", "对局与片段", "▧"),
             ("datasets", "数据集", "▦"),
             ("downloads", "数据下载", "↓"),
             ("research", "训练与分析", "◷"),
