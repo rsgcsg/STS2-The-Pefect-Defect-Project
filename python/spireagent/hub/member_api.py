@@ -225,7 +225,7 @@ def grant_collection_sharing(
     authorization before invoking it; neither membership nor upload implies consent.
     """
     exports = ExportService(service)
-    exports.set_collection_access(
+    exports.collections.set_collection_access(
         upload_id, approved=approved, evidence_ref=evidence_ref, actor=actor
     )
-    return {"upload_id": upload_id, **exports.collection_access([upload_id])[upload_id]}
+    return {"upload_id": upload_id, **exports.collections.collection_access([upload_id])[upload_id]}

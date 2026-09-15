@@ -12,10 +12,6 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-CI_COMMAND = (
-    'uv run --locked python tools/project.py check --base '
-    '"${{ github.event.pull_request.base.sha || github.event.before }}"'
-)
 ROUTES = (
     "README.md", "AGENTS.md", "CONTRIBUTING.md", "docs/DOCUMENT_MAP.md",
     "docs/DEVELOPMENT_WORKFLOW.md", "docs/PROJECT_SYSTEM.md", "docs/CODE_STYLE.md",
@@ -60,7 +56,7 @@ def validate_repository(root: Path) -> None:
             if not link or "://" in link or not link.endswith(".md"):
                 continue
             target = (source.parent / link).resolve()
-            require(target.is_relative_to(root.resolve()) and target.is_file(),
+            require(target.is_relative_to(root.resolve().parent) and target.is_file(),
                     f"{route}: broken local document link: {link}")
 
 

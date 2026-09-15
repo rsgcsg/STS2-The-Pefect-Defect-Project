@@ -53,7 +53,7 @@ def build_l2_handoff(
     handoff = {
         "schema": "stpd/l2-handoff-v0",
         "source": {
-            "repository": "https://github.com/rsgcsg/STS2-The-Perfect-Defect.git",
+            "repository": "https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project.git",
             "revision": source_revision,
             "python": ">=3.11,<3.12",
             "uv_lock_sha256": hashlib.sha256(uv_lock.read_bytes()).hexdigest(),
@@ -69,7 +69,7 @@ def build_l2_handoff(
         "environment": dict(environment),
         "data_manifest": data,
         "rebuild": [
-            "git clone https://github.com/rsgcsg/STS2-The-Perfect-Defect.git",
+            "git clone https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project.git",
             f"git checkout {source_revision}",
             "uv sync --frozen --all-extras",
             "uv run python tools/doctor.py --require-qwen-cache --qwen-cache <cache>",

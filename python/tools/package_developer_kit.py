@@ -33,10 +33,10 @@ supported systems, actual qualification gates and rollback before installing.
 
 Install Git, Python 3.11 with uv, Node 20+ and the collection tool's declared .NET runtime.
 Node and .NET must stay on PATH: the fixed tool uses them for native setup and packaging.
-Clone https://github.com/rsgcsg/STS2-The-Perfect-Defect.git and check out the exact
+Clone https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project.git and check out the exact
 stpd_source_revision from combination.json. Model weights are not needed for collection.
-Initial Mod installation is operator-assisted: the operator also retains the exact Platform
-checkout specified by the release and follows docs/DEVELOPER_KIT_INSTALL.md. The ZIP has no
+Initial Mod installation uses the same repository at the release commit. Enter python/
+and follow docs/DEVELOPER_KIT_INSTALL.md. The ZIP has no
 standalone installer. Everyday member collection uses the fixed tool without a Platform clone.
 Install mod/ with the game closed; retain the previous compatible Mod/tool pair. Keep
 collection-tool/ complete, including its setup helper and provenance. Verify its embedded BOM
@@ -45,8 +45,8 @@ separately from the kit root's pinned distribution BOM; the two may have identic
 Use one private absolute --config path for this computer on every command. The launcher default
 is %LOCALAPPDATA%/spireagent/workbench/project.json on Windows, or
 ~/.local/share/spireagent/workbench/project.json elsewhere. Use its resolved absolute path;
-other accounts need separate private directories. From the exact STPD checkout, replace
-/ABS/project.json and /ABS/kit below with your chosen locations and quote paths with spaces:
+other accounts need separate private directories. From python/ in the exact project checkout,
+replace /ABS/project.json and /ABS/kit below with your chosen locations and quote paths with spaces:
 
 ```bash
 python tools/open_workbench.py --config /ABS/project.json --hub-url https://hub.2-fire-2.com

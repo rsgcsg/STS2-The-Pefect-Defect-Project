@@ -201,16 +201,20 @@ def test_raw_archive_requires_explicit_grant_revocable_after_export(
     exports = ExportService(owner)
     upload, manifest = received(owner, b"unmodified original archive", status=status)
     before = owner.operations.upload(upload)
-    assert exports.collection_access([upload])[upload]["availability"] == "not_granted"
+    assert exports.collections.collection_access([upload])[upload]["availability"] == "not_granted"
     with pytest.raises(BoundaryError, match="collection_not_shared"):
         exports.create(MEMBER, request(collections=[upload]))
-    exports.set_collection_access(upload, approved=True, evidence_ref="a" * 64, actor="owner")
+    exports.collections.set_collection_access(
+        upload, approved=True, evidence_ref="a" * 64, actor="owner"
+    )
     result = exports.create(MEMBER, request(collections=[upload]))
     assert result["files_count"] == 1 and result["files"][0]["role"] == "archive"
     assert result["files"][0]["artifact_id"] == manifest.artifact_id
     assert "intent" not in json.dumps(result) and "owner" not in json.dumps(result)
     assert owner.operations.upload(upload) == before
-    exports.set_collection_access(upload, approved=False, evidence_ref="b" * 64, actor="owner")
+    exports.collections.set_collection_access(
+        upload, approved=False, evidence_ref="b" * 64, actor="owner"
+    )
     with pytest.raises(BoundaryError, match="collection_not_shared"):
         exports.payload(MEMBER, result["export_id"], result["files"][0]["file_id"])
     assert owner.operations.upload(upload) == before
@@ -310,10 +314,14 @@ def test_dataset_sharing_requires_exact_received_ancestor_grant(tmp_path: Path) 
     selection = request(artifacts=[{"artifact_id": dataset.artifact_id, "roles": ["records"]}])
     with pytest.raises(BoundaryError, match="source_sharing_not_established"):
         exports.create(MEMBER, selection)
-    exports.set_collection_access(upload, approved=True, evidence_ref="f" * 64, actor="owner")
+    exports.collections.set_collection_access(
+        upload, approved=True, evidence_ref="f" * 64, actor="owner"
+    )
     result = exports.create(MEMBER, selection)
     assert {item["artifact_id"] for item in result["files"]} == {dataset.artifact_id}
-    exports.set_collection_access(upload, approved=False, evidence_ref="e" * 64, actor="owner")
+    exports.collections.set_collection_access(
+        upload, approved=False, evidence_ref="e" * 64, actor="owner"
+    )
     with pytest.raises(BoundaryError, match="source_sharing_not_established"):
         exports.read(ADMIN, result["export_id"])
     historical_source = replace(source, parents=())
@@ -330,7 +338,9 @@ def test_collection_identity_and_stream_tamper_stay_fail_closed(tmp_path: Path) 
     owner = service(tmp_path)
     exports = ExportService(owner)
     upload, manifest = received(owner, b"archive")
-    exports.set_collection_access(upload, approved=True, evidence_ref="a" * 64, actor="owner")
+    exports.collections.set_collection_access(
+        upload, approved=True, evidence_ref="a" * 64, actor="owner"
+    )
     result = exports.create(MEMBER, request(collections=[upload]))
     file = result["files"][0]
     index_key = f"payload-indexes/v1/{manifest.payload('archive').sha256}.json"

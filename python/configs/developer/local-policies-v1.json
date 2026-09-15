@@ -3,7 +3,7 @@
   "runtime_package": {
     "package": "@rsgcsg/sts2-policy-runtime",
     "version": "0.1.0-rc.3",
-    "release_url": "https://github.com/rsgcsg/STS2-AI-PLATFORM/releases/download/policy-runtime%2Fv0.1.0-rc.3/rsgcsg-sts2-policy-runtime-0.1.0-rc.3.tgz",
+    "release_url": "https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project/releases/download/compat/platform-import-v1/rsgcsg-sts2-policy-runtime-0.1.0-rc.3.tgz",
     "source_revision": "cdcb324b2115cb25dc9fb253a7e8f36b5c5307e9",
     "component_tree_revision": "c5bf77b774a72bc52a02b24f9263a3d5584d846f",
     "release_asset_sha256": "48bf27ad931667a6c0bcb34dffc15a80de536c72e8ca4d3fde6fa973fdafa651",

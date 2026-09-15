@@ -7,9 +7,7 @@ request state, including uncertain requests that must never be retried.
 
 from __future__ import annotations
 
-import ast
 import hashlib
-import importlib.util
 import json
 import os
 import queue
@@ -30,10 +28,12 @@ from uuid import uuid4
 from spireagent.artifact_contracts import Manifest
 from spireagent.encoding import canonical_json
 from spireagent.json_boundary import BoundaryError, decode_json, digest, object_fields
+from spireagent.package_identity import PackageIdentityError
+from spireagent.policies import SUPPORTED_ADAPTERS, policy_support
+from spireagent.policy_files import _inside, _object_file
 from spireagent.workbench.developer import ROOT, ProjectConfig, atomic_json, endpoint
 from spireagent.workbench.hub_client import HubClient, NoRedirect
 from spireagent.workbench.runtime_install import install_runtime, validate_runtime_install
-from stpd.package_identity import PackageIdentityError, file_sha256
 
 SCHEMA = "stpd/local-models-v1"
 RUNTIME_PACKAGE = "@rsgcsg/sts2-policy-runtime"
@@ -41,22 +41,8 @@ MODES = frozenset({"human", "shadow", "one_step", "auto"})
 JSON_LIMIT = 1024 * 1024
 
 
-def _object_file(path: Path) -> dict[str, Any]:
-    if path.is_symlink() or not path.is_file() or path.stat().st_size > JSON_LIMIT:
-        raise BoundaryError("local_model", "metadata_missing_or_unsafe")
-    value = decode_json(path.read_bytes())
-    if not isinstance(value, dict):
-        raise BoundaryError("local_model", "invalid_metadata")
-    return value
 
 
-def _inside(root: Path, relative: object) -> Path:
-    if not isinstance(relative, str) or not relative or Path(relative).is_absolute():
-        raise BoundaryError("local_model", "invalid_registry_path")
-    path = (root / relative).resolve()
-    if not path.is_relative_to(root.resolve()):
-        raise BoundaryError("local_model", "invalid_registry_path")
-    return path
 
 
 def _loopback(url: str) -> str:
@@ -66,45 +52,8 @@ def _loopback(url: str) -> str:
     return str(result)
 
 
-def _s1_code_digest(root: Path) -> str:
-    # Reading this literal keeps collector inspection free of Torch imports and
-    # uses the adapter's own closure inventory instead of a second copied list.
-    tree = ast.parse((root / "stpd/policy/adapter.py").read_text(encoding="utf-8"))
-    inventory: object = None
-    for statement in tree.body:
-        if isinstance(statement, ast.Assign) and any(
-            isinstance(target, ast.Name) and target.id == "ADAPTER_SOURCE_CLOSURE"
-            for target in statement.targets
-        ):
-            inventory = ast.literal_eval(statement.value)
-    if not isinstance(inventory, tuple) or not inventory:
-        raise BoundaryError("local_model", "adapter_source_inventory_missing")
-    files = [
-        {"path": relative, "sha256": file_sha256(_inside(root, relative))} for relative in inventory
-    ]
-    return hashlib.sha256(canonical_json(files).encode()).hexdigest()
 
 
-def _backend_check() -> dict[str, str]:
-    if any(importlib.util.find_spec(name) is None for name in ("torch", "transformers")):
-        return {"status": "blocked", "code": "install_locked_ml_and_l2_dependencies"}
-    if sys.platform == "darwin":
-        return {"status": "blocked", "code": "s1_requires_cuda_bf16_backend"}
-    script = (
-        "import json,torch; print(json.dumps({'available':torch.cuda.is_available() "
-        "and torch.cuda.is_bf16_supported()}))"
-    )
-    try:
-        result = subprocess.run(
-            [sys.executable, "-c", script], capture_output=True, timeout=15, check=False
-        )
-        ready = result.returncode == 0 and json.loads(result.stdout).get("available") is True
-        return {
-            "status": "pass" if ready else "blocked",
-            "code": "cuda_bf16_available" if ready else "s1_requires_cuda_bf16_backend",
-        }
-    except (OSError, ValueError, subprocess.SubprocessError):
-        return {"status": "blocked", "code": "backend_probe_unavailable"}
 
 
 class RuntimeClient:
@@ -213,7 +162,7 @@ class LocalModelService:
                 entry, {"id", "label", "adapter", "manifest", "config"}, "local_model.policy"
             )
             if (
-                entry["adapter"] != "s1-v1"
+                entry["adapter"] not in SUPPORTED_ADAPTERS
                 or not isinstance(entry["id"], str)
                 or not re.fullmatch(r"[a-z0-9-]{1,80}", entry["id"])
             ):
@@ -384,48 +333,11 @@ class LocalModelService:
                     else name + "_missing_or_drifted",
                 }
 
-        def exact_file(path: Path, expected: object) -> None:
-            if file_sha256(path) != digest(expected, "local_model.sha256"):
-                raise BoundaryError("local_model", "artifact_checksum_mismatch")
-
-        def manifest_check() -> None:
-            if (
-                manifest.get("schema") != "sts2.policy-runtime/policy-manifest-1"
-                or manifest.get("adapter", {}).get("code_sha256") != _s1_code_digest(self.root)
-                or manifest.get("artifact", {}).get("sha256") != policy_config["checkpoint_sha256"]
-            ):
-                raise BoundaryError("local_model", "trusted_policy_identity_drift")
-            pin = manifest["adapter_config"]["s1"]["config"]
-            if pin["path"] != entry["config"]:
-                raise BoundaryError("local_model", "trusted_policy_config_drift")
-            exact_file(config_path, pin["sha256"])
-
-        check("policy_identity", manifest_check)
+        checks.update(policy_support(entry["adapter"]).inspect(
+            self.root, entry, manifest, policy_config
+        ))
         check("runtime_package", lambda: self._runtime_package() and None)
         check("public_contract", lambda: self._public_manifest_contract(manifest_path))
-        check(
-            "checkpoint",
-            lambda: exact_file(
-                _inside(self.root, policy_config["checkpoint_path"]),
-                policy_config["checkpoint_sha256"],
-            ),
-        )
-        check(
-            "training_ready",
-            lambda: exact_file(
-                _inside(self.root, policy_config["ready_path"]), policy_config["ready_sha256"]
-            ),
-        )
-        check(
-            "checkpoint_sidecar",
-            lambda: (
-                _object_file(
-                    _inside(self.root, policy_config["checkpoint_path"] + ".manifest.json")
-                )
-                and None
-            ),
-        )
-        checks["backend"] = _backend_check()
         checks["node"] = {
             "status": "pass" if shutil.which("node") else "blocked",
             "code": "node_available" if shutil.which("node") else "node_missing",
@@ -549,14 +461,7 @@ class LocalModelService:
             sys.executable,
             "--adapter-cwd",
             str(self.root),
-            "--adapter-arg",
-            "tools/policy_adapter.py",
-            "--adapter-arg=--config",
-            "--adapter-arg",
-            entry["config"],
-            "--adapter-arg=--manifest",
-            "--adapter-arg",
-            entry["manifest"],
+            *["--adapter-arg=" + arg for arg in policy_support(entry["adapter"]).arguments(entry)],
             "--connector-endpoint",
             connector,
             "--listen-port",

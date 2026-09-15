@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from types import ModuleType
 
-from .package_identity import validate_installed_package
+from spireagent.package_identity import validate_installed_package
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_HOST_RUNTIME = ROOT / "node_modules" / "@rsgcsg" / "sts2-host-runtime"

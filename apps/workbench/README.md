@@ -1,6 +1,8 @@
-# STS2 Platform Workbench
+# Platform diagnostic service
 
-This is a dependency-light Platform application-service view. It reads the
+The user console is now the project Workbench (`npm run workbench` at repository root).
+This retained compatibility service has no HTML console. It is a dependency-light
+Platform diagnostic and typed control API. It reads the
 Environment, Policy, Human Data, Evidence, Transfer and Diagnostics domains.
 Filesystem status is an explicit fallback, not live truth. The only command
 it can issue is a typed Policy Runtime mode change; it cannot submit a
@@ -23,7 +25,7 @@ node bin/workbench.mjs \
 The same roots can be configured with `--root name=path` or
 `WORKBENCH_<NAME>_ROOT`. Configure the Policy Runtime with
 `--policy-runtime-url` or `WORKBENCH_POLICY_RUNTIME_URL`; the URL must target a
-loopback host. The JSON API is `GET /api/status`; the HTML view is `GET /`.
+loopback host. The JSON API is `GET /api/status`; the retired HTML route `GET /` returns 410 with the project-console entry point.
 The only command API is `POST /api/policy/mode` with exactly one JSON field:
 `{"mode":"human"}`, `shadow`, `one_step`, or `auto`.
 

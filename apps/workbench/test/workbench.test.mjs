@@ -6,7 +6,6 @@ import os from "node:os";
 import path from "node:path";
 
 import { parseArgs } from "../bin/workbench.mjs";
-import { renderHtml } from "../src/render-html.mjs";
 import { createWorkbenchService } from "../src/workbench-service.mjs";
 import { createWorkbenchServer } from "../src/server.mjs";
 import { PolicyRuntimeClient } from "../src/policy-runtime-client.mjs";
@@ -184,7 +183,7 @@ test("official Evidence store status and transfer receipt are recognized", async
   assert.equal(byName.transfer.status.value.content_id, "fixture");
 });
 
-test("JSON API and HTML render the same typed status DTO", async () => {
+test("diagnostic API preserves typed status and retires the duplicate console", async () => {
   const configured = roots();
   await mkdir(configured.environment, { recursive: true });
   await writeFile(path.join(configured.environment, "runtime-status.json"), "{}\n");
@@ -201,16 +200,9 @@ test("JSON API and HTML render the same typed status DTO", async () => {
     assert.equal(apiStatus.services.find((item) => item.name === "environment").status.state, "known");
     assert.equal(apiStatus.services.find((item) => item.name === "annotator").state, "absent");
 
-    const htmlResponse = await fetch(`${base}/`);
-    const html = await htmlResponse.text();
-    assert.equal(htmlResponse.status, 200);
-    assert.match(html, /typed status view with explicit filesystem fallback/u);
-    assert.match(html, /environment/u);
-    assert.match(html, /absent/u);
-    assert.match(html, /Raw service DTO/u);
-    assert.match(html, /Policy controls/u);
-    assert.match(html, /disabled: live runtime unavailable/u);
-    assert.match(renderHtml(apiStatus), /overall: unknown/u);
+    const retired = await fetch(`${base}/`);
+    assert.equal(retired.status, 410);
+    assert.equal((await retired.json()).error, "project_console_moved");
 
     const methodResponse = await fetch(`${base}/api/status`, { method: "POST" });
     assert.equal(methodResponse.status, 405);

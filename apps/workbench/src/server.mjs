@@ -1,7 +1,6 @@
 import http from "node:http";
 import { URL } from "node:url";
 
-import { renderHtml } from "./render-html.mjs";
 import { POLICY_RUNTIME_MODES, PolicyRuntimeError, validatePolicyMode } from "./policy-runtime-client.mjs";
 
 function send(response, statusCode, contentType, body) {
@@ -88,8 +87,10 @@ export function createWorkbenchServer(service, options = {}) {
       return;
     }
     if (request.method === "GET" && url.pathname === "/") {
-      const status = await readStatus();
-      send(response, 200, "text/html; charset=utf-8", renderHtml(status));
+      send(response, 410, "application/json; charset=utf-8", JSON.stringify({
+        error: "project_console_moved",
+        message: "Use npm run workbench at the project root. This endpoint retains diagnostics APIs only."
+      }));
       return;
     }
     if (request.method === "POST" && url.pathname === "/api/policy/mode") {

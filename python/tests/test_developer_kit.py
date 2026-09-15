@@ -25,7 +25,7 @@ def inputs(tmp_path, monkeypatch):
         json.dumps(
             {
                 "schema": "stpd/developer-combination-v1",
-                "platform_repository": "https://github.com/rsgcsg/STS2-AI-PLATFORM.git",
+                "platform_repository": "https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project.git",
                 "platform_source_revision": "a" * 40,
                 "evidence_source_revision": "b" * 40,
                 "policy_mode": "existing-adapter-only",

@@ -11,7 +11,7 @@ services:
     command:
       - serve
       - --root
-      - /opt/stpd
+      - /opt/stpd/python
       - --state
       - /var/lib/stpd
       - --store

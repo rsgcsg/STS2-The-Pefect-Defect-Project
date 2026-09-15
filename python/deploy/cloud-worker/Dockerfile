@@ -5,6 +5,7 @@ FROM ${BASE_IMAGE}
 ARG BASE_IMAGE
 ARG STPD_SOURCE_REVISION
 ARG UV_VERSION=0.11.25
+ARG STPD_IMAGE_PROFILE=worker
 RUN printf '%s' "$BASE_IMAGE" | grep -Eq '@sha256:[0-9a-f]{64}$'
 RUN test -n "$STPD_SOURCE_REVISION" && \
     printf '%s' "$STPD_SOURCE_REVISION" | grep -Eq '^[0-9a-f]{40}$'
@@ -15,7 +16,16 @@ RUN git clone https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project.git /opt/
 WORKDIR /opt/stpd/python
 # The clone layer can predate a new approved commit when Docker reuses its cache.
 RUN git fetch origin "$STPD_SOURCE_REVISION" && \
-    git checkout --detach "$STPD_SOURCE_REVISION" && uv sync --locked --all-extras
+    git checkout --detach "$STPD_SOURCE_REVISION" && \
+    case "$STPD_IMAGE_PROFILE" in \
+      hub) uv sync --locked --extra cloud --extra research ;; \
+      worker) uv sync --locked --all-extras ;; \
+      *) echo "Unknown image profile" >&2; exit 1 ;; \
+    esac
+ENV STPD_IMAGE_PROFILE=$STPD_IMAGE_PROFILE
+LABEL org.opencontainers.image.source="https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project" \
+      org.opencontainers.image.revision=$STPD_SOURCE_REVISION \
+      org.spireagent.image-profile=$STPD_IMAGE_PROFILE
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PATH="/opt/stpd/python/.venv/bin:$PATH"
 # Modal uses its own Python runtime for the small wrapper. Model work executes

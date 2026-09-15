@@ -7,8 +7,8 @@ import time
 import uuid
 from typing import Any
 
+from spireagent.hub.collections import CollectionAccess
 from spireagent.hub.console_auth import ConsolePrincipal
-from spireagent.hub.exports import ExportService
 from spireagent.hub.uploads import UploadService
 from spireagent.json_boundary import BoundaryError, digest, object_fields
 from stpd.fullrun.decision_dataset import SelectionRules
@@ -18,7 +18,7 @@ from stpd.fullrun.decision_store import preview, publish
 class DecisionJobs:
     def __init__(self, service: UploadService) -> None:
         self.service = service
-        self.exports = ExportService(service)
+        self.collections = CollectionAccess(service)
         with service.operations.transaction() as db:
             db.execute(
                 "CREATE TABLE IF NOT EXISTS decision_jobs("
@@ -34,13 +34,13 @@ class DecisionJobs:
             raise BoundaryError("decision_job", "invalid_selection")
         if len(set(selections)) != len(selections):
             raise BoundaryError("decision_job", "duplicate_selection")
-        sources = tuple(self.exports._collection(value) for value in selections)
+        sources = tuple(self.collections.collection(value) for value in selections)
         if any(s.parameters.value()["disposition"] != "verified" for s in sources):
             raise BoundaryError("decision_job", "source_not_verified")
         return sources
 
     def create(self, principal: ConsolePrincipal, body: object) -> dict[str, Any]:
-        self.exports._member(principal)
+        self.collections.require_member(principal)
         obj = object_fields(body, {"uploads", "rules", "preview_id", "name"}, "decision_job")
         self._sources(obj["uploads"])
         rules = SelectionRules.decode(obj["rules"])
@@ -73,7 +73,7 @@ class DecisionJobs:
         return {"id": identity, "state": "pending"}
 
     def read(self, principal: ConsolePrincipal, identity: str) -> dict[str, Any]:
-        self.exports._member(principal)
+        self.collections.require_member(principal)
         digest(identity, "decision_job.id", length=32)
         with self.service.operations.transaction() as db:
             row = db.execute("SELECT * FROM decision_jobs WHERE id=?", (identity,)).fetchone()
@@ -92,7 +92,7 @@ class DecisionJobs:
         }
 
     def list(self, principal: ConsolePrincipal) -> dict[str, Any]:
-        self.exports._member(principal)
+        self.collections.require_member(principal)
         with self.service.operations.transaction() as db:
             rows = db.execute(
                 "SELECT id FROM decision_jobs WHERE owner=? ORDER BY created DESC LIMIT 50",
@@ -135,7 +135,7 @@ class DecisionJobs:
         return {"id": new_id, "state": "pending"}
 
     def games(self, principal: ConsolePrincipal) -> dict[str, Any]:
-        self.exports._member(principal)
+        self.collections.require_member(principal)
         with self.service.operations.transaction() as db:
             rows = db.execute(
                 "SELECT j.request,j.result FROM decision_jobs j JOIN collection_sharing s "

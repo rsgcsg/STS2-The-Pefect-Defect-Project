@@ -9,6 +9,7 @@ import pytest
 from sts2_platform_evidence.collection_tool import digest as tool_digest
 
 from spireagent.json_boundary import BoundaryError
+from spireagent.package_identity import file_sha256
 from spireagent.workbench.collection_tool_registration import (
     REGISTRATION_FILE,
     register_collection_tool,
@@ -17,7 +18,6 @@ from spireagent.workbench.collection_tool_registration import (
 from spireagent.workbench.developer import ProjectConfig, atomic_json, combination
 from spireagent.workbench.developer_cli import main
 from spireagent.workbench.developer_server import instance_lock
-from stpd.package_identity import file_sha256
 
 
 def make_tool(directory: Path, marker: str = "first") -> str:

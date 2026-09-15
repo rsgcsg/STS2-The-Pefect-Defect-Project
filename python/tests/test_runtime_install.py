@@ -9,8 +9,8 @@ from urllib.request import Request
 import pytest
 
 from spireagent.json_boundary import BoundaryError
+from spireagent.package_identity import PackageIdentityError, directory_sha256
 from spireagent.workbench import runtime_install
-from stpd.package_identity import PackageIdentityError, directory_sha256
 
 
 def package(root, name, *, runtime=False):

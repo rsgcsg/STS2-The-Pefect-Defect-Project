@@ -15,6 +15,7 @@ from spireagent.workbench import local_models
 from spireagent.workbench.developer import ProjectConfig, combination
 from spireagent.workbench.local_models import LocalModelService, RuntimeClient
 from stpd.canonical import canonical_json
+from stpd.policy import installation
 
 
 @pytest.fixture
@@ -141,7 +142,7 @@ def test_registry_is_trusted_code_selection_not_downloaded_command(service, tmp_
 
 def test_readiness_reports_real_missing_prerequisites_without_loading(service, monkeypatch):
     monkeypatch.setattr(
-        local_models, "_backend_check", lambda: {"status": "blocked", "code": "no_cuda"}
+        installation, "_backend_check", lambda: {"status": "blocked", "code": "no_cuda"}
     )
     result = service.readiness("s1-human-combat-v4")
     assert result["status"] == "blocked" and result["loaded"] is False
@@ -421,7 +422,7 @@ def test_start_uses_fixed_command_human_and_rejects_foreign_attestation(service,
     assert result["error_code"] == "runtime_load_or_attestation_failed"
     command, options = calls[0]
     assert command[-2:] == ["--mode", "human"]
-    assert "tools/policy_adapter.py" in command
+    assert "--adapter-arg=tools/policy_adapter.py" in command
     assert "STPD_HUB_TOKEN" not in options["env"]
     assert service.process.stopped
 

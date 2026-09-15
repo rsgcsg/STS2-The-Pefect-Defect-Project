@@ -134,7 +134,7 @@ def owner_uid(path: Path) -> int:
 def checkout_identity() -> dict[str, str]:
     """Read this deployment checkout; Hub still owns the runtime Producer guard."""
     root = Path(__file__).resolve().parents[2]
-    command = ["git", "-c", f"safe.directory={root}"]
+    command = ["git", "-c", f"safe.directory={root.parent}"]
 
     def read(*args: str) -> bytes:
         return subprocess.check_output(

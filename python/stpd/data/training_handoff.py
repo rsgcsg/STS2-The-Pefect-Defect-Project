@@ -189,7 +189,9 @@ def build_training_input(
             "consumer_identity must contain repository, source_revision, uv_lock_sha256, "
             "and entry_point"
         )
-    if consumer["repository"] != "rsgcsg/STS2-The-Perfect-Defect":
+    if consumer["repository"] not in {
+        "rsgcsg/STS2-The-Perfect-Defect", "rsgcsg/STS2-The-Pefect-Defect-Project"
+    }:
         raise TrainingHandoffError("training input has an unexpected consumer repository")
     for name in ("source_revision", "uv_lock_sha256"):
         value = consumer[name]

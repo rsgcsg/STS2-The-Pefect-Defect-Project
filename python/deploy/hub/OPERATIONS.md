@@ -170,7 +170,7 @@ to run without a reason:
 ```bash
 hubctl status
 dc ps
-sudo python3 /opt/stpd-deploy/source/deploy/hub/maintenance.py status --config /etc/stpd/deployment.env --image-store /ABS/ACTUAL/image-store
+sudo python3 /opt/stpd-deploy/source/python/deploy/hub/maintenance.py status --config /etc/stpd/deployment.env --image-store /ABS/ACTUAL/image-store
 sudo systemctl list-timers stpd-backup.timer
 df -h
 df -i

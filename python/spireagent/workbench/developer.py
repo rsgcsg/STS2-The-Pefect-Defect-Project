@@ -26,13 +26,13 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from spireagent.json_boundary import BoundaryError, decode_json, digest, object_fields, text
-from stpd.package_identity import PackageIdentityError, validate_installed_package
+from spireagent.package_identity import PackageIdentityError, validate_installed_package
 
 CONFIG_SCHEMA = "stpd/developer-project-v1"
 COMBINATION_SCHEMA = "stpd/developer-combination-v1"
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = ROOT / ".local" / "developer" / "project.json"
-PUBLIC_REPOSITORY = "https://github.com/rsgcsg/STS2-AI-PLATFORM.git"
+PUBLIC_REPOSITORY = "https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project.git"
 
 
 def endpoint(value: object, *, optional: bool = False) -> str:

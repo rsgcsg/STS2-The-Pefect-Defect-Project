@@ -5,11 +5,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/rsgcsg/STS2-AI-PLATFORM.git",
+    "url": "git+https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project.git",
     "directory": "components/connector/sdk/typescript"
   },
-  "homepage": "https://github.com/rsgcsg/STS2-AI-PLATFORM/tree/main/components/connector/sdk/typescript",
-  "bugs": "https://github.com/rsgcsg/STS2-AI-PLATFORM/issues",
+  "homepage": "https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project/tree/main/components/connector/sdk/typescript",
+  "bugs": "https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project/issues",
   "publishConfig": {
     "access": "public"
   },

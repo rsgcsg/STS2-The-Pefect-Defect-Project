@@ -200,3 +200,22 @@ workstation seam plus the exact component-local Connector witness artifact.
 bytes. These identities remain stable across unrelated component changes.
 Public contract and artifact identities are separate. Artifact SHA/MVID and
 exact loaded runtime remain the final byte/runtime authorities.
+
+## Project applications and research in the same checkout
+
+The one user console is `python/spireagent/console`, served locally by Workbench and
+remotely by Hub. Only Hub owns project membership and device authorization; local
+credentials authorize one device and are never cloud administrator credentials.
+The retained `apps/workbench` endpoint is a diagnostic API, not a second user UI.
+
+Shared JSON, package/source identity and artifact storage live below applications in
+`spireagent`. They import neither application UI nor STPD research. Research never
+imports Hub or Workbench. Hub composes explicit research jobs, permission services and
+a provider-neutral compute interface; the Modal adapter retains provider call handles.
+Workbench supervises the policy process; S1 requirements and launch arguments belong
+to its model adapter. Unknown delivery never becomes an automatic retry.
+
+One `python/uv.lock` governs the Python environment. Hub installs cloud/data dependencies;
+worker images additionally install training dependencies. These are explicit build
+profiles of the same source, not two product backends. Image digest and profile remain
+part of deployment identity. The CPU Hub cannot be submitted as a GPU worker.

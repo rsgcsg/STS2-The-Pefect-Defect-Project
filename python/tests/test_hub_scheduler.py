@@ -42,6 +42,9 @@ class Provider:
             raise TimeoutError("remote may have accepted; no automatic resubmit")
         return ModalCall(self.target.target_id, request, "fc-" + request.attempt_id)
 
+    def restore_handle(self, value):
+        return ModalCall.decode(value)
+
     def poll(self, handle):
         self.polls.append(handle.call_id)
         if self.poll_error:

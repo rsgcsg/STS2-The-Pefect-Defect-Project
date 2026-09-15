@@ -1,4 +1,23 @@
-# Hub operator runbook
+# Hub operations — unified repository
+
+Current source: `rsgcsg/STS2-The-Pefect-Defect-Project`. Commands with relative
+`deploy/` paths below run from `python/`. The installed host checkout is
+`/opt/stpd-deploy/source`, and deployment files are in its `python/deploy/hub/`.
+The durable `/etc/stpd`, `/srv/stpd`, domain, member/device identities and bucket
+names do not change. The initial monorepo cutover must take a verified old-image
+backup first, retain the old image/config/checkout, test a restored copy in isolation,
+then stop old service before starting one new service. Never run two schedulers on
+production state. The new image entry is `/opt/stpd/python/.venv/bin/python`; its
+application root is `/opt/stpd/python`, Git root `/opt/stpd`.
+
+For this CPU Hub, build the common image recipe with `STPD_IMAGE_PROFILE=hub`.
+Keep compute budget zero until a separate worker qualification and explicit budget.
+If cutover fails, stop the new service and use the retained old compose/config/image.
+Use the old checkout's maintenance script with an old image: do not mix executable
+paths. Restore database backups only with the documented revocation/unknown-job
+reconciliation. Changing a Git branch is not a rollback of database or R2 state.
+
+## Hub operator runbook
 
 Run commands only after account/region, resource budget and credentials are authorized.
 This document is a procedure, not a record that deployment happened. The source checkout,
@@ -55,7 +74,7 @@ Define command helpers in the operator shell; these read the external files thro
 ```bash
 STPD_HUB_COMPOSE_FILE="$PWD/deploy/hub/compose.yaml"
 dc() { sudo docker compose --env-file /etc/stpd/deployment.env -f "$STPD_HUB_COMPOSE_FILE" "$@"; }
-hubctl() { dc exec -T hub /opt/stpd/.venv/bin/python -m stpd.hub "$@" --root /opt/stpd --state /var/lib/stpd --store s3 --staging s3; }
+hubctl() { dc exec -T hub /opt/stpd/python/.venv/bin/python -m spireagent.hub "$@" --root /opt/stpd/python --state /var/lib/stpd --store s3 --staging s3; }
 sudo python3 deploy/hub/preflight.py --config /etc/stpd/deployment.env --host
 dc config -q
 ```
@@ -74,8 +93,8 @@ Pull only the configured digest references, then validate Caddy without starting
 ```bash
 dc pull
 dc run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
-dc run --rm --no-deps hub status --root /opt/stpd --state /var/lib/stpd --store s3 --staging s3
-sudo python3 /opt/stpd-deploy/source/deploy/hub/maintenance.py backup
+dc run --rm --no-deps hub status --root /opt/stpd/python --state /var/lib/stpd --store s3 --staging s3
+sudo python3 /opt/stpd-deploy/source/python/deploy/hub/maintenance.py backup
 dc up -d
 dc ps
 curl --fail --silent --show-error http://127.0.0.1:8765/health
@@ -101,7 +120,7 @@ dc logs --tail 100 hub caddy
 Validate a real store's immutable conditional write/readback using the existing owning smoke:
 
 ```bash
-dc exec -T hub /opt/stpd/.venv/bin/python -m stpd.workbench doctor --store s3 --smoke
+dc exec -T hub /opt/stpd/python/.venv/bin/python -m spireagent.workbench doctor --store s3 --smoke
 ```
 
 That command writes a uniquely scoped diagnostic probe; retain its receipt. Test one explicitly
@@ -116,7 +135,7 @@ Use a new device-specific random token. An operator injects `STPD_DEVICE_TOKEN` 
 the shell environment; do not put its value on the command line. Docker forwards only its name:
 
 ```bash
-sudo --preserve-env=STPD_DEVICE_TOKEN docker compose --env-file /etc/stpd/deployment.env -f "$STPD_HUB_COMPOSE_FILE" exec -T -e STPD_DEVICE_TOKEN hub /opt/stpd/.venv/bin/python -m stpd.hub register --device developer-device-01 --root /opt/stpd --state /var/lib/stpd --store s3 --staging s3
+sudo --preserve-env=STPD_DEVICE_TOKEN docker compose --env-file /etc/stpd/deployment.env -f "$STPD_HUB_COMPOSE_FILE" exec -T -e STPD_DEVICE_TOKEN hub /opt/stpd/python/.venv/bin/python -m spireagent.hub register --device developer-device-01 --root /opt/stpd/python --state /var/lib/stpd --store s3 --staging s3
 hubctl revoke --device developer-device-01
 ```
 
@@ -389,7 +408,7 @@ backupctl() {
     --env GIT_CONFIG_COUNT=1 --env GIT_CONFIG_KEY_0=safe.directory \
     --env GIT_CONFIG_VALUE_0=/opt/stpd --env GIT_OPTIONAL_LOCKS=0 \
     --mount type=bind,src=/srv/stpd/hub,dst=/var/lib/stpd \
-    "$STPD_WORKER_IMAGE" /opt/stpd/.venv/bin/python /opt/stpd/deploy/hub/backup.py "$@"
+    "$STPD_WORKER_IMAGE" /opt/stpd/python/.venv/bin/python /opt/stpd/python/deploy/hub/backup.py "$@"
 }
 backupctl backup
 backupctl restore-check --receipt EXACT_BACKUP_RECEIPT_SHA256 --destination /var/lib/stpd/backups/retrieval-drill.sqlite
@@ -429,7 +448,7 @@ sudo install -m 0644 deploy/hub/stpd-backup.timer /etc/systemd/system/stpd-backu
 sudo systemd-analyze verify /etc/systemd/system/stpd-backup.service /etc/systemd/system/stpd-backup.timer
 sudo systemctl daemon-reload
 sudo systemctl start stpd-backup.service
-sudo python3 /opt/stpd-deploy/source/deploy/hub/maintenance.py status
+sudo python3 /opt/stpd-deploy/source/python/deploy/hub/maintenance.py status
 sudo systemctl enable --now stpd-backup.timer
 sudo systemctl list-timers stpd-backup.timer
 ```
@@ -457,7 +476,7 @@ image-store filesystems; see [daily operations](OPERATIONS.md#daily-check-and-be
 for the explicit image-store argument and separate capacity/configuration admission checks.
 
 ```bash
-sudo python3 /opt/stpd-deploy/source/deploy/hub/maintenance.py status
+sudo python3 /opt/stpd-deploy/source/python/deploy/hub/maintenance.py status
 sudo systemctl status stpd-backup.service --no-pager
 sudo journalctl -u stpd-backup.service -n 20 --no-pager
 ```

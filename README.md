@@ -22,7 +22,8 @@ Policy Runtime. `apps/game-mod` builds one game Mod; `apps/ingame-ui` is its UI.
 `python/spireagent` owns Hub, local Workbench, shared console and artifact services.
 `python/stpd` owns research projections, models, training and evaluation.
 `python/deploy` owns cloud recipes. `tools/` owns the root checks and provenance.
-The old Platform Workbench is retained as diagnostics during UI consolidation.
+`apps/workbench` retains typed diagnostic APIs for existing consumers; its duplicate
+HTML console is retired. The project Workbench is the only user console.
 
 ## Developer setup
 

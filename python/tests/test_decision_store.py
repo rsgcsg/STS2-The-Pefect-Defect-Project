@@ -22,7 +22,9 @@ def setup(tmp_path: Path):
         content_id=load_json(bundle / "session-bundle-manifest.json")["bundle_content_id"],
     )
     jobs = DecisionJobs(owner)
-    jobs.exports.set_collection_access(upload, approved=True, evidence_ref="c" * 64, actor="test")
+    jobs.collections.set_collection_access(
+        upload, approved=True, evidence_ref="c" * 64, actor="test"
+    )
     with owner.operations.transaction() as db:
         db.execute(
             "INSERT INTO identity_members(id,email,issuer,subject,role,status,enroll_devices,"
@@ -61,11 +63,13 @@ def test_preview_then_build_job_and_revocation(tmp_path: Path) -> None:
     jobs.run(second["id"])
     artifact = jobs.read(MEMBER, second["id"])["result"]["artifact_id"]
     assert len(load(owner.store, artifact)[1].records) == 6
-    jobs.exports.set_collection_access(upload, approved=False, evidence_ref="d" * 64, actor="test")
+    jobs.collections.set_collection_access(
+        upload, approved=False, evidence_ref="d" * 64, actor="test"
+    )
     with pytest.raises(BoundaryError, match="collection_not_shared"):
         jobs.read(MEMBER, second["id"])
     with pytest.raises(BoundaryError, match="source_sharing_not_established"):
-        jobs.exports._artifact(artifact)
+        jobs.collections.artifact(artifact)
 
 
 def test_membership_revoked_before_worker_starts(tmp_path: Path) -> None:
@@ -97,7 +101,9 @@ def test_automatic_profiles_are_background_and_shared(tmp_path: Path) -> None:
     assert len(result["items"]) == 3
     assert result["items"][0]["uploads"] == [upload]
     assert jobs.pending() is None
-    jobs.exports.set_collection_access(upload, approved=False, evidence_ref="f" * 64, actor="test")
+    jobs.collections.set_collection_access(
+        upload, approved=False, evidence_ref="f" * 64, actor="test"
+    )
     assert jobs.games(MEMBER)["items"] == []
 
 

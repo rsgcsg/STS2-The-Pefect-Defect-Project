@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from tools.project import CI_COMMAND, RepositoryGateError, portable_commands
+from tools.project import RepositoryGateError, portable_commands
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -39,7 +39,6 @@ def test_portable_gate_includes_all_existing_checks_and_package() -> None:
     ) in commands
     assert ("uv", "build") in commands
     assert ("git", "diff", "--check") in commands
-    assert "project.py check" in CI_COMMAND
 
 
 @pytest.mark.parametrize("mutation", ["python", "current", "bootstrap", "route", "eol"])

@@ -12,3 +12,11 @@ Preserve old accounts/devices/outboxes/raw evidence and R2 data. Compute budget 
 
 Use root npm run check for both component gates. Tests/build/source evidence does
 not transfer to installed, loaded, service, Human or scientific qualification.
+
+Resolve live GitHub refs, CI, source and deployed identity; current source/runtime
+authorities override this file.
+
+## Remaining Platform non-claims
+
+The migration has no new native or Human qualification. Original recordings and
+loaded-artifact reports remain scoped to their exact historical identity.

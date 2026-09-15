@@ -358,9 +358,9 @@ class UploadService:
         upload_id: str,
         bundle: VerifiedHumanSessionBundle,
     ) -> dict[str, Any]:
-        from spireagent.hub.exports import ExportService
+        from spireagent.hub.collections import CollectionAccess
 
-        return ExportService(self).associate_verified_collection(upload_id, bundle)
+        return CollectionAccess(self).associate_verified_collection(upload_id, bundle)
 
     def _index_collection_status(self, upload_id: str, size: int, status: str) -> None:
         # Even the failure marker is optional: never mask durable owner outcome.

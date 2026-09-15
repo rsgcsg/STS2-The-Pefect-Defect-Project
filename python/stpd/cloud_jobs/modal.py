@@ -8,6 +8,7 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 from spireagent.artifact_contracts import Producer
+from spireagent.compute import ComputeHandle
 from spireagent.json_boundary import BoundaryError, object_fields, unsigned
 
 from ..canonical import semantic_hash
@@ -100,6 +101,9 @@ class ModalProvider:
         self.target = target
         self._sdk = sdk
 
+    def restore_handle(self, value: object) -> ModalCall:
+        return ModalCall.decode(value)
+
     def _client(self) -> Any:
         if self._sdk is None:
             from importlib.metadata import PackageNotFoundError, version
@@ -128,7 +132,9 @@ class ModalProvider:
                 "reconcile the recorded attempt with the provider; do not submit again",
             ) from None
 
-    def _call(self, handle: ModalCall) -> Any:
+    def _call(self, handle: ComputeHandle) -> Any:
+        if not isinstance(handle, ModalCall):
+            raise BoundaryError("modal", "foreign_handle")
         if (
             handle.target_id != self.target.target_id
             or handle.request.producer != self.target.producer
@@ -136,7 +142,7 @@ class ModalProvider:
             raise BoundaryError("modal", "foreign_target")
         return self._client().FunctionCall.from_id(handle.call_id)
 
-    def poll(self, handle: ModalCall) -> ComputeReceipt | None:
+    def poll(self, handle: ComputeHandle) -> ComputeReceipt | None:
         try:
             value = self._call(handle).get(timeout=0)
         except TimeoutError:
@@ -154,7 +160,7 @@ class ModalProvider:
         receipt.bind(handle.request)
         return receipt
 
-    def cancel(self, handle: ModalCall) -> None:
+    def cancel(self, handle: ComputeHandle) -> None:
         try:
             self._call(handle).cancel(terminate_containers=True)
         except BoundaryError:

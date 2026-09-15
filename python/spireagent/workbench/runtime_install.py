@@ -15,7 +15,7 @@ from uuid import uuid4
 
 from spireagent.encoding import canonical_json
 from spireagent.json_boundary import BoundaryError, digest
-from stpd.package_identity import (
+from spireagent.package_identity import (
     PackageIdentityError,
     directory_sha256,
     file_sha256,
@@ -25,7 +25,7 @@ from stpd.package_identity import (
 RUNTIME_PACKAGE = "@rsgcsg/sts2-policy-runtime"
 CONNECTOR_PACKAGE = "@rsgcsg/sts2-connector-client"
 ARCHIVE_LIMIT = 32 * 1024 * 1024
-RELEASE_PREFIX = "https://github.com/rsgcsg/STS2-AI-PLATFORM/releases/download/"
+RELEASE_PREFIX = "https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project/releases/download/"
 
 
 class ReleaseRedirect(HTTPRedirectHandler):

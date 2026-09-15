@@ -31,7 +31,10 @@
           "const": "stpd/developer-combination-v1"
         },
         "platform_repository": {
-          "const": "https://github.com/rsgcsg/STS2-AI-PLATFORM.git"
+          "enum": [
+            "https://github.com/rsgcsg/STS2-AI-PLATFORM.git",
+            "https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project.git"
+          ]
         },
         "platform_source_revision": {
           "type": "string",

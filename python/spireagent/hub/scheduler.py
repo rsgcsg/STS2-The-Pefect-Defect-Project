@@ -12,25 +12,19 @@ import json
 import math
 import os
 import threading
-from typing import Any, Protocol
+from typing import Any
 
+from spireagent.compute import ComputeHandle, ComputeProvider
 from spireagent.hub.database import Operations
 from spireagent.json_boundary import BoundaryError
 from spireagent.storage.store import ArtifactStore
 from stpd.cloud_jobs.contracts import ComputeReceipt, ComputeRequest, load_feature_job
 from stpd.cloud_jobs.execution import validate_receipt
-from stpd.cloud_jobs.modal import ModalCall, ModalTarget
 from stpd.workers.contracts import load_training_input
 
 ACTIVE = frozenset({"running", "uncertain", "submission_unknown", "cancelling"})
 
 
-class ComputeProvider(Protocol):
-    target: ModalTarget
-
-    def submit(self, request: ComputeRequest) -> ModalCall: ...
-    def poll(self, handle: ModalCall) -> ComputeReceipt | None: ...
-    def cancel(self, handle: ModalCall) -> None: ...
 
 
 class Scheduler:
@@ -164,7 +158,7 @@ class Scheduler:
         )
         return self._reply("submitted", job, request_id=request.request_id)
 
-    def _cancel(self, row: dict[str, Any], token: str, handle: ModalCall) -> None:
+    def _cancel(self, row: dict[str, Any], token: str, handle: ComputeHandle) -> None:
         job, attempt, fence = row["id"], row["attempt_id"], row["fence"]
         if row["status"] != "cancelling":
             self.operations.cancel(job)
@@ -212,7 +206,7 @@ class Scheduler:
                 "submission_unknown", job, recovery="provider_reconciliation_required"
             )
         request = ComputeRequest.decode(saved["request"])
-        handle = ModalCall.decode(saved["handle"])
+        handle = self.provider.restore_handle(saved["handle"])
         if (
             saved["target_id"] != self.provider.target.target_id
             or handle.target_id != saved["target_id"]

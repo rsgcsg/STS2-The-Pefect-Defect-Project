@@ -229,7 +229,10 @@ def test_receiver_automatically_grants_only_exact_verified_enrollment(api, tmp_p
     row = owner.operations.upload(upload)
     receipt_before = row["receipt"]
     assert row["status"] == "verified"
-    assert router.exports.collection_access([upload])[upload]["availability"] == "available"
+    assert (
+        router.exports.collections.collection_access([upload])[upload]["availability"]
+        == "available"
+    )
     result = router.write(
         "exports", {"schema": REQUEST_SCHEMA, "collections": [upload], "artifacts": []}, member
     )
@@ -256,7 +259,10 @@ def test_receiver_automatically_grants_only_exact_verified_enrollment(api, tmp_p
         owner, upload_id=upload, approved=False, evidence_ref="e" * 64, actor="owner"
     )
     assert owner.associate_verified_bundle(upload, bundle)["availability"] == "not_granted"
-    assert router.exports.collection_access([upload])[upload]["availability"] == "not_granted"
+    assert (
+        router.exports.collections.collection_access([upload])[upload]["availability"]
+        == "not_granted"
+    )
     assert owner.operations.upload(upload)["receipt"] == receipt_before
 
 
@@ -275,11 +281,17 @@ def test_receiver_wrong_device_and_missing_enrollment_do_not_grant(api, tmp_path
             (upload,),
         ).fetchone()[0]
         assert json.loads(detail)["reason"] == "verified_bundle_identity_mismatch"
-    assert router.exports.collection_access([upload])[upload]["availability"] == "not_granted"
+    assert (
+        router.exports.collections.collection_access([upload])[upload]["availability"]
+        == "not_granted"
+    )
     with pytest.raises(BoundaryError, match="verified_bundle_identity_mismatch"):
         owner.associate_verified_bundle(upload, bundle)
     with owner.operations.transaction() as db:
         db.execute("UPDATE uploads SET device='one' WHERE id=?", (upload,))
         db.execute("DELETE FROM collection_enrollments")
     assert owner.associate_verified_bundle(upload, bundle)["reason"] == "enrollment_not_found"
-    assert router.exports.collection_access([upload])[upload]["availability"] == "not_granted"
+    assert (
+        router.exports.collections.collection_access([upload])[upload]["availability"]
+        == "not_granted"
+    )
