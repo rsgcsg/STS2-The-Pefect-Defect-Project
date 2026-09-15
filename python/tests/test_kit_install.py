@@ -31,7 +31,12 @@ def archive(tmp_path: Path, *, extra: str | None = None) -> tuple[Path, str]:
     target = tmp_path / "kit.zip"
     with zipfile.ZipFile(target, "w") as z:
         for name, raw in files.items():
-            z.writestr(name, raw)
+            # ZipInfo normalizes the host separator on Windows. Preserve the
+            # literal archive name so the unsafe-path fixture is OS-independent.
+            entry = zipfile.ZipInfo(name)
+            entry.filename = name
+            entry.orig_filename = name
+            z.writestr(entry, raw)
     return target, install.sha(target.read_bytes())
 
 
