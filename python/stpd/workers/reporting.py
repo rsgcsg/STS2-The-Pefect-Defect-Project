@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from ..artifact_contracts import Manifest
+from spireagent.artifact_contracts import Manifest
 
 
 class RunReporter(Protocol):

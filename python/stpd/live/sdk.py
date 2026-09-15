@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..package_identity import (
+from spireagent.package_identity import (
     PackageIdentityError,
     file_sha256,
     validate_installed_package,
 )
+
 from .s1 import LiveS1Error
 
 

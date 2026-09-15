@@ -4,10 +4,10 @@ from dataclasses import replace
 
 import pytest
 
+from spireagent.json_boundary import BoundaryError, FrozenObject, decode_json, json_bytes
 from stpd.fullrun.contracts import ResearchTransitionV1, SemanticState
 from stpd.fullrun.fixtures import SyntheticSourceAdapter, synthetic_bundle
 from stpd.fullrun.representation import FullRunSerializer, decision_fingerprint
-from stpd.json_boundary import BoundaryError, FrozenObject, decode_json, json_bytes
 
 
 def transition() -> ResearchTransitionV1:

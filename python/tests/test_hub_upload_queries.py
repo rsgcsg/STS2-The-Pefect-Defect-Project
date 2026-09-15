@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from stpd.hub.database import Operations
-from stpd.json_boundary import BoundaryError
+from spireagent.hub.database import Operations
+from spireagent.json_boundary import BoundaryError
 
 
 def test_upload_lists_bound_history_and_filter_before_pagination(tmp_path: Path) -> None:
@@ -58,7 +58,7 @@ def test_pending_upload_selects_one_due_candidate_without_transport_intent(tmp_p
 
 
 def test_incident_projection_exposes_recovery_state(tmp_path: Path) -> None:
-    from stpd.hub.application import HubApplication
+    from spireagent.hub.application import HubApplication
 
     ops = Operations(tmp_path / "ops.sqlite")
     row = ops.create_upload("device", "a" * 64, "b" * 64, {"secret": "private-intent"})
@@ -88,9 +88,9 @@ import importlib.abc
 import sys
 class RejectWorkbench(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
-        if fullname.startswith('stpd.workbench'):
+        if fullname.startswith('spireagent.workbench'):
             raise AssertionError('server must not import developer workbench')
 sys.meta_path.insert(0, RejectWorkbench())
-import stpd.hub.application
+import spireagent.hub.application
 """
     subprocess.run([sys.executable, "-c", program], check=True)

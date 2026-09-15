@@ -6,7 +6,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/rsgcsg/STS2-AI-PLATFORM.git",
+    "url": "git+https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project.git",
     "directory": "components/annotator"
   },
   "type": "module",

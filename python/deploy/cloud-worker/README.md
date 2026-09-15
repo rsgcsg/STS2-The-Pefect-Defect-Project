@@ -1,3 +1,13 @@
+# Cloud image recipes in the unified project
+
+Run the commands below from `python/` of the exact clean project checkout.
+`Dockerfile` accepts `STPD_IMAGE_PROFILE=hub` (cloud/data only) or `worker`
+(all locked training extras, the default). Both record the profile and source in OCI
+labels. Hub does not need Torch on its small VPS. A Hub image is not a training worker.
+An existing predecessor image is a rollback artifact; `refresh.Dockerfile` only accepts
+an already-qualified monorepo image and retains its profile. Build the first monorepo
+candidate with `Dockerfile`, not the refresh shortcut.
+
 # Exact-source disposable compute
 
 The Hub owns queue, attempt, lease/fence, budget and final selection. This adapter only runs
@@ -92,7 +102,7 @@ One app name is derived from the complete target hash, including source, OCI dig
 resources. Modal's free/default lookup routes to a named App's latest version; do not redeploy
 changed code/resources under an old target name. Each invocation verifies target ID and the
 worker verifies actual clean executing-checkout Producer. It invokes the image's locked
-`/opt/stpd/.venv/bin/python -m stpd.cloud_jobs`, not Modal's injected SDK Python for training.
+`/opt/stpd/python/.venv/bin/python -m stpd.cloud_jobs`, not Modal's injected SDK Python for training.
 The local serialized deployment wrapper must also execute from the clean exact target
 Producer. No source-identity check is disabled to support packaging. The wrapper is serialized with
 only standard-library dependencies and primitive target identity, not the local STPD package.

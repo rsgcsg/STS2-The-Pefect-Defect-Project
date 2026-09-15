@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 from sts2_platform_evidence.collection_tool import CollectionTool, digest
 
-from stpd.json_boundary import BoundaryError
-from stpd.workbench import control
+from spireagent import source as control
+from spireagent.json_boundary import BoundaryError
 from tools.package_developer_kit import PinnedFile, package, sha256
 
 
@@ -25,7 +25,7 @@ def inputs(tmp_path, monkeypatch):
         json.dumps(
             {
                 "schema": "stpd/developer-combination-v1",
-                "platform_repository": "https://github.com/rsgcsg/STS2-AI-PLATFORM.git",
+                "platform_repository": "https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project.git",
                 "platform_source_revision": "a" * 40,
                 "evidence_source_revision": "b" * 40,
                 "policy_mode": "existing-adapter-only",
@@ -42,7 +42,7 @@ def inputs(tmp_path, monkeypatch):
     ):
         subprocess.run(["git", *command], cwd=root, check=True, capture_output=True)
     # Exercise the real clean-source checks with an isolated installed-checkout location.
-    monkeypatch.setattr(control, "__file__", str(root / "stpd/workbench/control.py"))
+    monkeypatch.setattr(control, "__file__", str(root / "spireagent/source.py"))
     explicit = {}
     for name in ("mod_dll", "mod_manifest", "platform_bom"):
         path = tmp_path / name

@@ -12,9 +12,9 @@ import json
 import os
 from pathlib import Path
 
+from spireagent.json_boundary import BoundaryError, decode_json
+from spireagent.source import source_identity
 from stpd.cloud_jobs.modal import ModalTarget
-from stpd.json_boundary import BoundaryError, decode_json
-from stpd.workbench.control import source_identity
 
 modal = importlib.import_module("modal")
 target = ModalTarget.decode(decode_json(Path(os.environ["STPD_MODAL_TARGET"]).read_bytes()))
@@ -32,22 +32,39 @@ secrets = [modal.Secret.from_name(target.storage_secret_name)]
 
 
 @app.function(
-    image=image, gpu=None if target.gpu == "none" else target.gpu,
-    timeout=target.timeout_seconds, max_containers=1, min_containers=0,
-    retries=0, secrets=secrets, volumes=volumes, serialized=True,
+    image=image,
+    gpu=None if target.gpu == "none" else target.gpu,
+    timeout=target.timeout_seconds,
+    max_containers=1,
+    min_containers=0,
+    retries=0,
+    secrets=secrets,
+    volumes=volumes,
+    serialized=True,
 )
 def compute(request: dict, target_id: str) -> dict:
     import subprocess
     import tempfile
 
+    if os.environ.get("STPD_IMAGE_PROFILE") != "worker":
+        raise ValueError("qualified_worker_image_required")
     if target_id != deployed_target_id:
         raise ValueError("deployed_target_mismatch")
     with tempfile.TemporaryDirectory(prefix="stpd-request-") as directory:
         request_path = Path(directory) / "request.json"
         request_path.write_text(json.dumps(request), encoding="utf-8")
         result = subprocess.run(
-            ["/opt/stpd/.venv/bin/python", "-m", "stpd.cloud_jobs", "--request", str(request_path)],
-            cwd="/opt/stpd", capture_output=True, text=True, check=False,
+            [
+                "/opt/stpd/python/.venv/bin/python",
+                "-m",
+                "stpd.cloud_jobs",
+                "--request",
+                str(request_path),
+            ],
+            cwd="/opt/stpd/python",
+            capture_output=True,
+            text=True,
+            check=False,
         )
     if result.returncode:
         # Do not forward cloud/sdk stderr, which can contain credential-bearing URLs.

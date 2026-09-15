@@ -59,9 +59,11 @@ class Refresh:
 def refresh(tmp_path: Path) -> Refresh:
     assert shutil.which("uv"), "the repository's supported uv bootstrap is required"
     env = {**os.environ, "UV_PYTHON": sys.executable, "UV_PYTHON_DOWNLOADS": "never"}
-    origin = tmp_path / "origin"
+    origin_repo = tmp_path / "origin"
+    origin_repo.mkdir()
+    origin = origin_repo / "python"
     origin.mkdir()
-    _run(origin, "git", "init")
+    _run(origin_repo, "git", "init")
     _run(origin, "git", "config", "user.name", "Fixture")
     _run(origin, "git", "config", "user.email", "fixture@example.invalid")
     (origin / ".gitignore").write_text(".venv/\n__pycache__/\n")
@@ -83,7 +85,11 @@ def refresh(tmp_path: Path) -> Refresh:
 
     old_head, old_lock = version("1.0")
     clone = tmp_path / "cached-clone"
-    _run(tmp_path, "git", "clone", str(origin), str(clone))
+    _run(tmp_path, "git", "clone", str(origin_repo), str(clone))
+    repository = "https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project.git"
+    _run(clone, "git", "remote", "set-url", "origin", repository)
+    _run(clone, "git", "config", "url." + str(origin_repo) + ".insteadOf", repository)
+    clone = clone / "python"
     _run(clone, "uv", "sync", "--locked", "--all-extras", "--offline", env=env)
     new_head, new_lock = version("2.0")
     recipe = Path(__file__).resolve().parents[1] / "deploy/cloud-worker/refresh.Dockerfile"
@@ -95,6 +101,7 @@ def refresh(tmp_path: Path) -> Refresh:
         env={
             **env,
             "QUALIFIED_WORKER_IMAGE": "registry.invalid/image@sha256:" + "a" * 64,
+            "STPD_IMAGE_PROFILE": "worker",
             "STPD_SOURCE_REVISION": new_head,
             "QUALIFIED_SOURCE_REVISION": old_head,
             "QUALIFIED_LOCK_SHA256": old_lock,
@@ -156,7 +163,7 @@ def test_default_unchanged_lock_refresh_still_runs_offline(refresh: Refresh) -> 
     env = refresh.env
     for name in ("pyproject.toml", "uv.lock"):
         original = _run(
-            refresh.origin, "git", "show", env["QUALIFIED_SOURCE_REVISION"] + ":" + name
+            refresh.origin, "git", "show", env["QUALIFIED_SOURCE_REVISION"] + ":python/" + name
         )
         (refresh.origin / name).write_text(original + "\n")
     (refresh.origin / "README.md").write_text("New source; unchanged dependency lock.\n")

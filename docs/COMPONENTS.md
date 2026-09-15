@@ -1,3 +1,6 @@
+> Project migration: application ownership and active layout are defined in
+> [MONOREPO_MIGRATION](MONOREPO_MIGRATION.md). Game/evidence authority below remains unchanged.
+
 # Components
 
 | Component | Path | Owns | Must not own |
@@ -8,11 +11,12 @@
 | Human Annotator | `components/annotator` | native-human witness, one semantic causal tracker, derived current Decision/canonical projections, records, audit/export/bundle, workstation | action authority, research admission, a second causal adjudicator |
 | Platform Evidence | `components/evidence` | typed verification, content identity, immutable store, transfer/receiver receipts | research eligibility, corpus policy, mutation |
 | Policy Runtime | `components/policy-runtime` | policy process boundary, Human/Shadow/One-Step/Auto, controller lifecycle, stale/Receipt/successor and Agent-run evidence | model inference, legality, native operands, candidate filtering |
-| Workbench | `apps/workbench` | typed live status, explicit filesystem fallback, bounded Policy Runtime commands | gameplay submission, evidence admission, model loading |
+| Platform diagnostic API | `apps/workbench` | typed live status, explicit filesystem fallback, bounded Policy Runtime commands | gameplay submission, evidence admission, model loading |
 | Platform Live UI | `apps/ingame-ui` | in-game Environment/Policy/Human Data/Diagnostics presentation and typed application commands | packaging/deployment, direct BoundAction submission, legality, recording writes |
 | Platform Game Mod | `apps/game-mod` | one manifest/DLL, explicit component initialization, exact build/install/load/rollback provenance | gameplay legality, Human witness semantics, UI domain logic |
 | Platform tools | `tools` | composition, component identity, migration/boundary checks | native operands, policy |
-| STPD | external repository | ResearchTransition, Dataset Views, representation, Qwen, training/evaluation | Host implementation or legality |
+| Project applications | `python/spireagent` | one local/cloud console, members/devices, upload/export, operations and shared artifact infrastructure | legality, recording proof, research labels |
+| STPD | `python/stpd` | ResearchTransition, Dataset Views, representation, Qwen, training/evaluation | Host implementation or legality |
 
 Native Foundation is deliberately compiled into the game-side Connector Host
 and unified Mod rather than published as a second runtime service. Its typed

@@ -320,7 +320,7 @@ root = Path.cwd().resolve()
 paths = sorted({
     Path(module.__file__).resolve().relative_to(root).as_posix()
     for name, module in sys.modules.items()
-    if (name == 'stpd' or name.startswith('stpd.'))
+    if (name in ('stpd', 'spireagent') or name.startswith(('stpd.', 'spireagent.')))
     and getattr(module, '__file__', None)
     and str(Path(module.__file__).resolve()).startswith(str(root))
 })
@@ -332,11 +332,11 @@ print(json.dumps(paths))
     assert set(loaded) == set(ADAPTER_SOURCE_CLOSURE) - {"tools/policy_adapter.py"}
 
 
-def test_v4_preserves_trained_policy_and_versions_public_identity_fix() -> None:
+def test_v5_preserves_trained_policy_and_versions_monorepo_identity() -> None:
     root = DEFAULT_MANIFEST.parents[1]
     current = json.loads(DEFAULT_MANIFEST.read_text())
-    old = json.loads((root / "policy-manifests/s1-policy-adapter-v3.json").read_text())
-    assert DEFAULT_MANIFEST.name == "s1-policy-adapter-v4.json"
+    old = json.loads((root / "policy-manifests/s1-policy-adapter-v4.json").read_text())
+    assert DEFAULT_MANIFEST.name == "s1-policy-adapter-v5.json"
     assert current["manifest_id"] != old["manifest_id"]
     assert current["adapter"]["code_sha256"] == adapter_code_sha256()
     assert "code_digest_scope" not in current["adapter"]
@@ -349,9 +349,9 @@ def test_v4_preserves_trained_policy_and_versions_public_identity_fix() -> None:
 
 def test_installed_public_package_accepts_manifest_ready_and_evidence(tmp_path: Path) -> None:
     """Optional exact-package gate: real public decoder/port/verifier, synthetic CPU model only."""
-    from stpd.workbench.developer import ProjectConfig, combination
-    from stpd.workbench.local_models import LocalModelService
-    from stpd.workbench.runtime_install import validate_runtime_install
+    from spireagent.workbench.developer import ProjectConfig, combination
+    from spireagent.workbench.local_models import LocalModelService
+    from spireagent.workbench.runtime_install import validate_runtime_install
 
     location = os.environ.get("STPD_TEST_POLICY_RUNTIME_NODE_MODULES")
     if not location:

@@ -5,8 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from spireagent.package_identity import PackageIdentityError, directory_sha256
 from stpd.host_runtime_client import activate_host_runtime_client
-from stpd.package_identity import PackageIdentityError, directory_sha256
 
 
 def _package_fixture(root: Path, *, version: str = "1.1.0-rc.7") -> dict[str, str]:

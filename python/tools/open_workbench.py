@@ -24,7 +24,7 @@ def main() -> int:
         return 1
     # Never replace configuration, switch branches, download models or start gameplay.
     commands = [[uv, "sync", "--locked", "--extra", "cloud", "--inexact"], [npm, "ci"]]
-    base = [uv, "run", "--locked", "python", "-m", "stpd.workbench", "project"]
+    base = [uv, "run", "--locked", "python", "-m", "spireagent.workbench", "project"]
     if not args.config.exists():
         commands.append(
             base

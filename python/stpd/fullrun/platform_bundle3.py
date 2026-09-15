@@ -19,8 +19,9 @@ from typing import Any
 
 from sts2_platform_evidence.human_session_bundle_v3 import HumanSessionBundleV3Verifier
 
+from spireagent.json_boundary import BoundaryError, FrozenObject, decode_json
+
 from ..canonical import canonical_json, semantic_hash
-from ..json_boundary import BoundaryError, FrozenObject, decode_json
 from .contracts import (
     AdmittedRead,
     EvidenceLink,

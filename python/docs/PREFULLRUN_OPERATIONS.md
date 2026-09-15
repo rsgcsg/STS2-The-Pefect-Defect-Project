@@ -1,22 +1,22 @@
 # Pre-Full-Run local operations
 
 Use the one supported bootstrap (`uv sync --locked --all-extras`, `npm ci`) from an exact
-clean checkout. `python -m stpd.workbench` is the provider-neutral control surface. Commands
-below use `uv run --locked python -m stpd.workbench` (abbreviated `WB` in prose only).
+clean checkout. `python -m spireagent.workbench` is the provider-neutral control surface. Commands
+below use `uv run --locked python -m spireagent.workbench` (abbreviated `WB` in prose only).
 No permanent service is required. Local reports and stores belong under ignored `.local/`.
 
 ## Prepare and execute an engineering Run
 
 ```bash
-uv run --locked python -m stpd.workbench prepare --fixture --config configs/fullrun/engineering-cpu.json --output .local/prepared.json
+uv run --locked python -m spireagent.workbench prepare --fixture --config configs/fullrun/engineering-cpu.json --output .local/prepared.json
 ```
 
 The returned exact `run_id` freezes Dataset, ModelView, FeatureSet, source, lock, Qwen,
 serializer and complete config. Pass that ID explicitly:
 
 ```bash
-uv run --locked python -m stpd.workbench worker --run <run-id> --stop-after 1
-uv run --locked python -m stpd.workbench worker --run <run-id> --resume <checkpoint-id>
+uv run --locked python -m spireagent.workbench worker --run <run-id> --stop-after 1
+uv run --locked python -m spireagent.workbench worker --run <run-id> --resume <checkpoint-id>
 ```
 
 `--fixture` is explicitly synthetic/FakeQwen. It never produces qualified Human evidence.
@@ -31,13 +31,13 @@ Changing source or lock requires preparing a new TrainingInput; a worker rejects
 ## Artifacts and registry
 
 ```bash
-uv run --locked python -m stpd.workbench show --artifact <id>
-uv run --locked python -m stpd.workbench lineage --artifact <id>
-uv run --locked python -m stpd.workbench registry-rebuild
-uv run --locked python -m stpd.workbench sync
-uv run --locked python -m stpd.workbench doctor
-uv run --locked python -m stpd.workbench push --artifact <id> --other-store <directory-or-s3>
-uv run --locked python -m stpd.workbench pull --artifact <id> --other-store <directory-or-s3>
+uv run --locked python -m spireagent.workbench show --artifact <id>
+uv run --locked python -m spireagent.workbench lineage --artifact <id>
+uv run --locked python -m spireagent.workbench registry-rebuild
+uv run --locked python -m spireagent.workbench sync
+uv run --locked python -m spireagent.workbench doctor
+uv run --locked python -m spireagent.workbench push --artifact <id> --other-store <directory-or-s3>
+uv run --locked python -m spireagent.workbench pull --artifact <id> --other-store <directory-or-s3>
 ```
 
 Push/pull copy exact transitive parent closure and verified payloads, then publish manifests.
@@ -55,9 +55,9 @@ SDK provider chain; environment credentials may use `AWS_ACCESS_KEY_ID`,
 launch packets. No vendor changes training semantics.
 
 ```bash
-uv run --locked python -m stpd.workbench doctor --store s3 --smoke
-uv run --locked python -m stpd.workbench push --artifact <run-id> --other-store s3
-uv run --locked python -m stpd.workbench launch --run <run-id> --output .local/launch.json
+uv run --locked python -m spireagent.workbench doctor --store s3 --smoke
+uv run --locked python -m spireagent.workbench push --artifact <run-id> --other-store s3
+uv run --locked python -m spireagent.workbench launch --run <run-id> --output .local/launch.json
 ```
 
 `doctor --smoke` writes a unique tiny immutable probe and tests identical/conflicting
@@ -75,10 +75,10 @@ Resume using the exact durable checkpoint ID; do not rename checkpoints or selec
 
 ```bash
 uv run --locked python tools/project.py closeout --base <exact-base-sha>
-uv run --locked python -m stpd.workbench e2e --output .local/cpu-e2e.json
-uv run --locked python -m stpd.workbench analysis --output .local/analysis.json
-uv run --locked python -m stpd.workbench dashboard --output .local/dashboard.html
-uv run --locked python -m stpd.workbench readiness --evidence .local/qualification.json
+uv run --locked python -m spireagent.workbench e2e --output .local/cpu-e2e.json
+uv run --locked python -m spireagent.workbench analysis --output .local/analysis.json
+uv run --locked python -m spireagent.workbench dashboard --output .local/dashboard.html
+uv run --locked python -m spireagent.workbench readiness --evidence .local/qualification.json
 ```
 
 The deterministic read-only readiness command requires an exact-source reviewed qualification

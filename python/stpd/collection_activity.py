@@ -7,7 +7,14 @@ import math
 import re
 from typing import Any
 
-from .json_boundary import BoundaryError, decode_json, digest, json_bytes, object_fields, text
+from spireagent.json_boundary import (
+    BoundaryError,
+    decode_json,
+    digest,
+    json_bytes,
+    object_fields,
+    text,
+)
 
 TEMPLATE_SCHEMA = "stpd/collection-activity-v1"
 COLLECTION_SETTINGS_SCHEMA = "stpd/collection-activity-v2"

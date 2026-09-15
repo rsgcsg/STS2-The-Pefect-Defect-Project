@@ -25,13 +25,16 @@ from .s1 import (
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = ROOT / "configs/v0/experiments/s1-human-combat-live-v2.json"
-DEFAULT_MANIFEST = ROOT / "policy-manifests" / "s1-policy-adapter-v4.json"
+DEFAULT_MANIFEST = ROOT / "policy-manifests" / "s1-policy-adapter-v5.json"
 MANIFEST_SCHEMA = "sts2.policy-runtime/policy-manifest-1"
 PORT_SCHEMA = "sts2.policy-runtime/policy-port-1"
 ADAPTER_PROTOCOL = "sts2.policy-runtime/decision-only-ndjson-1"
 ADAPTER_ENTRYPOINT = (ROOT / "tools" / "policy_adapter.py").resolve()
 ADAPTER_CODE_DIGEST_SCOPE = "runtime-import-closure-v1"
 ADAPTER_SOURCE_CLOSURE = (
+    "spireagent/__init__.py",
+    "spireagent/encoding.py",
+    "spireagent/package_identity.py",
     "stpd/__init__.py",
     "stpd/canonical.py",
     "stpd/contracts.py",
@@ -51,7 +54,6 @@ ADAPTER_SOURCE_CLOSURE = (
     "stpd/models/s2_sdt.py",
     "stpd/models/s2_simple.py",
     "stpd/models/scheme1.py",
-    "stpd/package_identity.py",
     "stpd/policy/__init__.py",
     "stpd/policy/adapter.py",
     "stpd/policy/s1.py",

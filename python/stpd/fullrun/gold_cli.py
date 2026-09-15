@@ -6,8 +6,10 @@ import argparse
 import json
 from pathlib import Path
 
-from ..json_boundary import BoundaryError, array, decode_json
-from ..workbench.control import open_store, source_identity
+from spireagent.json_boundary import BoundaryError, array, decode_json
+from spireagent.source import source_identity
+from spireagent.storage.config import open_store
+
 from .campaign import default_harness_config
 from .gold_store import decode_annotation, gold_report, load_tasks, publish_labels, publish_tasks
 

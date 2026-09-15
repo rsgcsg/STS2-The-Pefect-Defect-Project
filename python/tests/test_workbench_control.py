@@ -7,10 +7,10 @@ import pytest
 from test_artifact_store_v1 import PRODUCER
 from test_fullrun_worker import training
 
-from stpd.json_boundary import BoundaryError
-from stpd.workbench.__main__ import main
-from stpd.workbench.control import doctor, launch_packet
-from stpd.workbench.readiness import ENGINEERING, EXTERNAL, readiness
+from spireagent.json_boundary import BoundaryError
+from spireagent.workbench.__main__ import main
+from spireagent.workbench.control import doctor, launch_packet
+from spireagent.workbench.readiness import ENGINEERING, EXTERNAL, readiness
 from stpd.workers.contracts import prepare_run
 
 
@@ -27,7 +27,7 @@ def test_store_doctor_and_launch_do_not_embed_credentials(tmp_path: Path, monkey
 
 
 def test_readiness_requires_exact_complete_receipts(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr("stpd.workbench.readiness.source_identity", lambda root: PRODUCER)
+    monkeypatch.setattr("spireagent.workbench.readiness.source_identity", lambda root: PRODUCER)
     assert readiness(tmp_path)["verdict"] == "EVIDENCE_REQUIRED"
     evidence = {
         "schema": "stpd/prefullrun-qualification-v1",

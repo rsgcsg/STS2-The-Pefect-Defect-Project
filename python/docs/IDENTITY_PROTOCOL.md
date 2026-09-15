@@ -197,7 +197,7 @@ Whole-host recovery includes the separately retained identity master key and dep
 A fresh explicit bootstrap's one-time pending-admin marker never substitutes for an existing
 site's administrator. Browser activation clears it; preflight cannot manufacture that event.
 
-`python -m stpd.hub rotate-device --device EXACT_DEVICE_ID` reads the replacement credential
+`python -m spireagent.hub rotate-device --device EXACT_DEVICE_ID` reads the replacement credential
 only from `STPD_DEVICE_TOKEN`. This explicit operator operation replaces the credential hash,
 restores device access, invalidates the old credential and appends an audit event, preserving
 ownership and all old upload identities. It cannot repair an existing Platform outbox incident;

@@ -1,7 +1,10 @@
 # Project workflow: download, collect, view and maintain
 
-This is the default developer workflow for the whole project. The B pipeline is its current
-implementation: one Platform game Mod, one STPD workbench, one protected cloud portal and
+This is the default developer workflow for the whole project.
+All Python commands below run from `python/` of the one project checkout; native
+`npm run game-mod:*` commands run at its repository root. Download/checkout once.
+The monorepo candidate is not a qualified release until its own acceptance report passes. The B pipeline is its current
+implementation: one Platform game Mod, one project workbench, one protected cloud portal and
 separately downloaded models. [B operations](CLOUD_PIPELINE_B.md) owns data/worker commands;
 the [Hub runbook](../deploy/hub/RUNBOOK.md) owns deployment and recovery commands;
 the [console guide](PROJECT_CONSOLE.md) explains the screens and account/device behavior.
@@ -23,7 +26,7 @@ production rollout. [ADR-0006](adr/0006-project-members-and-local-models.md) rec
 
 | When | What to do | What confirms success |
 |---|---|---|
-| first install | obtain the approved Mod/tool and exact STPD checkout; run the launcher below | local workbench opens; project doctor passes |
+| first install | obtain the approved Mod/tool and exact project checkout; run the launcher below | local workbench opens; project doctor passes |
 | first connection | log in with an invited email; then separately compare the pairing code and approve this computer | the profile is visible immediately after verified login; the same named computer appears after approval |
 | before first recording | open **录制与上传**, confirm daily Human/upload/project-sharing consent, prepare local files, bind with the game closed, then launch and enable uploads | persisted setup, current native root/identity check and delivery doctor pass; each is a separate stage |
 | each collection | reopen the same workbench configuration, record in the game, press Recorder **Close** | collection detail reaches **云端已验收** with an exact remote receipt |
@@ -36,19 +39,18 @@ research gates below remain explicit, with compute launch budget zero until auth
 
 ## Download and connect once
 
-1. Choose the reviewed release from [STPD Releases](https://github.com/rsgcsg/STS2-The-Perfect-Defect/releases)
-   and its linked [Platform release](https://github.com/rsgcsg/STS2-AI-PLATFORM/releases), or an
+1. Choose the reviewed release from [Project Releases](https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project/releases), or an
    explicitly non-stable developer combination. Verify its
-   published hashes and supported operating system. Obtain STPD at the release's exact Git
+   published hashes and supported operating system. Obtain this project at the release's exact Git
    commit, the single qualified Platform Mod, and the entire fixed collection-tool directory.
    Use an exact Git checkout for this developer distribution; a generated source ZIP does not
    carry the checkout identity used by the reviewed workflow.
 2. Install Git, Python 3.11/uv, Node 20+ and the collection tool's declared .NET runtime once.
    The game must already be owned and installed. Install the Mod using the Platform release's
    exact install/load instructions; do not copy game files from another developer. Initial native
-   installation is operator-assisted using a retained exact Platform checkout; see
+   installation is operator-assisted using a same exact project checkout; see
    [developer kit installation](DEVELOPER_KIT_INSTALL.md). The kit has no standalone installer.
-3. From that clean STPD checkout, open the workbench. Use the same explicit config path in
+3. From that clean project checkout, in its `python/` directory, open the workbench. Use the same explicit config path in
    all commands; the launcher's user-state default and the lower-level CLI default differ.
    The launcher normally uses `%LOCALAPPDATA%/spireagent/workbench/project.json` on Windows,
    or `~/.local/share/spireagent/workbench/project.json` elsewhere. Use the resolved absolute
@@ -97,10 +99,10 @@ closing its browser tab is insufficient. Use the same private configuration crea
 launcher and the release's independently approved tool ID:
 
 ```bash
-uv run --locked python -m stpd.workbench project stop --config /ABS/project.json
-uv run --locked python -m stpd.workbench project collection-tool --config /ABS/project.json \
+uv run --locked python -m spireagent.workbench project stop --config /ABS/project.json
+uv run --locked python -m spireagent.workbench project collection-tool --config /ABS/project.json \
   --tool-directory /ABS/kit/collection-tool --tool-release-id EXACT_APPROVED_ID
-uv run --locked python -m stpd.workbench project open --config /ABS/project.json
+uv run --locked python -m spireagent.workbench project open --config /ABS/project.json
 ```
 
 Keep Node 20+ and the tool's declared .NET runtime on the local PATH. Register the complete
@@ -204,7 +206,7 @@ the deployed source; a Git merge alone does not update the running service or co
 
 ## Build the reviewed developer download
 
-Use the maintained offline builder from the clean exact STPD checkout. Obtain the Mod,
+Use the maintained offline builder from the clean exact project checkout. Obtain the Mod,
 manifest, current distribution BOM and fixed tool from the independently reviewed Platform
 release. Expected hashes/release ID come from that release's trusted inventory; do not simply
 trust a manifest downloaded beside unknown bytes. The operator checks compatibility and OS
@@ -287,12 +289,12 @@ Roll back with the recorded compatible source/tool/config pair, never by rewriti
 For an STPD configuration/combination refresh, stop first and preserve every configured value:
 
 ```bash
-uv run --locked python -m stpd.workbench project stop --config /ABS/project.json
-uv run --locked python -m stpd.workbench project setup --replace-config --config /ABS/project.json \
+uv run --locked python -m spireagent.workbench project stop --config /ABS/project.json
+uv run --locked python -m spireagent.workbench project setup --replace-config --config /ABS/project.json \
   --state-dir /ABS/existing-workbench-state --hub-url https://hub.2-fire-2.com \
   --delivery-config /ABS/existing-delivery.json --platform-url http://127.0.0.1:PORT
-uv run --locked python -m stpd.workbench project doctor --config /ABS/project.json
-uv run --locked python -m stpd.workbench project open --config /ABS/project.json
+uv run --locked python -m spireagent.workbench project doctor --config /ABS/project.json
+uv run --locked python -m spireagent.workbench project open --config /ABS/project.json
 ```
 
 Use the actual existing delivery path and platform URL; omit an option only if it was deliberately
@@ -317,7 +319,7 @@ upgrade when the game version changes. Legacy v1 constraints remain unchanged.
 2. Use the existing enrollment ID from the collection settings' technical details. Prepare:
 
    ```bash
-   uv run --locked python -m stpd.workbench project collection-upgrade --config /ABS/project.json \
+   uv run --locked python -m spireagent.workbench project collection-upgrade --config /ABS/project.json \
      --enrollment-id EXISTING_ID --tool-release-id NEW_APPROVED_ID --phase prepare \
      --game-directory /ABS/Steam/GameDirectory
    ```
@@ -334,9 +336,9 @@ upgrade when the game version changes. Legacy v1 constraints remain unchanged.
 4. Activate the exact prepared generation:
 
    ```bash
-   uv run --locked python -m stpd.workbench project collection-upgrade --config /ABS/project.json \
+   uv run --locked python -m spireagent.workbench project collection-upgrade --config /ABS/project.json \
      --enrollment-id EXISTING_ID --tool-release-id NEW_APPROVED_ID --phase activate
-   uv run --locked python -m stpd.workbench project open --config /ABS/project.json
+   uv run --locked python -m spireagent.workbench project open --config /ABS/project.json
    ```
 
    Activation rechecks old completion, the unchanged proposal/config, fresh new roots, current

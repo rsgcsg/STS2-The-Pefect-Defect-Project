@@ -7,11 +7,16 @@ ARG STPD_SOURCE_REVISION
 ARG QUALIFIED_SOURCE_REVISION=
 ARG QUALIFIED_LOCK_SHA256=
 ARG EXPECTED_NEW_LOCK_SHA256=
-WORKDIR /opt/stpd
+WORKDIR /opt/stpd/python
 RUN set -eu; \
     printf '%s' "$QUALIFIED_WORKER_IMAGE" | grep -Eq '@sha256:[0-9a-f]{64}$'; \
     printf '%s' "$STPD_SOURCE_REVISION" | grep -Eq '^[0-9a-f]{40}$'; \
     test -z "$(git status --porcelain)"; \
+    case "$STPD_IMAGE_PROFILE" in \
+      hub) stpd_refresh_extras="--extra cloud --extra research" ;; \
+      worker) stpd_refresh_extras="--all-extras" ;; \
+      *) echo "Qualified monorepo image profile required" >&2; exit 1 ;; \
+    esac; \
     stpd_refresh_lock=$(sha256sum uv.lock | cut -d ' ' -f 1); \
     if test -n "$EXPECTED_NEW_LOCK_SHA256"; then \
         printf '%s' "$QUALIFIED_SOURCE_REVISION" | grep -Eq '^[0-9a-f]{40}$'; \
@@ -20,14 +25,15 @@ RUN set -eu; \
         test "$(git rev-parse HEAD)" = "$QUALIFIED_SOURCE_REVISION"; \
         test "$stpd_refresh_lock" = "$QUALIFIED_LOCK_SHA256"; \
     fi; \
+    test "$(git config --get remote.origin.url)" = "https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project.git"; \
     git fetch origin "$STPD_SOURCE_REVISION"; \
     git checkout --detach "$STPD_SOURCE_REVISION"; \
     if test -n "$EXPECTED_NEW_LOCK_SHA256"; then \
         test "$(sha256sum uv.lock | cut -d ' ' -f 1)" = "$EXPECTED_NEW_LOCK_SHA256"; \
-        uv sync --locked --all-extras; \
+        uv sync --locked $stpd_refresh_extras; \
     else \
         test "$stpd_refresh_lock" = "$(sha256sum uv.lock | cut -d ' ' -f 1)"; \
-        uv sync --locked --all-extras --offline; \
+        uv sync --locked $stpd_refresh_extras --offline; \
     fi; \
     uv pip check --python .venv/bin/python; \
     test "$(git rev-parse HEAD)" = "$STPD_SOURCE_REVISION"; \

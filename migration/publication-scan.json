@@ -1,0 +1,59 @@
+{
+  "scanner": "gitleaks 8.30.1",
+  "scope": "6f2e3c11360e1d0c4b3f5bb52c739972061f36b9",
+  "findings": [
+    {
+      "RuleID": "generic-api-key",
+      "File": "deploy/hub/preflight.py",
+      "StartLine": 32,
+      "Commit": "78896eee009e39933b5a1548da3567eda94bad6b",
+      "classification": "environment_variable_name_list"
+    },
+    {
+      "RuleID": "generic-api-key",
+      "File": "deploy/hub/preflight.py",
+      "StartLine": 31,
+      "Commit": "39b7b9572e935331657874d7a9e1ec68ef8d0a40",
+      "classification": "environment_variable_name_list"
+    },
+    {
+      "RuleID": "generic-api-key",
+      "File": "deploy/hub/maintenance.py",
+      "StartLine": 69,
+      "Commit": "265b95967b5ba7165ad63e29951f2ecc99e182a1",
+      "classification": "environment_variable_name_list"
+    },
+    {
+      "RuleID": "generic-api-key",
+      "File": "deploy/hub/preflight.py",
+      "StartLine": 28,
+      "Commit": "a81fc0f325c81af1018df08c9332042e90fcd9a7",
+      "classification": "environment_variable_name_list"
+    },
+    {
+      "RuleID": "generic-api-key",
+      "File": "docs/QWEN_L2_OPERATIONS.md",
+      "StartLine": 12,
+      "Commit": "a95ab022b8d81e6e697e8784893ece9c5eb1f59d",
+      "classification": "public_revision_or_content_digest"
+    },
+    {
+      "RuleID": "generic-api-key",
+      "File": "configs/v0/qwen/qwen3-0.6b-base-l1.json",
+      "StartLine": 45,
+      "Commit": "acf867c7c3e9bed27f389956b58056f3acab674a",
+      "classification": "public_revision_or_content_digest"
+    },
+    {
+      "RuleID": "generic-api-key",
+      "File": "configs/v0/qwen/qwen3-0.6b-base-l1.json",
+      "StartLine": 60,
+      "Commit": "abf55af01774e6f13f1b8b6df65153a3c778efc9",
+      "classification": "public_revision_or_content_digest"
+    }
+  ],
+  "large_blobs_over_5mb": 0,
+  "non_claims": [
+    "automated scan is not proof of absence of all sensitive content"
+  ]
+}

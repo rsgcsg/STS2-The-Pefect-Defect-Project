@@ -5,8 +5,8 @@ from __future__ import annotations
 import io
 from typing import Any
 
-from ..artifact_contracts import Manifest, Parent, Producer
-from ..json_boundary import (
+from spireagent.artifact_contracts import Manifest, Parent, Producer
+from spireagent.json_boundary import (
     BoundaryError,
     FrozenObject,
     array,
@@ -14,7 +14,8 @@ from ..json_boundary import (
     json_bytes,
     object_fields,
 )
-from ..storage.store import ArtifactStore
+from spireagent.storage.store import ArtifactStore
+
 from .data import load_dataset
 from .gold import (
     GOLD_ANNOTATION_SCHEMA,

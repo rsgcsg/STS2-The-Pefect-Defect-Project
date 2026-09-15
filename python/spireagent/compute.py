@@ -1,0 +1,39 @@
+"""Provider-neutral scheduling seam; task meaning remains with its worker contract."""
+from typing import Any, Protocol
+
+from spireagent.artifact_contracts import Producer
+from stpd.cloud_jobs.contracts import ComputeReceipt, ComputeRequest
+
+
+class ComputeTarget(Protocol):
+    @property
+    def producer(self) -> Producer: ...
+
+    @property
+    def timeout_seconds(self) -> int: ...
+
+    @property
+    def target_id(self) -> str: ...
+
+
+class ComputeHandle(Protocol):
+    @property
+    def call_id(self) -> str: ...
+
+    @property
+    def target_id(self) -> str: ...
+
+    @property
+    def request(self) -> ComputeRequest: ...
+
+    def to_dict(self) -> dict[str, Any]: ...
+
+
+class ComputeProvider(Protocol):
+    @property
+    def target(self) -> ComputeTarget: ...
+
+    def submit(self, request: ComputeRequest) -> ComputeHandle: ...
+    def restore_handle(self, value: object) -> ComputeHandle: ...
+    def poll(self, handle: ComputeHandle) -> ComputeReceipt | None: ...
+    def cancel(self, handle: ComputeHandle) -> None: ...

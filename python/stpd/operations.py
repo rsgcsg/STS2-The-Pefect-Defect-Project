@@ -11,8 +11,9 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from spireagent.package_identity import validate_installed_package
+
 from .host_runtime_client import load_host_runtime_pin
-from .package_identity import validate_installed_package
 from .qwen.l1 import inspect_cache, is_weight_file, load_pin
 
 

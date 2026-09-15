@@ -1,8 +1,8 @@
 # Initial installation of a developer kit
 
 This is an operator-assisted macOS installation using the existing Platform lifecycle.
-The kit is not a standalone installer. The operator retains a clean, exact Platform checkout;
-the member uses STPD and the fixed tool for everyday recording. Do not build native source
+The kit is not a standalone installer. One clean, exact project checkout supplies the installer and Python workbench.
+Use the repository root for native commands and python/ for collector commands. Do not build native source
 as part of installing a published binary kit. Windows/Linux portable CI is not proof that
 this native installation procedure works there. Consult the release's supported game/OS tuple.
 
@@ -10,16 +10,16 @@ this native installation procedure works there. Consult the release's supported 
 
 1. Verify the ZIP SHA256 against its independently approved release receipt before extraction.
    Read `combination.json`, the release's exact refs, game identity, qualification and rollback.
-   Obtain clean STPD and Platform checkouts at those refs, in durable directories.
+   Obtain the project checkout at the release commit in one durable directory.
 2. Install Git, Python 3.11/uv, Node 20+ and the fixed tool's declared .NET runtime.
    The member owns a local game installation; game files are never distributed in the kit.
 3. Fully close the game and stop the existing workbench. Preserve its configuration, complete
    old tool, raw recordings and outbox. This installation does not migrate a queue.
-4. In the clean Platform checkout run `npm ci`. Compare the tracked
+4. In the clean project checkout run `npm ci`. Compare the tracked
    `apps/game-mod/mod_manifest.json` to the kit's `mod/STS2_PLATFORM.json`; stop on differences.
    Stage only these ignored outputs, creating their parent directories if necessary:
 
-| Kit file | Destination within the retained Platform checkout |
+| Kit file | Destination within the retained project checkout |
 |---|---|
 | `mod/STS2_PLATFORM.dll` | `apps/game-mod/bin/Release/net9.0/STS2_PLATFORM.dll` |
 | `collection-tool/game-mod/build-provenance.json` | `apps/game-mod/bin/Release/net9.0/build-provenance.json` |
@@ -38,7 +38,7 @@ is also required. A mismatch requires compatibility qualification, not a forced 
 
 ## Deploy and cold-load through the existing owner
 
-From that exact Platform checkout, run these commands separately and retain their receipts:
+From that exact project checkout, run these commands separately and retain their receipts:
 
 ```bash
 npm run game-mod:doctor
@@ -56,8 +56,8 @@ admission. Do not run a build command here: it would replace the supplied releas
 On first macOS installation, a Human may need to enable Mods and exactly `STS2_PLATFORM` in
 the native game interface, then fully close and repeat launch/verify-loaded. The lifecycle
 does not edit macOS Mod-enable settings. Do not invent a settings file or remove unrelated Mods.
-Initial Recorder status storage may point inside the retained Platform checkout; do not delete
-or relocate that checkout after installation. Later STPD binding preserves this status path.
+Initial Recorder status storage may point inside the retained project checkout; do not delete
+or relocate that checkout after installation. Later workbench binding preserves this status path.
 
 ## Continue collection and retain recovery
 
@@ -66,7 +66,7 @@ workbench is stopped, reopen the same private profile, confirm daily consent, pr
 with the game closed, cold-load, check the current root and explicitly activate uploads.
 The member's first real Close-to-receipt check is separate from installation evidence.
 
-For rollback, stop delivery and close the game. From the same retained Platform checkout and
+For rollback, stop delivery and close the game. From the same retained project checkout and
 game directory run `npm run game-mod:rollback`. It uses the recorded installed provenance and
 backup; it does not accept an arbitrary backup path. Preserve old/new receipts. Cold-load the
 restored compatible pair with its owning checkout and verify it. A first install may roll back

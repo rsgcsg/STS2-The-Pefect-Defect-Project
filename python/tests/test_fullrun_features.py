@@ -7,7 +7,8 @@ from pathlib import Path
 import pytest
 from test_artifact_store_v1 import PRODUCER, store
 
-from stpd.artifact_contracts import Manifest
+from spireagent.artifact_contracts import Manifest
+from spireagent.json_boundary import BoundaryError, FrozenObject, json_bytes
 from stpd.fullrun.data import admit, publish_dataset, publish_source
 from stpd.fullrun.features import (
     compile_features,
@@ -19,7 +20,6 @@ from stpd.fullrun.features import (
 )
 from stpd.fullrun.fixtures import SyntheticSourceAdapter, synthetic_bundle
 from stpd.fullrun.representation import FullRunSerializer
-from stpd.json_boundary import BoundaryError, FrozenObject, json_bytes
 
 
 def prepared(tmp_path: Path):

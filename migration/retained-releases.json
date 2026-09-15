@@ -1,0 +1,29 @@
+{
+  "schema": "spireagent/retained-release-mirror-1",
+  "source_repository": "rsgcsg/STS2-AI-PLATFORM",
+  "destination_repository": "rsgcsg/STS2-The-Pefect-Defect-Project",
+  "release": "compat/platform-import-v1",
+  "identity_policy": "identical historical bytes; no new source/build/runtime qualification",
+  "assets": [
+    {
+      "source_tag": "consumer-sdk/v1.1.0-rc.1",
+      "name": "rsgcsg-sts2-connector-client-1.1.0-rc.1.tgz",
+      "sha256": "4484b4bec90f43c29c108fe5444e419c8a81164fb4b246ac3212c51960db1ed3"
+    },
+    {
+      "source_tag": "host-runtime/v1.1.0-rc.7",
+      "name": "rsgcsg-sts2-host-runtime-1.1.0-rc.7.tgz",
+      "sha256": "b77fb7956caabb3b43ac03c0aee78c9918ce852cee819c6ca44cf77671743f20"
+    },
+    {
+      "source_tag": "policy-runtime/v0.1.0-rc.3",
+      "name": "rsgcsg-sts2-policy-runtime-0.1.0-rc.3.tgz",
+      "sha256": "48bf27ad931667a6c0bcb34dffc15a80de536c72e8ca4d3fde6fa973fdafa651"
+    },
+    {
+      "source_tag": "connector/v1.2.0-rc.5",
+      "name": "STS2-Connector-1.2.0-rc.5-host.tar.gz",
+      "sha256": "a0bc1985995806a93498949b213972504d73c2f4b8d52f299c1356ecec34b908"
+    }
+  ]
+}

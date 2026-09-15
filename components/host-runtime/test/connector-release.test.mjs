@@ -6,7 +6,7 @@ import {
 } from "../src/connector-release.mjs";
 
 test("Platform Connector release pins archive and native artifact identity", () => {
-  assert.match(CONNECTOR_RELEASE.baseUrl, /rsgcsg\/STS2-AI-PLATFORM\/releases\/download\/connector\//u);
+  assert.match(CONNECTOR_RELEASE.baseUrl, /rsgcsg\/STS2-The-Pefect-Defect-Project\/releases\/download\/compat\/platform-import-v1/u);
   assert.equal(CONNECTOR_RELEASE.version, "1.2.0-rc.5");
   assert.doesNotThrow(() => assertConnectorReleaseIdentity({
     source_revision: CONNECTOR_RELEASE.sourceRevision,

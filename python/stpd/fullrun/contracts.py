@@ -5,8 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from ..canonical import semantic_hash
-from ..json_boundary import (
+from spireagent.json_boundary import (
     BoundaryError,
     FrozenObject,
     array,
@@ -15,6 +14,8 @@ from ..json_boundary import (
     text,
     unsigned,
 )
+
+from ..canonical import semantic_hash
 
 TRANSITION_SCHEMA = "stpd/research-transition-v1"
 TRANSITION_SCHEMA_V2 = "stpd/research-transition-v2"

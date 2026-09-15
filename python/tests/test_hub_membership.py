@@ -10,10 +10,10 @@ import pytest
 from test_hub_console import ISSUER
 from test_hub_console import signed as signed
 
-from stpd.hub.database import CURRENT_SCHEMA, Operations, token_hash
-from stpd.hub.identity import IdentityService
-from stpd.hub.membership import MembershipService
-from stpd.json_boundary import BoundaryError
+from spireagent.hub.database import CURRENT_SCHEMA, Operations, token_hash
+from spireagent.hub.identity import IdentityService
+from spireagent.hub.membership import MembershipService
+from spireagent.json_boundary import BoundaryError
 
 
 @pytest.fixture

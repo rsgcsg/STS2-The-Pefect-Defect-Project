@@ -6,11 +6,11 @@ import pytest
 from test_artifact_store_v1 import PRODUCER
 from test_fullrun_worker import training
 
-from stpd.artifact_contracts import Manifest
-from stpd.json_boundary import BoundaryError, FrozenObject
-from stpd.storage.registry import SQLiteRegistry, sync_registry
-from stpd.workbench.analysis import analyze
-from stpd.workbench.dashboard import SECTIONS, project, render_html
+from spireagent.artifact_contracts import Manifest
+from spireagent.json_boundary import BoundaryError, FrozenObject
+from spireagent.storage.registry import SQLiteRegistry, sync_registry
+from spireagent.workbench.analysis import analyze
+from spireagent.workbench.dashboard import SECTIONS, project, render_html
 from stpd.workers.contracts import prepare_run
 from stpd.workers.worker import execute
 

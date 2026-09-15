@@ -57,13 +57,13 @@ private config/state paths throughout:
 ```bash
 uv sync --locked --extra cloud
 npm ci
-uv run --locked python -m stpd.workbench project setup --config /ABS/project.json \
+uv run --locked python -m spireagent.workbench project setup --config /ABS/project.json \
   --state-dir /ABS/workbench-state --hub-url https://HUB \
   --delivery-config /ABS/delivery.json --platform-url http://127.0.0.1:PORT
-uv run --locked python -m stpd.workbench project doctor --config /ABS/project.json
-uv run --locked python -m stpd.workbench project open --config /ABS/project.json
-uv run --locked python -m stpd.workbench project status --config /ABS/project.json
-uv run --locked python -m stpd.workbench project stop --config /ABS/project.json
+uv run --locked python -m spireagent.workbench project doctor --config /ABS/project.json
+uv run --locked python -m spireagent.workbench project open --config /ABS/project.json
+uv run --locked python -m spireagent.workbench project status --config /ABS/project.json
+uv run --locked python -m spireagent.workbench project stop --config /ABS/project.json
 ```
 
 The Platform-owned delivery config is documented in its Evidence DELIVERY.md. It binds the
@@ -99,14 +99,14 @@ inside that deployment; a different state directory would address a different da
 Local development uses a local store and loopback staging instead.
 
 ```bash
-python -m stpd.hub register --device developer-01
-python -m stpd.hub serve --budget-units 0
-python -m stpd.hub dataset --received RECEIVED_ID_1 --received RECEIVED_ID_2 --seed 0
-python -m stpd.hub feature-job --input-id DATASET_ID --spec /ABS/feature-spec.json
-python -m stpd.hub enqueue --kind feature --input-id FEATURE_JOB_ID \
+python -m spireagent.hub register --device developer-01
+python -m spireagent.hub serve --budget-units 0
+python -m spireagent.hub dataset --received RECEIVED_ID_1 --received RECEIVED_ID_2 --seed 0
+python -m spireagent.hub feature-job --input-id DATASET_ID --spec /ABS/feature-spec.json
+python -m spireagent.hub enqueue --kind feature --input-id FEATURE_JOB_ID \
   --request-key FEATURE_REQUEST --max-seconds 300 --reserved-units 1 --budget-units 2
-python -m stpd.hub prepare-run --input-id FEATURE_JOB_ID --feature-id FEATURE_SET_ID
-python -m stpd.hub enqueue --kind training --input-id RUN_ID \
+python -m spireagent.hub prepare-run --input-id FEATURE_JOB_ID --feature-id FEATURE_SET_ID
+python -m spireagent.hub enqueue --kind training --input-id RUN_ID \
   --request-key TRAIN_REQUEST --max-seconds 300 --reserved-units 1 --budget-units 2
 ```
 
@@ -121,7 +121,7 @@ The operator must also set provider spend limits and an approved timeout/GPU/con
 ## Failure and maintenance
 
 - Operations SQLite is authoritative mutable state; Registry/DuckDB are rebuildable views.
-  Back up SQLite using `python -m stpd.hub backup --backup /ABS/new.sqlite`. The consistent
+  Back up SQLite using `python -m spireagent.hub backup --backup /ABS/new.sqlite`. The consistent
   backup restores paused. Do not copy only a live WAL database file, delete operational state
   to clear jobs, or run a restored Hub beside the original against the same external work.
 - Submission uncertainty never resubmits. Lease expiry never means a worker stopped.

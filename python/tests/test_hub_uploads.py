@@ -12,12 +12,12 @@ from unittest.mock import patch
 import pytest
 from sts2_platform_evidence import DirectoryTransferManifest
 
-from stpd.artifact_contracts import Producer
-from stpd.hub.database import Operations
-from stpd.hub.uploads import LocalStaging, UploadService
-from stpd.json_boundary import BoundaryError
-from stpd.storage.local import LocalBlobStore
-from stpd.storage.store import ManifestArtifactStore
+from spireagent.artifact_contracts import Producer
+from spireagent.hub.database import Operations
+from spireagent.hub.uploads import LocalStaging, UploadService
+from spireagent.json_boundary import BoundaryError
+from spireagent.storage.local import LocalBlobStore
+from spireagent.storage.store import ManifestArtifactStore
 
 
 def fixture(tmp_path: Path) -> tuple[UploadService, dict, bytes]:
@@ -70,7 +70,7 @@ def test_missing_object_does_not_starve_and_owner_findings_are_preserved(tmp_pat
     owner_result = SimpleNamespace(
         passed=False, findings=[SimpleNamespace(code="exact_owner_failure")]
     )
-    with patch("stpd.hub.uploads.verify_human_session_bundle", return_value=owner_result):
+    with patch("spireagent.hub.uploads.verify_human_session_bundle", return_value=owner_result):
         assert service.verify_pending() == 2
     assert service.operations.upload(missing)["status"] == "verification_pending"
     assert service.operations.upload(missing)["verify_attempts"] == 1
@@ -89,7 +89,7 @@ def test_disk_failure_is_not_semantic_quarantine(tmp_path: Path) -> None:
     assert isinstance(service.staging, LocalStaging)
     service.staging.write(upload_id, io.BytesIO(data), len(data))
     service.operations.request_verification(upload_id)
-    with patch("stpd.hub.uploads.unpack", side_effect=OSError("disk full")):
+    with patch("spireagent.hub.uploads.unpack", side_effect=OSError("disk full")):
         service.verify_pending()
     row = service.operations.upload(upload_id)
     assert row["status"] == "verification_pending" and row["receipt"] is None
@@ -117,7 +117,7 @@ def test_expanded_headers_and_corrupt_gzip_are_quarantined(tmp_path: Path) -> No
     assert isinstance(service.staging, LocalStaging)
     service.staging.write(identity, io.BytesIO(data), len(data))
     service.operations.request_verification(identity)
-    with patch("stpd.hub.uploads.MAX_EXPANDED", 4096):
+    with patch("spireagent.hub.uploads.MAX_EXPANDED", 4096):
         service.verify_pending()
     row = service.operations.upload(identity)
     assert row["status"] == "quarantined"
@@ -133,8 +133,8 @@ def test_verified_source_pipeline_and_true_platform_client_wait(tmp_path: Path) 
     from sts2_platform_evidence.delivery import ReceiverVerificationPending
     from sts2_platform_evidence.delivery_http import HubTransport
 
-    from stpd.hub.application import HubApplication
-    from stpd.hub.pipeline import build_dataset
+    from spireagent.hub.application import HubApplication
+    from spireagent.hub.pipeline import build_dataset
 
     class Quiet(WSGIRequestHandler):
         def log_message(self, format: str, *args: object) -> None:

@@ -9,7 +9,7 @@ import torch
 from safetensors.torch import load, save
 from torch import Tensor
 
-from ..json_boundary import BoundaryError, decode_json, json_bytes, object_fields
+from spireagent.json_boundary import BoundaryError, decode_json, json_bytes, object_fields
 
 MAGIC = b"STPDCKP1"
 MAX_BYTES = 512 * 1024 * 1024

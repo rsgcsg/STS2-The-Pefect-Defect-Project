@@ -6,11 +6,11 @@ from platform_bundle3_fixture import load as load_json
 from test_hub_console import service
 from test_hub_member_data import MEMBER, received
 
+from spireagent.hub.decision_jobs import DecisionJobs
+from spireagent.json_boundary import BoundaryError
 from stpd.fullrun.decision_dataset import SelectionRules
 from stpd.fullrun.decision_store import load, preview, publish
 from stpd.fullrun.platform_bundle3 import archive_bundle
-from stpd.hub.decision_jobs import DecisionJobs
-from stpd.json_boundary import BoundaryError
 
 
 def setup(tmp_path: Path):
@@ -22,7 +22,9 @@ def setup(tmp_path: Path):
         content_id=load_json(bundle / "session-bundle-manifest.json")["bundle_content_id"],
     )
     jobs = DecisionJobs(owner)
-    jobs.exports.set_collection_access(upload, approved=True, evidence_ref="c" * 64, actor="test")
+    jobs.collections.set_collection_access(
+        upload, approved=True, evidence_ref="c" * 64, actor="test"
+    )
     with owner.operations.transaction() as db:
         db.execute(
             "INSERT INTO identity_members(id,email,issuer,subject,role,status,enroll_devices,"
@@ -61,11 +63,13 @@ def test_preview_then_build_job_and_revocation(tmp_path: Path) -> None:
     jobs.run(second["id"])
     artifact = jobs.read(MEMBER, second["id"])["result"]["artifact_id"]
     assert len(load(owner.store, artifact)[1].records) == 6
-    jobs.exports.set_collection_access(upload, approved=False, evidence_ref="d" * 64, actor="test")
+    jobs.collections.set_collection_access(
+        upload, approved=False, evidence_ref="d" * 64, actor="test"
+    )
     with pytest.raises(BoundaryError, match="collection_not_shared"):
         jobs.read(MEMBER, second["id"])
     with pytest.raises(BoundaryError, match="source_sharing_not_established"):
-        jobs.exports._artifact(artifact)
+        jobs.collections.artifact(artifact)
 
 
 def test_membership_revoked_before_worker_starts(tmp_path: Path) -> None:
@@ -97,7 +101,9 @@ def test_automatic_profiles_are_background_and_shared(tmp_path: Path) -> None:
     assert len(result["items"]) == 3
     assert result["items"][0]["uploads"] == [upload]
     assert jobs.pending() is None
-    jobs.exports.set_collection_access(upload, approved=False, evidence_ref="f" * 64, actor="test")
+    jobs.collections.set_collection_access(
+        upload, approved=False, evidence_ref="f" * 64, actor="test"
+    )
     assert jobs.games(MEMBER)["items"] == []
 
 
@@ -105,7 +111,7 @@ def test_payload_tamper_cannot_pass_reprojection(tmp_path: Path) -> None:
     import io
     from dataclasses import replace
 
-    from stpd.json_boundary import json_bytes
+    from spireagent.json_boundary import json_bytes
 
     owner, _, source, _ = setup(tmp_path)
     rules = SelectionRules()
@@ -135,7 +141,7 @@ def test_concurrent_worker_claim_runs_once(tmp_path: Path) -> None:
         },
     )
     with (
-        patch("stpd.hub.decision_jobs.preview", wraps=preview) as call,
+        patch("spireagent.hub.decision_jobs.preview", wraps=preview) as call,
         ThreadPoolExecutor(max_workers=2) as pool,
     ):
         list(pool.map(jobs.run, [job["id"], job["id"]]))
@@ -163,7 +169,7 @@ def test_explicit_retry_keeps_failed_attempt(tmp_path: Path) -> None:
 
 
 def test_new_dataset_statistics_uses_its_own_loader(tmp_path: Path) -> None:
-    from stpd.hub.statistics import refresh_decision_statistics
+    from spireagent.hub.statistics import refresh_decision_statistics
 
     owner, _, source, _ = setup(tmp_path)
     rules = SelectionRules()

@@ -6,8 +6,8 @@ the immutable manifest and payload contracts while avoiding a server, a
 database-backed authority, or a second evaluation implementation.
 
 ```python
-from stpd.workbench.analysis import analyze
-from stpd.workbench.dashboard import project, render_html
+from spireagent.workbench.analysis import analyze
+from spireagent.workbench.dashboard import project, render_html
 
 report = analyze(registry, store, duckdb_path=".local/workbench.duckdb")
 dashboard = project(registry, store, analysis=report)

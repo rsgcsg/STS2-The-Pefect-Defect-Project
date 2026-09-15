@@ -5,7 +5,7 @@ import io
 import pytest
 import torch
 
-from stpd.json_boundary import BoundaryError
+from spireagent.json_boundary import BoundaryError
 from stpd.workers.checkpoint_codec import decode_checkpoint, encode_checkpoint
 
 

@@ -6,8 +6,10 @@ import argparse
 import os
 from pathlib import Path
 
-from ..json_boundary import BoundaryError, decode_json, json_bytes
-from ..workbench.control import open_store, source_identity
+from spireagent.json_boundary import BoundaryError, decode_json, json_bytes
+from spireagent.source import source_identity
+from spireagent.storage.config import open_store
+
 from .contracts import ComputeRequest, load_feature_job
 from .execution import FeatureBackend, dispatch
 
