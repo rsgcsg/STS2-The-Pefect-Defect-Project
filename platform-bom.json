@@ -51,9 +51,9 @@
       "component_source_digest_sha256": "2caee009a20fbe287a68c394c0d537771026cb391a801645ed298247a759170a"
     },
     "game_mod": {
-      "source_revision": "1e5413995d8d382c0bd1615cd1b39dab4ea8e893",
-      "component_tree_revision": "9fa2101bb011e82306ffca6219deb163f1d74b58",
-      "component_source_digest_sha256": "a09181fb0d98d7b23d9919a8d59029a3aced40a043537d1287637f5397c8ee7a",
+      "source_revision": "95dedda6443ec0632e6b542e86e7870e83976fec",
+      "component_tree_revision": "00fb84722eded70abd6827ddee53eb281ccd0a3c",
+      "component_source_digest_sha256": "f2c1c9e62e430ce5fa8c8c7dfcc0399e9e7f601e0af8d392811a2e2aafcd79f7",
       "version": "0.2.0-rc.6"
     },
     "player_environment_protocol": "1.0.0",
@@ -910,8 +910,8 @@
       "version": "0.2.0-rc.1",
       "platform_source_revision": "b5389a0b4a1bbed37e6a9718776fdf38f06f50c9",
       "platform_source_digest_sha256": "dbcd6ec1df10cad5ad011eb61a2f2ca533d7a110cd3f1296efa9c154b98d0cea",
-      "current_component_source_revision": "1e5413995d8d382c0bd1615cd1b39dab4ea8e893",
-      "current_component_source_digest_sha256": "a09181fb0d98d7b23d9919a8d59029a3aced40a043537d1287637f5397c8ee7a",
+      "current_component_source_revision": "95dedda6443ec0632e6b542e86e7870e83976fec",
+      "current_component_source_digest_sha256": "f2c1c9e62e430ce5fa8c8c7dfcc0399e9e7f601e0af8d392811a2e2aafcd79f7",
       "artifact_sha256": "04104ca5cd47c82329be185a8aa7017f7982b2062048fbf825488bead231d1c1",
       "artifact_mvid": "7408a183-f5a8-4f95-a997-dbf588b1536b",
       "installed": "pass",
