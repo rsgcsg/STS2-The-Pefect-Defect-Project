@@ -32,3 +32,33 @@ compatibility stays unknown; this rule does not waive an existing native or sche
 Keep historical data unchanged and publish a new derived dataset/model when interpretation
 changes. Upgrade/release triggers and rollout ownership are defined once in
 [Development Workflow](DEVELOPMENT_WORKFLOW.md#compatibility-and-update-policy).
+
+## Small-team update decisions
+
+The immutable release combination is the delivery recommendation; main is its
+formal source history, develop is daily integration, and the deployment receipt
+identifies actual running bytes. None is an alias for the others. Main may advance
+for documentation while a previously accepted executable stays in use.
+
+Only changed deliverables need a new candidate. A Hub-only fix leaves member Mod,
+tool, model and dataset bytes alone. Shared console changes are tested in both
+shells; a shared lock/build/schema change expands the affected consumers. A local
+Workbench update does not itself migrate a pinned outbox or replace a native Mod.
+Use the existing combination/BOM and release/integration receipts; never create a
+parallel version registry or rewrite an old producer to today's SHA.
+
+Current interface support is finite: test the current writer/reader and an actual
+supported released consumer for changed public surfaces. The release compatibility
+suite uses the archived published Hub client against current authenticated APIs.
+This bounded wire test does not qualify its entire old installation or arbitrary
+future schemas. Unknown schema stays unsupported with diagnostics; different
+producer source SHAs alone do not reject supported data. Preserve exact integrity,
+lineage, candidate semantics, model representation, native operands and queue/tool
+binding. Training dataset selection stays permissive about coverage and versions,
+while scientific grouping/splits and sequence gaps remain explicit.
+
+Users update for a needed feature, supported-interface change, correctness or
+security fix, not because a branch moved. Removal of a supported interface needs a
+reason, affected consumers and migration window. Stopping old executable support
+never authorizes deleting archival data readers. Ordinary dependency maintenance
+is batched; urgent security or data-integrity issues are handled promptly.

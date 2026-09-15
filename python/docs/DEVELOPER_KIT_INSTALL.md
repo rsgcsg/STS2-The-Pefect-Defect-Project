@@ -6,6 +6,48 @@ Use the repository root for native commands and python/ for collector commands. 
 as part of installing a published binary kit. Windows/Linux portable CI is not proof that
 this native installation procedure works there. Consult the release's supported game/OS tuple.
 
+## Managed preparation (default for new kits)
+
+Use the approved release's exact checkout to run the following entrypoint from
+`python/`. Supply the ZIP and the one independently published SHA256; the existing
+`combination.json` supplies every component pin. Choose a permanent directory
+outside your development checkout. Do not use the currently running release as a
+writable development directory.
+
+```bash
+uv run --locked --extra cloud python tools/install_developer_kit.py plan --archive /ABS/kit.zip --sha256 APPROVED_ZIP_SHA256 --releases /ABS/releases
+uv run --locked --extra cloud python tools/install_developer_kit.py prepare --archive /ABS/kit.zip --sha256 APPROVED_ZIP_SHA256 --releases /ABS/releases
+uv run --locked --extra cloud python tools/install_developer_kit.py initialize --directory /ABS/releases/APPROVED_ZIP_SHA256
+```
+
+`plan` reads only; `prepare` checks bounded archive paths/inventory, clones the exact
+source, verifies lock/combination/manifest, stages the published native bytes and
+publishes the directory. Dependencies initialize **after** placement so virtualenv
+paths remain stable. Neither step changes the game, profile, queues or cloud.
+A prepared directory is never overwritten; `status --directory ...` rechecks its
+original archive, source, tool and staged bytes. Failed temporary preparation is
+removed; initialization can be retried in the same directory while its Workbench
+is stopped. Keep the original archive and all older in-use release directories.
+
+With STS2 fully closed, the same entrypoint can run `deploy --directory ...
+--game-directory /ABS/game`. It checks actual game/dependency bytes against native
+provenance and calls the existing lifecycle, which checks source/artifact identity
+and retains rollback. It does not rebuild, launch or claim a loaded game. Use the
+cold-load commands below from that permanent source directory.
+
+After creating/logging into the private Workbench profile, stop it and run
+`register --directory ... --config /ABS/project.json` through this entrypoint.
+The selected release's registration owner enforces the stopped-profile lock and
+refuses replacing a different registration. Daily consent and upload activation
+still require the member. For existing tools/queues use the existing explicit
+collection-upgrade prepare/activate procedure: pending evidence is never rewritten.
+A Workbench-only change does not require Mod deployment when published Mod/tool
+bytes and their necessary contracts remain unchanged.
+
+The manual staging instructions below remain the recovery path for old released
+kits whose exact source predates this entrypoint. Do not transplant new executable
+files into an old pinned checkout to make its source appear current.
+
 ## Verify and stage the approved bytes
 
 1. Verify the ZIP SHA256 against its independently approved release receipt before extraction.

@@ -426,3 +426,17 @@ session / run / decision / receipt / dataset / job ID（按相关性）：
 后续维护本指南时也走新 PR。保持它作为入口和解释；安装细节由 developer-kit 文档、生产操作由 runbook、研究准入由 STPD 契约拥有，不继续复制出第二套实现。
 
 **当前仓库源码、治理和 exact runtime evidence 始终高于本交付说明。**
+
+## 日常开发和发布的简化规则
+
+- 普通工作：从最新 develop 开独立分支，修复、相关回归、按影响检查、PR、合 develop；除非任务要求上线，到这里就完成。
+- 正式交付：负责人选一批可发布改动，经 release PR 合 main；发布清单指定实际产物。main 有文档更新，不代表全员重装。
+- 检查入口：`npm run check:plan -- --base origin/develop --run`。普通说明文档可走 Node 轻检查；源码、契约、治理、未知影响仍走全套。原生/Human 等更高证据要求另外保留。
+- 安装入口：按[开发者包安装指南](../python/docs/DEVELOPER_KIT_INSTALL.md)使用已批准 ZIP 与其一个校验值，工具准备固定目录、锁定环境和已发布二进制；不再手抄全部组件 hash。
+- 本地工作台“系统”页区分本机和 Hub 来源，链接正式发布说明。不同 SHA 不自动阻止连接；未知格式、过期观测和真实错误必须显示。
+- 云端普通更新：按 [RUNBOOK](../python/deploy/hub/RUNBOOK.md) 的 rollout 计划/应用入口，只更新受影响 Hub；数据库或配置变化走明确迁移流程。
+- 不改旧记录、不清 pending 队列、不共享私人凭据；所有 bug、架构或跨组件修复仍开新分支和 PR。问题报告附原始 session/upload/job ID、来源、时间、期望与实际、脱敏错误，不贴 Token。
+
+规范分别由 DEVELOPMENT_WORKFLOW、TESTING、VERSIONING 和 owning RUNBOOK 维护；
+本指南是入口，不再复制另一套发布命令或版本表。普通成员不需要 SSH 管服务器，
+工程师也不需要为每次提交维护一次生产部署。

@@ -69,6 +69,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, `scope=${plan.scope}\n`);
     if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `Check scope: **${plan.scope}** (${plan.reason}). Base ${plan.base}; tested checkout ${plan.head}. Source/test only.\n`);
     if (args.includes("--run")) {
+      if (plan.base && plan.head) execFileSync("git", ["diff", "--check", plan.base, plan.head, "--"], { cwd: root, stdio: "inherit" });
       const result = spawnSync(process.platform === "win32" ? "npm.cmd" : "npm", ["run", plan.scope === "docs" ? "check:docs" : "check"], { cwd: root, stdio: "inherit", shell: process.platform === "win32" });
       process.exitCode = result.status ?? 1;
     }

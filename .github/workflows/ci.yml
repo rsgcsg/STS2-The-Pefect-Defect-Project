@@ -53,6 +53,10 @@ jobs:
           node-version: 20
       - name: Check editorial links, routes and governance
         run: npm run check:docs
+      - name: Check committed editorial patch
+        env:
+          CHECK_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: git diff --check "$CHECK_BASE" HEAD --
 
   linux-portability:
     needs: plan
