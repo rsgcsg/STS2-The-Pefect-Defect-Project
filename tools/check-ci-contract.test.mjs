@@ -20,7 +20,7 @@ test("current CI workflow also validates with CRLF newlines", () => {
 
 test("CI contract rejects unscoped push duplication", () => {
   const source = currentSource().replace(
-    "  push:\n    branches:\n      - develop\n      - main\n      - \"release/**\"\n      - \"hotfix/**\"\n",
+    "  push:\n    branches:\n      - develop\n      - main\n",
     "  push:\n"
   );
   assert.ok(ciWorkflowErrors(source).includes("CI push trigger must be branch-scoped"));
@@ -38,10 +38,10 @@ test("CI contract rejects a hand-picked Windows subset", () => {
 
 test("CI contract rejects a required status that does not aggregate Windows", () => {
   const source = currentSource().replace(
-    "needs: [linux-portability, windows-portability]",
+    "needs: [plan, docs, linux-portability, windows-portability]",
     "needs: [linux-portability]"
   );
-  assert.ok(ciWorkflowErrors(source).includes("portable must aggregate both OS lanes"));
+  assert.ok(ciWorkflowErrors(source).includes("portable must aggregate plan and selected lanes"));
 });
 
 test("CI contract rejects hosted exact-game qualification", () => {

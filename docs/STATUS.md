@@ -1,5 +1,12 @@
 # Current Status
 
+The [operating-flow acceptance](evidence/OPERATING_FLOW_2026-09-16.md) qualifies
+the managed Workbench installation and same-schema Hub rollout: 60 new Human
+decisions proved/canonical, zero real failures, automatic Close/upload and exact
+R2 byte readback. It is a bounded incomplete-run canary, not a new Full-Run claim.
+Runtime components intentionally retain their separately verified source/artifact
+identities; the report and PR link the integration checks and rollback.
+
 The monorepo release has its own [acceptance record](MONOREPO_MIGRATION.md) and
 [bounded Human audit](evidence/MONOREPO_HUMAN_GATE_2026-09-15.md): 580 accepted
 decisions, all proved/canonical, zero real failures, verified Close/upload/download.
