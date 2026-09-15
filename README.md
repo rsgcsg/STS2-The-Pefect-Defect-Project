@@ -6,6 +6,8 @@ applications and models consume declared interfaces.
 
 ## Start here
 
+- [New member and Agent handoff (中文)](docs/NEW_MEMBER_HANDOFF.zh-CN.md): accounts,
+  first installation, collection, development/PRs, operations and incident reporting.
 - [Default release and migration acceptance](docs/MONOREPO_MIGRATION.md): native recording,
   automatic upload and member download passed the sealed migration Human gate.
 - [Architecture and component ownership](docs/ARCHITECTURE.md).
