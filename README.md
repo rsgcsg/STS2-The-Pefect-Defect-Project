@@ -6,8 +6,8 @@ applications and models consume declared interfaces.
 
 ## Start here
 
-- [Migration progress and acceptance](docs/MONOREPO_MIGRATION.md): the new candidate
-  is not yet a qualified replacement for the existing installation or Hub.
+- [Default release and migration acceptance](docs/MONOREPO_MIGRATION.md): native recording,
+  automatic upload and member download passed the sealed migration Human gate.
 - [Architecture and component ownership](docs/ARCHITECTURE.md).
 - [Developer workflow](docs/DEVELOPMENT_WORKFLOW.md), [testing](docs/TESTING.md),
   [engineering governance](docs/ENGINEERING_GOVERNANCE.md), [skills](.agents/skills/README.md).

@@ -1,0 +1,87 @@
+{
+  "schema": "spireagent/monorepo-human-qualification-v1",
+  "candidate_source": "45ef463e3c13cd82db55601c122a292c37aaae2e",
+  "session_id": "session-20260915T105448Z-6b885bfbe1bc4f028f563da4ec0a2782",
+  "verdict": "MIGRATION_HUMAN_GATE_PASS",
+  "human_origin": "owner_attested_in_conversation_not_machine_proved",
+  "counts": {
+    "accepted": 580,
+    "proved": 580,
+    "canonical": 580,
+    "real_failures": 0,
+    "cancelled": 0,
+    "aborted": 0,
+    "diagnostics": 72,
+    "unsupported": 0,
+    "unresolved": 0,
+    "invalidations": 72,
+    "accepted_children": 81,
+    "canonical_children": 81,
+    "compatibility_valid": 196,
+    "compatibility_invalid": 0
+  },
+  "runs": [
+    {
+      "run_id": "run-0001",
+      "start_observed": true,
+      "terminal_observed": true,
+      "outcome": "defeat"
+    },
+    {
+      "run_id": "run-0002",
+      "start_observed": true,
+      "terminal_observed": false,
+      "outcome": null
+    }
+  ],
+  "canonical_families": {
+    "act_change.ready": 1,
+    "combat_hand_selector": 51,
+    "event_option.choose": 7,
+    "event_option.nested_selector": 6,
+    "event_option.proceed": 8,
+    "map_navigation.travel": 28,
+    "native_generated_card_choice": 1,
+    "ordinary_combat.end_turn": 70,
+    "ordinary_combat.play_card": 312,
+    "ordinary_combat.use_potion": 3,
+    "rest_site.choose": 5,
+    "rest_site.nested_selector": 8,
+    "rest_site.proceed": 5,
+    "reward_claim.claim": 29,
+    "reward_claim.proceed": 11,
+    "reward_nested.replacement_selection": 12,
+    "shop_inventory.card_removal": 1,
+    "shop_inventory.card_removal_nested_selector": 2,
+    "shop_inventory.close": 4,
+    "shop_inventory.purchase": 2,
+    "shop_room.open": 4,
+    "shop_room.proceed": 4,
+    "treasure_room.open": 2,
+    "treasure_room.proceed": 2,
+    "treasure_room.select": 2
+  },
+  "canonical_parent_lineage": "81/81 exact parent and root joins",
+  "diagnostics": {
+    "ReadyToBeginEnemyTurnAction": 44,
+    "MoveToMapCoordAction": 28
+  },
+  "read_materialized": 2062,
+  "read_failed": 0,
+  "native_semantic": {
+    "exact": 415,
+    "unknown": 0
+  },
+  "bundle_content_id": "0f9f96d9681bcf3630f360e5a2451a4f399cbbbf8e79a5515c45d1a15efe5872",
+  "export_sha256": "7a7fff998b1bf599cceb59ad1a20a5f73eb501b8de8e61f9565c1791b861d97d",
+  "cloud_receipt_id": "ce84ef2f75e3a6d231dd4bc2bebc0c84",
+  "remote_archive_sha256": "f785415ca296510da7586f5fbd261fd1609309c38b730635baa65f5cec9c29f9",
+  "remote_archive_bytes": 3275812,
+  "member_download": "verified_and_byte_equal_to_local_archive",
+  "non_claims": [
+    "No unseen action-family or arbitrary-version qualification",
+    "Second run is incomplete, not a second completed run",
+    "No model quality, training admission or GPU qualification",
+    "Diagnostics remain in immutable raw evidence"
+  ]
+}

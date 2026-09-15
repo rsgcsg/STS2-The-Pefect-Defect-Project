@@ -1,8 +1,9 @@
 # Current Status
 
-The monorepo cutover has its own [acceptance record](MONOREPO_MIGRATION.md).
-All native Human results below retain their original source/artifact identities.
-Do not treat the migration branch as a newly Human-qualified release.
+The monorepo release has its own [acceptance record](MONOREPO_MIGRATION.md) and
+[bounded Human audit](evidence/MONOREPO_HUMAN_GATE_2026-09-15.md): 580 accepted
+decisions, all proved/canonical, zero real failures, verified Close/upload/download.
+This qualifies the sealed candidate; historical results below keep their original identities.
 
 PR25 rc.4 passes the bounded Full-Run Human gate: two uninterrupted native starts
 through natural defeat, all 524 accepted decisions proved/canonical, zero real
