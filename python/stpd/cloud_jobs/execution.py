@@ -5,12 +5,13 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, replace
 from typing import Protocol
 
-from ..artifact_contracts import Manifest, Producer
+from spireagent.artifact_contracts import Manifest, Producer
+from spireagent.json_boundary import BoundaryError, FrozenObject, unsigned
+from spireagent.storage.store import ArtifactStore
+
 from ..contracts import QwenBackend
 from ..fullrun.evaluation import load_evaluation
 from ..fullrun.features import compile_features, load_features
-from ..json_boundary import BoundaryError, FrozenObject, unsigned
-from ..storage.store import ArtifactStore
 from ..workers.checkpoint_codec import MAX_BYTES, decode_checkpoint
 from ..workers.contracts import (
     RUN_SCHEMA,

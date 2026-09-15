@@ -10,13 +10,15 @@ import tempfile
 from dataclasses import asdict
 from pathlib import Path
 
+from spireagent.json_boundary import BoundaryError, FrozenObject, decode_json, json_bytes
+from spireagent.source import source_identity
+from spireagent.storage.config import open_store
+
 from ..fullrun.data import admit, publish_dataset, publish_source
 from ..fullrun.features import publish_model_view
 from ..fullrun.fixtures import SyntheticSourceAdapter, synthetic_bundle
 from ..fullrun.representation import FullRunSerializer
-from ..json_boundary import BoundaryError, FrozenObject, decode_json, json_bytes
 from ..qwen.fake_backend import DeterministicFakeQwenBackend
-from ..workbench.control import open_store, source_identity
 from ..workers.contracts import TrainingConfig
 from .contracts import ComputeReceipt, ComputeRequest, FeatureJobSpec, publish_feature_job
 from .execution import prepare_feature_run, validate_receipt

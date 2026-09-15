@@ -5,11 +5,11 @@ from pathlib import Path
 
 import pytest
 
+from spireagent.json_boundary import BoundaryError
 from stpd.fullrun.contracts import SourceProjection
 from stpd.fullrun.data import admit, load_dataset, publish_dataset, publish_source
 from stpd.fullrun.fixtures import SyntheticSourceAdapter, synthetic_bundle
 from stpd.fullrun.representation import decision_fingerprint
-from stpd.json_boundary import BoundaryError
 
 
 def projection(runs: int = 12) -> SourceProjection:

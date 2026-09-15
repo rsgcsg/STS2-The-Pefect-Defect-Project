@@ -10,12 +10,12 @@ from urllib.request import Request, urlopen
 
 import pytest
 
-from stpd.console.page import CSP, asset, render_shell
-from stpd.json_boundary import BoundaryError
-from stpd.workbench.console import LocalConsole, ProjectionCache, pagination
-from stpd.workbench.developer import ProjectConfig, combination
-from stpd.workbench.developer_server import Application, create_server
-from stpd.workbench.hub_client import HubClient
+from spireagent.console.page import CSP, asset, render_shell
+from spireagent.json_boundary import BoundaryError
+from spireagent.workbench.console import LocalConsole, ProjectionCache, pagination
+from spireagent.workbench.developer import ProjectConfig, combination
+from spireagent.workbench.developer_server import Application, create_server
+from spireagent.workbench.hub_client import HubClient
 
 
 def config(tmp_path, *, delivery=True, hub=True):
@@ -159,7 +159,7 @@ def test_local_console_uses_isolated_owner_projection_and_keeps_dispositions(tmp
         assert kwargs["cwd"] == cfg.state_dir
         return subprocess.CompletedProcess(command, 0, json.dumps(owner).encode())
 
-    monkeypatch.setattr("stpd.workbench.console.subprocess.run", read)
+    monkeypatch.setattr("spireagent.workbench.console.subprocess.run", read)
     console = LocalConsole(
         cfg, None, lambda: {"STPD_HUB_TOKEN": "device-only"}, lambda: "running", {}
     )
@@ -294,7 +294,7 @@ def test_http_shell_and_assets_do_not_query_owners_or_accept_browser_mutations(
 def test_upgrade_can_observe_and_stop_predecessor_but_cannot_start_it(
     tmp_path, monkeypatch, capsys
 ):
-    from stpd.workbench import developer_cli
+    from spireagent.workbench import developer_cli
 
     cfg = config(tmp_path, delivery=False, hub=False)
     previous = cfg.to_dict()

@@ -10,10 +10,11 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 from numpy.typing import NDArray
 
-from ..artifact_contracts import Manifest, Parent, Producer
+from spireagent.artifact_contracts import Manifest, Parent, Producer
+from spireagent.json_boundary import BoundaryError, FrozenObject, decode_json, json_bytes, unsigned
+from spireagent.storage.store import ArtifactStore
+
 from ..canonical import semantic_hash, to_json_value
-from ..json_boundary import BoundaryError, FrozenObject, decode_json, json_bytes, unsigned
-from ..storage.store import ArtifactStore
 from .data import AdmittedDataset, load_dataset
 from .representation import FullRunSerializer
 

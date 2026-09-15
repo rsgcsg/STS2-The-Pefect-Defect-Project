@@ -15,14 +15,14 @@ from sts2_platform_evidence.collection_tool import CollectionTool, digest
 from test_campaign_onboarding import campaign as campaign
 from test_collection_setup import daily
 
-from stpd.json_boundary import BoundaryError
-from stpd.workbench import collection_upgrade as module
-from stpd.workbench.campaign_prepare import prepare_campaign, read_preparation
-from stpd.workbench.collection_setup import CollectionSetup
-from stpd.workbench.collection_tool_registration import register_collection_tool
-from stpd.workbench.developer import ProjectConfig, atomic_json, combination
-from stpd.workbench.identity import LocalIdentity
-from stpd.workbench.member_client import MemberClient
+from spireagent.json_boundary import BoundaryError
+from spireagent.workbench import collection_upgrade as module
+from spireagent.workbench.campaign_prepare import prepare_campaign, read_preparation
+from spireagent.workbench.collection_setup import CollectionSetup
+from spireagent.workbench.collection_tool_registration import register_collection_tool
+from spireagent.workbench.developer import ProjectConfig, atomic_json, combination
+from spireagent.workbench.identity import LocalIdentity
+from spireagent.workbench.member_client import MemberClient
 
 
 @pytest.fixture
@@ -179,7 +179,7 @@ def test_activation_failure_preserves_old_active_config(upgrade_case, failure):
 
 
 def test_stopped_workbench_lock_is_required_before_contacting_members(upgrade_case):
-    from stpd.workbench.developer_server import instance_lock
+    from spireagent.workbench.developer_server import instance_lock
 
     _, config, *rest = upgrade_case
     with (
@@ -235,7 +235,7 @@ def test_proposal_does_not_authorize_rebinding_another_profile(upgrade_case):
 def test_generation_config_write_failure_is_retriable_before_native_binding(
     upgrade_case, monkeypatch
 ):
-    from stpd.workbench import campaign_prepare
+    from spireagent.workbench import campaign_prepare
 
     path, config, _, _, state, _ = upgrade_case
     write = campaign_prepare.atomic_json
@@ -255,7 +255,7 @@ def test_generation_config_write_failure_is_retriable_before_native_binding(
 
 
 def test_real_setup_writer_cannot_replace_config_during_upgrade_commit(upgrade_case, monkeypatch):
-    from stpd.workbench.developer import setup
+    from spireagent.workbench.developer import setup
 
     path, config, _, _, state, _ = upgrade_case
     invoke(upgrade_case, "prepare")

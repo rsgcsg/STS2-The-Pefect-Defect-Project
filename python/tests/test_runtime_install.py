@@ -8,9 +8,9 @@ from urllib.request import Request
 
 import pytest
 
-from stpd.json_boundary import BoundaryError
+from spireagent.json_boundary import BoundaryError
+from spireagent.workbench import runtime_install
 from stpd.package_identity import PackageIdentityError, directory_sha256
-from stpd.workbench import runtime_install
 
 
 def package(root, name, *, runtime=False):
@@ -150,8 +150,8 @@ def test_release_redirects_stay_on_https_github_storage(url):
 
 
 def test_offline_cli_archive_never_becomes_an_http_path(tmp_path, monkeypatch):
-    from stpd.workbench import local_model_cli
-    from stpd.workbench.developer import ProjectConfig, combination
+    from spireagent.workbench import local_model_cli
+    from spireagent.workbench.developer import ProjectConfig, combination
 
     config = ProjectConfig(tmp_path, "", "", None, combination())
     monkeypatch.setattr(local_model_cli, "running", lambda _: {"port": 1234})

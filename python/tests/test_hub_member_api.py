@@ -15,15 +15,15 @@ from test_campaign_onboarding import campaign as campaign
 from test_hub_console import service
 from test_hub_console import signed as signed
 
-from stpd.artifact_contracts import Manifest
+from spireagent.artifact_contracts import Manifest
+from spireagent.hub.campaigns import create_campaign_tables
+from spireagent.hub.console_auth import ConsolePrincipal
+from spireagent.hub.exports import REQUEST_SCHEMA
+from spireagent.hub.identity import IdentityService
+from spireagent.hub.member_api import MemberApi, grant_collection_sharing
+from spireagent.json_boundary import BoundaryError, json_bytes
 from stpd.collection_activity import CONSENT_FIELDS
 from stpd.fullrun.platform_bundle3 import archive_bundle
-from stpd.hub.campaigns import create_campaign_tables
-from stpd.hub.console_auth import ConsolePrincipal
-from stpd.hub.exports import REQUEST_SCHEMA
-from stpd.hub.identity import IdentityService
-from stpd.hub.member_api import MemberApi, grant_collection_sharing
-from stpd.json_boundary import BoundaryError, json_bytes
 
 
 @pytest.fixture

@@ -5,11 +5,19 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from ..artifact_contracts import Manifest, Parent, Producer
+from spireagent.artifact_contracts import Manifest, Parent, Producer
+from spireagent.json_boundary import (
+    BoundaryError,
+    FrozenObject,
+    digest,
+    object_fields,
+    text,
+    unsigned,
+)
+from spireagent.storage.store import ArtifactStore
+
 from ..canonical import semantic_hash
 from ..fullrun.features import load_model_view, validate_qwen_identity
-from ..json_boundary import BoundaryError, FrozenObject, digest, object_fields, text, unsigned
-from ..storage.store import ArtifactStore
 from ..workers.contracts import TrainingConfig
 
 FEATURE_JOB_SCHEMA = "stpd/feature-job-v1"

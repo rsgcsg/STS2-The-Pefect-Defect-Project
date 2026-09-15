@@ -1,3 +1,6 @@
+> Project migration: application ownership and active layout are defined in
+> [MONOREPO_MIGRATION](MONOREPO_MIGRATION.md). Game/evidence authority below remains unchanged.
+
 # Architecture
 
 ## Product Boundary

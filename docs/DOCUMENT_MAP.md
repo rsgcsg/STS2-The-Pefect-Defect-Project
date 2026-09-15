@@ -96,3 +96,8 @@ default newcomer or Codex context.
 - [B workflow release evidence](evidence/B_UNIFIED_WORKFLOW_RELEASE_2026-09-13.md): exact cross-repository source/service scope and release receipt routing.
 
 - [Packaging identity correction](evidence/B_WORKFLOW_PACKAGING_IDENTITY_CORRECTION_2026-09-13.md): actual BOM file SHA and separate tool revisions.
+
+## Project migration
+
+- [Migration and unified application ownership](MONOREPO_MIGRATION.md).
+- [Python and research routing](../python/docs/DOCUMENT_MAP.md).

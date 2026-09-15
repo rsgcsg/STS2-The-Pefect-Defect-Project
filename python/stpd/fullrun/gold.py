@@ -17,8 +17,7 @@ from dataclasses import dataclass, replace
 from itertools import combinations
 from typing import Any, Literal
 
-from ..canonical import semantic_hash
-from ..json_boundary import (
+from spireagent.json_boundary import (
     BoundaryError,
     FrozenObject,
     array,
@@ -27,6 +26,8 @@ from ..json_boundary import (
     text,
     unsigned,
 )
+
+from ..canonical import semantic_hash
 from .contracts import ResearchTransitionV1
 from .data import AdmittedDataset
 from .representation import FullRunSerializer

@@ -7,8 +7,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from spireagent.json_boundary import BoundaryError
+
 from ..canonical import canonical_json, semantic_hash
-from ..json_boundary import BoundaryError
 from .contracts import ResearchTransitionV1, SemanticAction, SemanticState
 
 SERIALIZER_VERSION = "stpd-fullrun-provisional-v1"

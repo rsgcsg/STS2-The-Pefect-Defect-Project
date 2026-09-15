@@ -1,0 +1,21 @@
+{
+  "schema": "spireagent/source-import-1",
+  "repository": "rsgcsg/STS2-The-Pefect-Defect-Project",
+  "import_commit": "6f2e3c11360e1d0c4b3f5bb52c739972061f36b9",
+  "platform": {
+    "repository": "rsgcsg/STS2-AI-PLATFORM",
+    "revision": "c698569893a1a87493230edd915697d49211f674",
+    "tree": "4bc2e207edf8d52ca17deb6c369095963257aa96"
+  },
+  "python": {
+    "repository": "rsgcsg/STS2-The-Perfect-Defect",
+    "revision": "aaa100ec847f3f3f33e527417c95da870ef2153b",
+    "tree": "490ee605ae3d8ef6ff1b8c01d97e4b34ccc50a96",
+    "target_path": "python"
+  },
+  "history": "original commits remain ancestors; existing predecessor import proofs retained",
+  "non_claims": [
+    "source import does not qualify new artifacts or services",
+    "historical data and producer identities are unchanged"
+  ]
+}

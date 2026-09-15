@@ -11,8 +11,8 @@ from test_artifact_store_v1 import PRODUCER
 from test_cloud_jobs import job_fixture
 from test_cloud_modal import target
 
+from spireagent.json_boundary import BoundaryError
 from stpd.cloud_jobs.__main__ import execute_request, main
-from stpd.json_boundary import BoundaryError
 
 
 def test_entrypoint_requires_actual_clean_matching_checkout_before_opening_store(
@@ -50,7 +50,7 @@ def test_modal_definition_bounds_runtime_and_invokes_only_locked_worker(
     target_file = tmp_path / "target.json"
     target_file.write_text(json.dumps(selected.to_dict()))
     monkeypatch.setenv("STPD_MODAL_TARGET", str(target_file))
-    monkeypatch.setattr("stpd.workbench.control.source_identity", lambda _: PRODUCER)
+    monkeypatch.setattr("spireagent.source.source_identity", lambda _: PRODUCER)
     calls = {}
 
     class App:
@@ -96,7 +96,7 @@ def test_modal_definition_bounds_runtime_and_invokes_only_locked_worker(
     with pytest.raises(ValueError, match="deployed_target_mismatch"):
         compute({}, "different")
     monkeypatch.setattr(
-        "stpd.workbench.control.source_identity",
+        "spireagent.source.source_identity",
         lambda _: replace(PRODUCER, source_revision="f" * 40),
     )
     with pytest.raises(BoundaryError, match="wrapper_source_lock_mismatch"):

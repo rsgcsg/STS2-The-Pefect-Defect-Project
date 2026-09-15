@@ -6,8 +6,8 @@ services:
     container_name: stpd-hub
     network_mode: host
     user: "10001:10001"
-    working_dir: /opt/stpd
-    entrypoint: ["/opt/stpd/.venv/bin/python", "-m", "stpd.hub"]
+    working_dir: /opt/stpd/python
+    entrypoint: ["/opt/stpd/python/.venv/bin/python", "-m", "spireagent.hub"]
     command:
       - serve
       - --root
@@ -66,7 +66,7 @@ services:
         bind:
           create_host_path: false
     healthcheck:
-      test: ["CMD", "/opt/stpd/.venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/health', timeout=3).read()"]
+      test: ["CMD", "/opt/stpd/python/.venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/health', timeout=3).read()"]
       interval: 30s
       timeout: 5s
       retries: 3

@@ -4,6 +4,7 @@ from dataclasses import replace
 
 import pytest
 
+from spireagent.json_boundary import BoundaryError
 from stpd.fullrun.campaign import FullRunHarnessConfig, GoldCampaign, default_harness_config
 from stpd.fullrun.data import admit
 from stpd.fullrun.fixtures import SyntheticSourceAdapter, synthetic_bundle
@@ -13,7 +14,6 @@ from stpd.fullrun.gold import (
     audit_gold,
     sample_gold_tasks,
 )
-from stpd.json_boundary import BoundaryError
 
 
 def dataset():

@@ -12,21 +12,21 @@ import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from stpd.artifact_contracts import Manifest, Parent, Producer
-from stpd.hub.application import HubApplication
-from stpd.hub.console_auth import (
+from spireagent.artifact_contracts import Manifest, Parent, Producer
+from spireagent.hub.application import HubApplication
+from spireagent.hub.console_auth import (
     AccessVerifier,
     ConsolePrincipal,
     configured_access,
     load_legacy_allowlist,
 )
-from stpd.hub.console_index import ConsoleIndex, pagination
-from stpd.hub.database import Operations
-from stpd.hub.membership import MembershipService
-from stpd.hub.uploads import LocalStaging, UploadService
-from stpd.json_boundary import BoundaryError, FrozenObject
-from stpd.storage.local import LocalBlobStore
-from stpd.storage.store import ManifestArtifactStore
+from spireagent.hub.console_index import ConsoleIndex, pagination
+from spireagent.hub.database import Operations
+from spireagent.hub.membership import MembershipService
+from spireagent.hub.uploads import LocalStaging, UploadService
+from spireagent.json_boundary import BoundaryError, FrozenObject
+from spireagent.storage.local import LocalBlobStore
+from spireagent.storage.store import ManifestArtifactStore
 
 ISSUER = "https://test-team.cloudflareaccess.com"
 AUDIENCE = "a" * 64
@@ -597,7 +597,9 @@ def test_both_summary_and_failure_marker_errors_preserve_terminal_upload(
         findings=[] if verified else [SimpleNamespace(code="expected_fixture_rejection")],
         require_value=lambda: SimpleNamespace(bundle_content_id="a" * 64),
     )
-    monkeypatch.setattr("stpd.hub.uploads.verify_human_session_bundle", lambda *args: verification)
+    monkeypatch.setattr(
+        "spireagent.hub.uploads.verify_human_session_bundle", lambda *args: verification
+    )
 
     def broken(*args: Any, **kwargs: Any) -> None:
         raise OSError("optional projection unavailable")
@@ -626,7 +628,9 @@ def test_owner_receipt_failure_is_not_suppressed_with_optional_index(
     owner.staging.write(upload_id, io.BytesIO(raw), len(raw))
     owner.operations.request_verification(upload_id)
     verification = SimpleNamespace(passed=False, findings=[SimpleNamespace(code="rejected")])
-    monkeypatch.setattr("stpd.hub.uploads.verify_human_session_bundle", lambda *args: verification)
+    monkeypatch.setattr(
+        "spireagent.hub.uploads.verify_human_session_bundle", lambda *args: verification
+    )
 
     def failed_receipt(*args: Any) -> None:
         raise BoundaryError("hub", "authoritative_receipt_unavailable")
@@ -643,7 +647,7 @@ def test_dataset_cli_retains_success_when_optional_catalogue_fails(
     monkeypatch: pytest.MonkeyPatch,
     capsys: Any,
 ) -> None:
-    from stpd.hub import __main__ as cli
+    from spireagent.hub import __main__ as cli
 
     owner = service(tmp_path)
     manifest = Manifest("dataset", owner.producer)
@@ -656,9 +660,9 @@ def test_dataset_cli_retains_success_when_optional_catalogue_fails(
         raise OSError("optional catalogue unavailable")
 
     monkeypatch.setattr(cli, "configured_service", lambda args: owner)
-    monkeypatch.setattr("stpd.hub.pipeline.build_dataset", build)
+    monkeypatch.setattr("spireagent.hub.pipeline.build_dataset", build)
     monkeypatch.setattr(owner.console_index, "artifact_closure", broken)
-    monkeypatch.setattr("sys.argv", ["stpd.hub", "dataset", "--received", "a" * 64])
+    monkeypatch.setattr("sys.argv", ["spireagent.hub", "dataset", "--received", "a" * 64])
     assert cli.main() == 0
     report = json.loads(capsys.readouterr().out)
     assert report == {
@@ -671,6 +675,6 @@ def test_dataset_cli_retains_success_when_optional_catalogue_fails(
     def rejected(*args: Any, **kwargs: Any) -> dict:
         raise BoundaryError("dataset", "authoritative_admission_failure")
 
-    monkeypatch.setattr("stpd.hub.pipeline.build_dataset", rejected)
+    monkeypatch.setattr("spireagent.hub.pipeline.build_dataset", rejected)
     assert cli.main() == 2
     assert json.loads(capsys.readouterr().out)["error"] == "authoritative_admission_failure"

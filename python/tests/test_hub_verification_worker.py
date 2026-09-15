@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
-from stpd.hub.verification_worker import run_verifier
+from spireagent.hub.verification_worker import run_verifier
 
 
 @pytest.mark.parametrize("cancel", [False, True])
@@ -31,8 +31,10 @@ def test_supervisor_reaps_actual_child_on_deadline_or_shutdown(cancel: bool) -> 
         shutdown.set()
     started = time.monotonic()
     with (
-        patch("stpd.hub.verification_worker.subprocess.Popen", side_effect=spawn),
-        patch("stpd.hub.verification_worker.filesystem_capacity", return_value={"status": "ok"}),
+        patch("spireagent.hub.verification_worker.subprocess.Popen", side_effect=spawn),
+        patch(
+            "spireagent.hub.verification_worker.filesystem_capacity", return_value={"status": "ok"}
+        ),
     ):
         assert not run_verifier([], timeout=0.15, shutdown=shutdown)
     assert time.monotonic() - started < 5
@@ -46,7 +48,7 @@ def test_linux_address_space_limit_rejects_oversized_allocation() -> None:
         [
             sys.executable,
             "-c",
-            "from stpd.hub.verification_worker import constrain_worker; "
+            "from spireagent.hub.verification_worker import constrain_worker; "
             "constrain_worker(); bytearray(2 * 1024**3)",
         ],
         capture_output=True,

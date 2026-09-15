@@ -6,7 +6,10 @@ import io
 import uuid
 from dataclasses import dataclass
 
-from ..artifact_contracts import Manifest, Parent, Producer
+from spireagent.artifact_contracts import Manifest, Parent, Producer
+from spireagent.json_boundary import BoundaryError, FrozenObject, json_bytes, unsigned
+from spireagent.storage.store import ArtifactStore
+
 from ..fullrun.evaluation import (
     action_only_prior,
     evaluate_samples,
@@ -14,8 +17,6 @@ from ..fullrun.evaluation import (
     publish_evaluation,
 )
 from ..fullrun.features import LoadedFeatures
-from ..json_boundary import BoundaryError, FrozenObject, json_bytes, unsigned
-from ..storage.store import ArtifactStore
 from .contracts import RUN_SCHEMA, TrainingConfig, load_training_input
 from .ranking import RankingEngine
 from .reporting import RunReporter

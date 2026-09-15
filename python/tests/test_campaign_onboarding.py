@@ -10,13 +10,13 @@ import pytest
 from sts2_platform_evidence.collection_tool import digest as tool_digest
 from sts2_platform_evidence.delivery_config import DeliveryConfig
 
+from spireagent.hub.campaigns import Campaigns, create_campaign_tables
+from spireagent.hub.console_auth import ConsolePrincipal
+from spireagent.hub.database import Operations
+from spireagent.json_boundary import BoundaryError
+from spireagent.workbench.campaign_prepare import prepare_campaign
+from spireagent.workbench.developer import ProjectConfig, atomic_json
 from stpd.collection_activity import CONSENT_FIELDS, validate_enrollment
-from stpd.hub.campaigns import Campaigns, create_campaign_tables
-from stpd.hub.console_auth import ConsolePrincipal
-from stpd.hub.database import Operations
-from stpd.json_boundary import BoundaryError
-from stpd.workbench.campaign_prepare import prepare_campaign
-from stpd.workbench.developer import ProjectConfig, atomic_json
 
 
 class CurrentMembership:
@@ -233,7 +233,7 @@ def test_prepare_rejects_remote_and_local_identity_drift_before_creating_roots(c
 def test_unpublished_partial_preparation_can_retry_without_adopting_history(campaign, monkeypatch):
     selected = enroll(campaign)
     _, _, _, _, config, tool = campaign
-    import stpd.workbench.campaign_prepare as module
+    import spireagent.workbench.campaign_prepare as module
 
     write = module.atomic_json
 

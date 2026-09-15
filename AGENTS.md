@@ -1,9 +1,9 @@
-# STS2 AI Platform Engineering Guide
+# SpireAgent Project Engineering Guide
 
 ## Mission
 
-Maintain one coherent, fair-player STS2 environment platform without merging
-the authorities of its components.
+Maintain one project for the STS2 environment, project applications and STPD research.
+One repository and workflow do not merge game, evidence, operational or research authority.
 
 ## Required Read Order
 
@@ -43,10 +43,11 @@ matter.
 - External consumers own strategy, research projection, training and
   evaluation.
 
-Platform is the upper-level, model-neutral foundation. STPD is an independent
-research project that consumes versioned Platform contracts; repository
-independence does not make it a peer platform. Platform must not import STPD
-model, reward, training or research semantics.
+Platform components are the model-neutral foundation. `python/spireagent` owns
+project applications and shared infrastructure; `python/stpd` owns research.
+Both use declared component APIs. Platform must not import model, reward,
+training or research semantics. See docs/MONOREPO_MIGRATION.md for cutover gates.
+Root governance overrides historical repository workflow descriptions in imported docs.
 
 Never add hidden-state leakage, coordinate/index mutation, arbitrary reflection,
 a second legality engine, consumer-created native operands, silent fallback or

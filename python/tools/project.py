@@ -10,7 +10,6 @@ import subprocess
 import sys
 import tomllib
 from pathlib import Path
-from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 CI_COMMAND = (
@@ -34,64 +33,6 @@ def require(condition: bool, message: str) -> None:
         raise RepositoryGateError(message)
 
 
-def validate_ci(workflow: dict[str, Any]) -> None:
-    """Validate JSON (a YAML subset), avoiding a second configuration parser."""
-    require(set(workflow) == {"name", "on", "permissions", "concurrency", "jobs"},
-            "CI top-level shape drift")
-    require(workflow.get("permissions") == {"contents": "read"}, "CI permissions must be read-only")
-    require(workflow.get("on") == {
-        "pull_request": {},
-        "push": {"branches": ["main", "develop", "release/**", "hotfix/**"]},
-    }, "CI must cover every PR and only governed push refs")
-    require(workflow.get("concurrency") == {
-        "group": "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}",
-        "cancel-in-progress": True,
-    }, "CI must cancel stale same-ref runs")
-    jobs = workflow.get("jobs", {})
-    require(set(jobs) == {"linux-portable", "windows-portable", "locked-python"},
-            "CI job set drift")
-    lanes = []
-    for name, runner in (("linux-portable", "ubuntu-latest"),
-                         ("windows-portable", "windows-latest")):
-        job = jobs[name]
-        require(job.get("runs-on") == runner, f"{name}: runner mismatch")
-        require(set(job) == {"runs-on", "timeout-minutes", "steps"}, f"{name}: job shape drift")
-        require(job.get("timeout-minutes") == 30, f"{name}: timeout drift")
-        steps = job.get("steps", [])
-        require(len(steps) == 6, f"{name}: portable step count drift")
-        require([step.get("run") for step in steps if "run" in step] == [
-            "uv sync --locked --all-extras", "npm ci", CI_COMMAND,
-        ], f"{name}: must run the complete common portable gate")
-        for step in steps:
-            require(set(step) <= {"name", "uses", "with", "run"},
-                    f"{name}: conditional/continue-on-error/extra step properties forbidden")
-            if "uses" in step:
-                require(re.fullmatch(r"[\w.-]+/[\w.-]+@[0-9a-f]{40}", step["uses"]) is not None,
-                        f"{name}: every action must use a full commit SHA")
-        for step, action in zip(steps[:3], ("actions/checkout", "actions/setup-node",
-                                            "astral-sh/setup-uv"), strict=True):
-            require(step.get("uses", "").startswith(action + "@"),
-                    f"{name}: action owner/order drift")
-        require(steps[1].get("with") == {"node-version": "20", "cache": "npm"},
-                f"{name}: Node bootstrap drift")
-        require(steps[2].get("with") == {"enable-cache": True},
-                f"{name}: uv bootstrap drift")
-        require(steps[0].get("with") == {
-            "fetch-depth": 0,
-            "persist-credentials": False,
-            "ref": "${{ github.event.pull_request.head.sha || github.sha }}",
-        }, f"{name}: checkout must bind exact source without retained credentials")
-        lanes.append(steps)
-    require(lanes[0] == lanes[1], "Windows must not degrade to a subset of Linux")
-    aggregate = jobs["locked-python"]
-    require(aggregate == {
-        "runs-on": "ubuntu-latest",
-        "if": "${{ always() }}",
-        "needs": ["linux-portable", "windows-portable"],
-        "steps": [{"name": "Require both portable lanes", "shell": "bash", "run":
-                   'test "${{ needs.linux-portable.result }}" = success\n'
-                   'test "${{ needs.windows-portable.result }}" = success'}],
-    }, "locked-python must reject failed, cancelled, or skipped portable lanes")
 
 
 def validate_repository(root: Path) -> None:
@@ -121,19 +62,18 @@ def validate_repository(root: Path) -> None:
             target = (source.parent / link).resolve()
             require(target.is_relative_to(root.resolve()) and target.is_file(),
                     f"{route}: broken local document link: {link}")
-    validate_ci(json.loads((root / ".github/workflows/ci.yml").read_text(encoding="utf-8")))
 
 
 def portable_commands(python: str = sys.executable) -> tuple[tuple[str, ...], ...]:
     return (
         (python, "tools/doctor.py"),
         (python, "-m", "ruff", "check", "."),
-        (python, "-m", "mypy", "stpd", "tools"),
+        (python, "-m", "mypy", "stpd", "spireagent", "tools"),
         ("npm", "run", "check:connector-sdk"),
         (python, "-m", "pytest", "-q"),
-        (python, "-m", "stpd.workbench", "e2e", "--output", ".local/cpu-e2e.json"),
+        (python, "-m", "spireagent.workbench", "e2e", "--output", ".local/cpu-e2e.json"),
         (python, "-m", "stpd.cloud_jobs.smoke", "--output", ".local/cloud-worker-cpu.json"),
-        (python, "-m", "compileall", "-q", "stpd", "tests", "tools", "deploy"),
+        (python, "-m", "compileall", "-q", "stpd", "spireagent", "tests", "tools", "deploy"),
         ("uv", "build"),
         ("git", "diff", "--check"),
         ("git", "show", "--format=", "--check", "HEAD"),

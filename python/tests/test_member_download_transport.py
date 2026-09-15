@@ -15,9 +15,9 @@ import pytest
 from test_hub_console import service
 from test_hub_console import signed as signed
 
-from stpd.artifact_contracts import Manifest
-from stpd.hub.application import HubApplication
-from stpd.hub.exports import REQUEST_SCHEMA
+from spireagent.artifact_contracts import Manifest
+from spireagent.hub.application import HubApplication
+from spireagent.hub.exports import REQUEST_SCHEMA
 
 
 class QuietHandler(WSGIRequestHandler):

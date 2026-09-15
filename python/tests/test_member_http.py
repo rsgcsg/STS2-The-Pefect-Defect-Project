@@ -19,12 +19,12 @@ from test_hub_console import signed as signed
 from test_hub_identity import create, decision, request
 from test_local_identity import config
 
-from stpd.hub.application import HubApplication
-from stpd.json_boundary import BoundaryError, json_bytes
-from stpd.workbench.developer import atomic_json
-from stpd.workbench.developer_server import Application, create_server
-from stpd.workbench.identity import LocalIdentity
-from stpd.workbench.member_client import MemberClient
+from spireagent.hub.application import HubApplication
+from spireagent.json_boundary import BoundaryError, json_bytes
+from spireagent.workbench.developer import atomic_json
+from spireagent.workbench.developer_server import Application, create_server
+from spireagent.workbench.identity import LocalIdentity
+from spireagent.workbench.member_client import MemberClient
 
 
 def test_project_presentation_runs_actual_shared_module():

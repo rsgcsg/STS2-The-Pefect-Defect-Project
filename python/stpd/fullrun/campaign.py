@@ -6,8 +6,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from spireagent.json_boundary import BoundaryError, FrozenObject, digest, unsigned
+
 from ..canonical import semantic_hash
-from ..json_boundary import BoundaryError, FrozenObject, digest, unsigned
 from .data import AdmittedDataset
 from .gold import GoldSplit, GoldTask, assert_gold_access, sample_gold_tasks
 from .representation import FullRunSerializer

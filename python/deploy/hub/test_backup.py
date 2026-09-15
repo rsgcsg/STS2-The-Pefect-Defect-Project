@@ -13,7 +13,7 @@ from unittest.mock import patch
 import backup
 from test_support import PosixPermissionFixture
 
-from stpd.storage.local import LocalBlobStore
+from spireagent.storage.local import LocalBlobStore
 
 PRODUCER = {"repository": "rsgcsg/STS2-The-Perfect-Defect", "source_revision": "a" * 40,
             "uv_lock_sha256": "b" * 64}
@@ -29,8 +29,8 @@ def snapshot(path: Path, *, paused: str = "1", version: int = 2) -> None:
 
 class BackupTests(PosixPermissionFixture):
     def test_only_current_snapshot_discarded_after_verified_remote_commit(self) -> None:
-        from stpd.artifact_contracts import Producer
-        from stpd.hub.database import Operations
+        from spireagent.artifact_contracts import Producer
+        from spireagent.hub.database import Operations
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -40,7 +40,7 @@ class BackupTests(PosixPermissionFixture):
             old.write_bytes(b"existing evidence")
             store = LocalBlobStore(root / "remote")
             command = ["backup", "--state", str(root), "--discard-local-after-verified"]
-            with (patch("stpd.workbench.control.source_identity",
+            with (patch("spireagent.source.source_identity",
                         return_value=Producer.decode(PRODUCER)),
                   patch.object(backup, "configured_store", return_value=store),
                   patch.dict("os.environ", {"STPD_WORKER_IMAGE": IMAGE}),

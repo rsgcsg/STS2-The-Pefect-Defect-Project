@@ -8,13 +8,13 @@ import torch
 from test_artifact_store_v1 import PRODUCER
 from test_fullrun_features import prepared
 
-from stpd.artifact_contracts import Manifest, Parent, Producer
+from spireagent.artifact_contracts import Manifest, Parent, Producer
+from spireagent.json_boundary import BoundaryError, FrozenObject
+from spireagent.storage.blobs import StoreError
+from spireagent.storage.run_reporter import ObjectStoreRunReporter
 from stpd.fullrun.evaluation import evaluate_samples, publish_evaluation
 from stpd.fullrun.features import compile_features, load_features
-from stpd.json_boundary import BoundaryError, FrozenObject
 from stpd.qwen.fake_backend import DeterministicFakeQwenBackend
-from stpd.storage.blobs import StoreError
-from stpd.storage.run_reporter import ObjectStoreRunReporter
 from stpd.workers.contracts import (
     TrainingConfig,
     load_training_input,
@@ -236,7 +236,7 @@ def test_completed_return_rejects_missing_weights_and_evaluation_tamper(tmp_path
         )
     model = store.get_manifest(result.parent("model"))
     # Delete actual indexed bytes to prove idempotent completion rechecks them.
-    from stpd.json_boundary import decode_json
+    from spireagent.json_boundary import decode_json
 
     index = decode_json(
         store.blobs.get(f"payload-indexes/v1/{model.payload('weights').sha256}.json")

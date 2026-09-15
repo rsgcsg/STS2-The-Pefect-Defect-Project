@@ -17,7 +17,7 @@ import preflight
 import pytest
 from test_support import PosixPermissionFixture
 
-from stpd.hub.console_routes import ConsoleRoutes
+from spireagent.hub.console_routes import ConsoleRoutes
 
 
 @pytest.fixture(autouse=True)

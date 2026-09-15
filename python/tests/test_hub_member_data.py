@@ -16,16 +16,16 @@ from platform_bundle3_fixture import bundle3
 from sts2_platform_evidence import verify_human_session_bundle
 from test_hub_console import service
 
-from stpd.artifact_contracts import Manifest, Parent
+from spireagent.artifact_contracts import Manifest, Parent
+from spireagent.hub.access import require_artifact_access
+from spireagent.hub.console_auth import ConsolePrincipal
+from spireagent.hub.console_routes import ConsoleRoutes
+from spireagent.hub.exports import REQUEST_SCHEMA, ExportService
+from spireagent.hub.statistics import refresh_decision_statistics
+from spireagent.json_boundary import BoundaryError, FrozenObject, json_bytes
 from stpd.fullrun.data import admit, publish_dataset, publish_source
 from stpd.fullrun.fixtures import SyntheticSourceAdapter, synthetic_bundle
 from stpd.fullrun.platform_bundle3 import archive_bundle
-from stpd.hub.access import require_artifact_access
-from stpd.hub.console_auth import ConsolePrincipal
-from stpd.hub.console_routes import ConsoleRoutes
-from stpd.hub.exports import REQUEST_SCHEMA, ExportService
-from stpd.hub.statistics import refresh_decision_statistics
-from stpd.json_boundary import BoundaryError, FrozenObject, json_bytes
 
 MEMBER = ConsolePrincipal("member", ("one",), subject="member-subject")
 ADMIN = ConsolePrincipal("admin", (), subject="admin-subject")
@@ -236,7 +236,7 @@ def test_export_concurrent_idempotency_bounds_and_no_parent_download(tmp_path: P
             MEMBER, request(artifacts=[{"artifact_id": "https://evil.invalid", "roles": []}])
         )
     with (
-        patch("stpd.hub.exports.MAX_BYTES", 1),
+        patch("spireagent.hub.exports.MAX_BYTES", 1),
         pytest.raises(BoundaryError, match="export_size_limit"),
     ):
         exports.create(MEMBER, selection)

@@ -5,12 +5,12 @@ from pathlib import Path
 import pytest
 from test_artifact_store_v1 import PRODUCER
 
-from stpd.artifact_contracts import Manifest, Parent
-from stpd.json_boundary import FrozenObject
-from stpd.storage.blobs import StoreError
-from stpd.storage.local import LocalBlobStore
-from stpd.storage.run_reporter import ObjectStoreRunReporter
-from stpd.storage.store import ManifestArtifactStore
+from spireagent.artifact_contracts import Manifest, Parent
+from spireagent.json_boundary import FrozenObject
+from spireagent.storage.blobs import StoreError
+from spireagent.storage.local import LocalBlobStore
+from spireagent.storage.run_reporter import ObjectStoreRunReporter
+from spireagent.storage.store import ManifestArtifactStore
 
 
 def test_immutable_completion_and_manifest_event_recovery(tmp_path: Path) -> None:

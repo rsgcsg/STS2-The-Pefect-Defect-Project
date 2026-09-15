@@ -8,8 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from stpd.storage.blobs import StoreError
-from stpd.storage.local import LocalBlobStore
+from spireagent.storage.blobs import StoreError
+from spireagent.storage.local import LocalBlobStore
 
 
 def test_validated_keys_do_not_resolve_mutable_hard_link_names(tmp_path: Path, monkeypatch) -> None:

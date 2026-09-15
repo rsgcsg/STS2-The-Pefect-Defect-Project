@@ -7,9 +7,10 @@ import re
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from ..artifact_contracts import Producer
+from spireagent.artifact_contracts import Producer
+from spireagent.json_boundary import BoundaryError, object_fields, unsigned
+
 from ..canonical import semantic_hash
-from ..json_boundary import BoundaryError, object_fields, unsigned
 from .contracts import ComputeReceipt, ComputeRequest
 
 MODAL_SDK_VERSION = "1.5.5"
@@ -70,7 +71,7 @@ class ModalCall:
     call_id: str
 
     def __post_init__(self) -> None:
-        from ..json_boundary import digest
+        from spireagent.json_boundary import digest
 
         digest(self.target_id, "modal_call.target_id")
         if not isinstance(self.request, ComputeRequest):

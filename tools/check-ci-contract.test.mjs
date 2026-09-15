@@ -56,3 +56,5 @@ test("CI contract rejects unpinned GitHub Actions", () => {
   );
   assert.ok(ciWorkflowErrors(source).some((error) => error.includes("actions/setup-node@v7")));
 });
+
+// Same root contract covers both language stacks after consolidation.

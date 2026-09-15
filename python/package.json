@@ -9,7 +9,8 @@
     "node": ">=20"
   },
   "scripts": {
-    "check:connector-sdk": "node --test tests/connector_sdk_bridge_contract.test.mjs"
+    "check:connector-sdk": "node --test tests/connector_sdk_bridge_contract.test.mjs",
+    "check": "uv run --locked python tools/project.py check"
   },
   "dependencies": {
     "@rsgcsg/sts2-connector-client": "https://github.com/rsgcsg/STS2-AI-PLATFORM/releases/download/consumer-sdk/v1.1.0-rc.1/rsgcsg-sts2-connector-client-1.1.0-rc.1.tgz",

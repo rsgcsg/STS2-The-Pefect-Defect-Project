@@ -20,9 +20,9 @@ from typing import Any
 
 from sts2_platform_evidence.collection_tool import CollectionTool
 
-from stpd.json_boundary import BoundaryError, decode_json, digest, json_bytes
-from stpd.workbench.control import source_identity
-from stpd.workbench.developer import combination
+from spireagent.json_boundary import BoundaryError, decode_json, digest, json_bytes
+from spireagent.source import source_identity
+from spireagent.workbench.developer import combination
 
 ROOT = Path(__file__).resolve().parents[1]
 README = """# SpireAgent developer kit
@@ -58,10 +58,10 @@ Then stop the workbench, register the complete tool with its independently appro
 and reopen. Closing a browser tab alone does not release the registration lock.
 
 ```bash
-uv run --locked python -m stpd.workbench project stop --config /ABS/project.json
-uv run --locked python -m stpd.workbench project collection-tool --config /ABS/project.json \\
+uv run --locked python -m spireagent.workbench project stop --config /ABS/project.json
+uv run --locked python -m spireagent.workbench project collection-tool --config /ABS/project.json \\
   --tool-directory /ABS/kit/collection-tool --tool-release-id EXACT_APPROVED_ID
-uv run --locked python -m stpd.workbench project open --config /ABS/project.json
+uv run --locked python -m spireagent.workbench project open --config /ABS/project.json
 ```
 
 Open 录制与上传. Review the daily default and explicitly confirm Human origin, upload and

@@ -8,8 +8,8 @@ from typing import Any
 
 from test_human_evidence_v2 import _refresh_checksums, _sha_file, _v2_bundle
 
+from spireagent.json_boundary import decode_json, json_bytes
 from stpd.canonical import semantic_hash
-from stpd.json_boundary import decode_json, json_bytes
 
 
 def load(path: Path) -> dict[str, Any]:

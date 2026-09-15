@@ -6,10 +6,11 @@ import math
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from ..artifact_contracts import Manifest, Parent, Producer
+from spireagent.artifact_contracts import Manifest, Parent, Producer
+from spireagent.json_boundary import BoundaryError, FrozenObject, object_fields, text, unsigned
+from spireagent.storage.store import ArtifactStore
+
 from ..fullrun.features import LoadedFeatures, load_features
-from ..json_boundary import BoundaryError, FrozenObject, object_fields, text, unsigned
-from ..storage.store import ArtifactStore
 
 TRAINING_SCHEMA = "stpd/training-input-v1"
 RUN_SCHEMA = "stpd/research-run-v1"

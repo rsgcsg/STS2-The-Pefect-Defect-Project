@@ -9,12 +9,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
-from stpd.artifact_contracts import Manifest, Producer
+from spireagent.artifact_contracts import Manifest, Producer
+from spireagent.json_boundary import BoundaryError, FrozenObject
+from spireagent.workbench import local_models
+from spireagent.workbench.developer import ProjectConfig, combination
+from spireagent.workbench.local_models import LocalModelService, RuntimeClient
 from stpd.canonical import canonical_json
-from stpd.json_boundary import BoundaryError, FrozenObject
-from stpd.workbench import local_models
-from stpd.workbench.developer import ProjectConfig, combination
-from stpd.workbench.local_models import LocalModelService, RuntimeClient
 
 
 @pytest.fixture

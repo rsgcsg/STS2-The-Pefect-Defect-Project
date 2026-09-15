@@ -1,3 +1,6 @@
+> Project migration: application ownership and active layout are defined in
+> [MONOREPO_MIGRATION](MONOREPO_MIGRATION.md). Game/evidence authority below remains unchanged.
+
 # Components
 
 | Component | Path | Owns | Must not own |
@@ -12,7 +15,7 @@
 | Platform Live UI | `apps/ingame-ui` | in-game Environment/Policy/Human Data/Diagnostics presentation and typed application commands | packaging/deployment, direct BoundAction submission, legality, recording writes |
 | Platform Game Mod | `apps/game-mod` | one manifest/DLL, explicit component initialization, exact build/install/load/rollback provenance | gameplay legality, Human witness semantics, UI domain logic |
 | Platform tools | `tools` | composition, component identity, migration/boundary checks | native operands, policy |
-| STPD | external repository | ResearchTransition, Dataset Views, representation, Qwen, training/evaluation | Host implementation or legality |
+| STPD | python/stpd | ResearchTransition, Dataset Views, representation, Qwen, training/evaluation | Host implementation or legality |
 
 Native Foundation is deliberately compiled into the game-side Connector Host
 and unified Mod rather than published as a second runtime service. Its typed

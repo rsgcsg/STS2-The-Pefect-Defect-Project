@@ -138,7 +138,7 @@ function setup({
   });
   vm.runInContext(
     readFileSync(
-      new URL("../stpd/console/project.js", import.meta.url),
+      new URL("../spireagent/console/project.js", import.meta.url),
       "utf8",
     ),
     context,

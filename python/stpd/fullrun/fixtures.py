@@ -5,8 +5,7 @@ from __future__ import annotations
 import hashlib
 from typing import Any
 
-from ..canonical import semantic_hash
-from ..json_boundary import (
+from spireagent.json_boundary import (
     BoundaryError,
     FrozenObject,
     array,
@@ -17,6 +16,8 @@ from ..json_boundary import (
     text,
     unsigned,
 )
+
+from ..canonical import semantic_hash
 from .contracts import (
     AdmittedRead,
     EvidenceLink,

@@ -7,11 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from stpd.artifact_contracts import Manifest, Parent, Payload, Producer
-from stpd.json_boundary import BoundaryError, FrozenObject, decode_json, json_bytes
-from stpd.storage.blobs import StoreError
-from stpd.storage.local import LocalBlobStore
-from stpd.storage.store import CHUNK_BYTES, ManifestArtifactStore, copy_artifact
+from spireagent.artifact_contracts import Manifest, Parent, Payload, Producer
+from spireagent.json_boundary import BoundaryError, FrozenObject, decode_json, json_bytes
+from spireagent.storage.blobs import StoreError
+from spireagent.storage.local import LocalBlobStore
+from spireagent.storage.store import CHUNK_BYTES, ManifestArtifactStore, copy_artifact
 
 PRODUCER = Producer("rsgcsg/STS2-The-Perfect-Defect", "a" * 40, "b" * 64)
 

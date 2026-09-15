@@ -8,16 +8,16 @@ from pathlib import Path
 import pytest
 from sts2_platform_evidence.collection_tool import digest as tool_digest
 
-from stpd.json_boundary import BoundaryError
-from stpd.package_identity import file_sha256
-from stpd.workbench.collection_tool_registration import (
+from spireagent.json_boundary import BoundaryError
+from spireagent.workbench.collection_tool_registration import (
     REGISTRATION_FILE,
     register_collection_tool,
     registered_collection_tool,
 )
-from stpd.workbench.developer import ProjectConfig, atomic_json, combination
-from stpd.workbench.developer_cli import main
-from stpd.workbench.developer_server import instance_lock
+from spireagent.workbench.developer import ProjectConfig, atomic_json, combination
+from spireagent.workbench.developer_cli import main
+from spireagent.workbench.developer_server import instance_lock
+from stpd.package_identity import file_sha256
 
 
 def make_tool(directory: Path, marker: str = "first") -> str:

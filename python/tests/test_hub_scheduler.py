@@ -8,12 +8,12 @@ from pathlib import Path
 import pytest
 from test_cloud_jobs import job_fixture
 
+from spireagent.hub.database import CURRENT_SCHEMA, Operations
+from spireagent.hub.scheduler import Scheduler
+from spireagent.json_boundary import BoundaryError
 from stpd.cloud_jobs.contracts import ComputeReceipt
 from stpd.cloud_jobs.execution import dispatch, prepare_feature_run
 from stpd.cloud_jobs.modal import ModalCall, ModalTarget
-from stpd.hub.database import CURRENT_SCHEMA, Operations
-from stpd.hub.scheduler import Scheduler
-from stpd.json_boundary import BoundaryError
 
 
 class Provider:
@@ -317,7 +317,7 @@ def test_valid_receipt_binding_still_requires_artifact_integrity(pipeline):
 
 
 def test_cancel_racing_after_validation_prevents_final_selection(pipeline, monkeypatch):
-    import stpd.hub.scheduler as module
+    import spireagent.hub.scheduler as module
 
     ops, store, provider, job = pipeline
     validate = module.validate_receipt
@@ -349,7 +349,7 @@ def test_provider_timeout_cannot_exceed_authorized_job_duration(pipeline):
 
 
 def test_console_index_failure_never_reopens_selected_compute(pipeline, monkeypatch):
-    from stpd.hub.console_index import ConsoleIndex
+    from spireagent.hub.console_index import ConsoleIndex
 
     ops, store, provider, job = pipeline
 
@@ -371,7 +371,7 @@ def test_index_and_secondary_telemetry_failures_cannot_change_completed_compute(
     pipeline,
     monkeypatch,
 ):
-    from stpd.hub.console_index import ConsoleIndex
+    from spireagent.hub.console_index import ConsoleIndex
 
     ops, store, provider, job = pipeline
     event = ops._event

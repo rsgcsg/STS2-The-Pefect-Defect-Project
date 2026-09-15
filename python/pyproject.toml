@@ -42,11 +42,11 @@ dev = [
 ]
 
 [tool.setuptools.package-data]
-"stpd.console" = ["*.css", "*.js"]
+"spireagent.console" = ["*.css", "*.js"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["stpd*"]
+include = ["stpd*", "spireagent*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "deploy/hub"]

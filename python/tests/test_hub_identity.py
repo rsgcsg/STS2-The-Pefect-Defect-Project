@@ -13,10 +13,10 @@ import pytest
 from test_hub_console import service
 from test_hub_console import signed as signed
 
-from stpd.hub.application import HubApplication
-from stpd.hub.console_auth import verified_identity
-from stpd.hub.database import CURRENT_SCHEMA, Operations, token_hash
-from stpd.json_boundary import BoundaryError
+from spireagent.hub.application import HubApplication
+from spireagent.hub.console_auth import verified_identity
+from spireagent.hub.database import CURRENT_SCHEMA, Operations, token_hash
+from spireagent.json_boundary import BoundaryError
 
 ORIGIN = "https://hub.example"
 SECRET = "client-secret-" + "a" * 48
@@ -409,7 +409,7 @@ def test_public_flow_bounds_ignore_forged_forwarded_ip_and_reject_callback(hub, 
     app, _, _ = hub
     # The quota is per minute; test wall time must not silently reset its bucket.
     now = [60.0]
-    monkeypatch.setattr("stpd.hub.identity.time", SimpleNamespace(time=lambda: now[0]))
+    monkeypatch.setattr("spireagent.hub.identity.time", SimpleNamespace(time=lambda: now[0]))
     for index in range(20):
         result = request(
             app,

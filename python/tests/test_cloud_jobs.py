@@ -7,6 +7,8 @@ import pytest
 from test_artifact_store_v1 import PRODUCER
 from test_fullrun_features import prepared
 
+from spireagent.json_boundary import BoundaryError, FrozenObject
+from spireagent.storage.run_reporter import ObjectStoreRunReporter
 from stpd.cloud_jobs.contracts import (
     ComputeReceipt,
     ComputeRequest,
@@ -21,9 +23,7 @@ from stpd.cloud_jobs.execution import (
     validate_receipt,
 )
 from stpd.fullrun.features import compile_features
-from stpd.json_boundary import BoundaryError, FrozenObject
 from stpd.qwen.fake_backend import DeterministicFakeQwenBackend
-from stpd.storage.run_reporter import ObjectStoreRunReporter
 from stpd.workers.contracts import TrainingConfig
 from stpd.workers.worker import WorkerExecutionError
 

@@ -21,20 +21,45 @@ from typing import Any
 from urllib.parse import urlsplit
 
 PUBLIC_KEYS = {
-    "STPD_WORKER_IMAGE", "STPD_CADDY_IMAGE", "STPD_HUB_DOMAIN", "STPD_ACME_EMAIL",
-    "STPD_HUB_STATE_DIR", "STPD_HUB_CADDY_DIR", "STPD_HUB_SECRET_FILE", "STPD_HUB_BUDGET_UNITS",
+    "STPD_WORKER_IMAGE",
+    "STPD_CADDY_IMAGE",
+    "STPD_HUB_DOMAIN",
+    "STPD_ACME_EMAIL",
+    "STPD_HUB_STATE_DIR",
+    "STPD_HUB_CADDY_DIR",
+    "STPD_HUB_SECRET_FILE",
+    "STPD_HUB_BUDGET_UNITS",
 }
 SECRET_KEYS = {
-    "STPD_HUB_ADMIN_TOKEN", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
-    "STPD_S3_ENDPOINT", "STPD_S3_REGION", "STPD_S3_BUCKET", "STPD_S3_PREFIX",
-    "STPD_INGRESS_BUCKET", "STPD_MODAL_TARGET", "MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET",
-    "MODAL_ENVIRONMENT", "STPD_ACCESS_ISSUER", "STPD_ACCESS_AUDIENCE",
-    "STPD_ACCESS_ALLOWLIST", "STPD_HUB_BACKUP_STATUS",
+    "STPD_HUB_ADMIN_TOKEN",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_SESSION_TOKEN",
+    "STPD_S3_ENDPOINT",
+    "STPD_S3_REGION",
+    "STPD_S3_BUCKET",
+    "STPD_S3_PREFIX",
+    "STPD_INGRESS_BUCKET",
+    "STPD_MODAL_TARGET",
+    "MODAL_TOKEN_ID",
+    "MODAL_TOKEN_SECRET",
+    "MODAL_ENVIRONMENT",
+    "STPD_ACCESS_ISSUER",
+    "STPD_ACCESS_AUDIENCE",
+    "STPD_ACCESS_ALLOWLIST",
+    "STPD_HUB_BACKUP_STATUS",
 }
 COMPUTE_KEYS = {"STPD_MODAL_TARGET", "MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET"}
 REQUIRED_SECRET_KEYS = SECRET_KEYS - {
-    "AWS_SESSION_TOKEN", "STPD_S3_REGION", "STPD_S3_PREFIX", "MODAL_ENVIRONMENT", *COMPUTE_KEYS,
-    "STPD_ACCESS_ISSUER", "STPD_ACCESS_AUDIENCE", "STPD_ACCESS_ALLOWLIST", "STPD_HUB_BACKUP_STATUS",
+    "AWS_SESSION_TOKEN",
+    "STPD_S3_REGION",
+    "STPD_S3_PREFIX",
+    "MODAL_ENVIRONMENT",
+    *COMPUTE_KEYS,
+    "STPD_ACCESS_ISSUER",
+    "STPD_ACCESS_AUDIENCE",
+    "STPD_ACCESS_ALLOWLIST",
+    "STPD_HUB_BACKUP_STATUS",
 }
 IMAGE_PATTERN = r"[A-Za-z0-9][A-Za-z0-9._:/-]*@sha256:[0-9a-f]{64}"
 SAFE_STATUS_DIRECTORY = Path("/var/lib/stpd-maintenance/safe-status")
@@ -49,7 +74,7 @@ def operational_owner(name: str) -> ModuleType:
     # Load the one stdlib-only owner from this exact checkout, not a second policy.
     if name not in {"capacity", "backup_status"}:
         raise PreflightError("unknown_operational_owner")
-    path = Path(__file__).resolve().parents[2] / "stpd/hub" / (name + ".py")
+    path = Path(__file__).resolve().parents[2] / "spireagent/hub" / (name + ".py")
     spec = importlib.util.spec_from_file_location("stpd_host_" + name, path)
     if spec is None or spec.loader is None:
         raise PreflightError("capacity_owner_unavailable")
@@ -63,16 +88,24 @@ def capacity_owner() -> ModuleType:
 
 
 def check_capacity(
-    config: Path, image_store: Path, *, additional_bytes: int, additional_inodes: int,
+    config: Path,
+    image_store: Path,
+    *,
+    additional_bytes: int,
+    additional_inodes: int,
 ) -> dict[str, Any]:
     values = read_env(config, PUBLIC_KEYS)
     state = Path(values.get("STPD_HUB_STATE_DIR", ""))
     if not state.is_absolute() or not image_store.is_absolute():
         raise PreflightError("capacity_requires_absolute_state_and_image_store")
-    return dict(capacity_owner().host_capacity(
-        state, image_store, additional_bytes=additional_bytes,
-        additional_inodes=additional_inodes,
-    ))
+    return dict(
+        capacity_owner().host_capacity(
+            state,
+            image_store,
+            additional_bytes=additional_bytes,
+            additional_inodes=additional_inodes,
+        )
+    )
 
 
 def read_env(path: Path, allowed: set[str], *, private: bool = False) -> dict[str, str]:
@@ -105,7 +138,9 @@ def checkout_identity() -> dict[str, str]:
 
     def read(*args: str) -> bytes:
         return subprocess.check_output(
-            command + list(args), cwd=root, stderr=subprocess.PIPE,
+            command + list(args),
+            cwd=root,
+            stderr=subprocess.PIPE,
             env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
         )
 
@@ -113,14 +148,25 @@ def checkout_identity() -> dict[str, str]:
         raise PreflightError("compute_requires_exact_clean_deployment_checkout")
     revision = read("rev-parse", "HEAD").decode().strip()
     lock = (root / "uv.lock").read_bytes()
-    if re.fullmatch(r"[0-9a-f]{40}", revision) is None or read("show", "HEAD:uv.lock") != lock:
+    if (
+        re.fullmatch(r"[0-9a-f]{40}", revision) is None
+        or read("show", "HEAD:" + read("rev-parse", "--show-prefix").decode().strip() + "uv.lock")
+        != lock
+    ):
         raise PreflightError("compute_checkout_identity_mismatch")
-    return {"repository": "rsgcsg/STS2-The-Perfect-Defect", "source_revision": revision,
-            "uv_lock_sha256": hashlib.sha256(lock).hexdigest()}
+    return {
+        "repository": "rsgcsg/STS2-The-Pefect-Defect-Project",
+        "source_revision": revision,
+        "uv_lock_sha256": hashlib.sha256(lock).hexdigest(),
+    }
 
 
 def check_compute(
-    values: dict[str, str], secrets: dict[str, str], state: Path, *, allow_compute: bool,
+    values: dict[str, str],
+    secrets: dict[str, str],
+    state: Path,
+    *,
+    allow_compute: bool,
 ) -> dict[str, Any]:
     raw_budget = values["STPD_HUB_BUDGET_UNITS"]
     if re.fullmatch(r"0|[1-9][0-9]{0,18}", raw_budget) is None:
@@ -128,9 +174,14 @@ def check_compute(
     budget = int(raw_budget)
     if budget and not allow_compute:
         raise PreflightError("initial_deployment_must_disable_compute_budget")
-    if "MODAL_ENVIRONMENT" in secrets and re.fullmatch(
-        r"[A-Za-z0-9_-]{1,64}", secrets["MODAL_ENVIRONMENT"],
-    ) is None:
+    if (
+        "MODAL_ENVIRONMENT" in secrets
+        and re.fullmatch(
+            r"[A-Za-z0-9_-]{1,64}",
+            secrets["MODAL_ENVIRONMENT"],
+        )
+        is None
+    ):
         raise PreflightError("invalid_modal_environment")
     configured = any(key in secrets for key in COMPUTE_KEYS)
     if not configured:
@@ -153,13 +204,16 @@ def check_compute(
         raise PreflightError("modal_target_requires_private_uid_10001_file")
     target = json.loads(target_path.read_bytes())
     if (
-        not isinstance(target, dict) or target.get("schema") != "stpd/modal-target-v1"
+        not isinstance(target, dict)
+        or target.get("schema") != "stpd/modal-target-v1"
         or target.get("producer") != checkout_identity()
         or target.get("image") != values["STPD_WORKER_IMAGE"]
     ):
         raise PreflightError("modal_target_current_source_lock_image_mismatch")
-    return {"compute_budget": budget,
-            "compute": "configured_budget_zero" if not budget else "explicitly_enabled"}
+    return {
+        "compute_budget": budget,
+        "compute": "configured_budget_zero" if not budget else "explicitly_enabled",
+    }
 
 
 @contextmanager
@@ -221,15 +275,21 @@ def check_console(secrets: dict[str, str], state: Path) -> dict[str, str]:
             raise PreflightError("membership_database_symlinks_forbidden")
         if candidate.exists():
             info = candidate.stat()
-            if (not stat.S_ISREG(info.st_mode) or info.st_mode & 0o077
-                    or owner_uid(candidate) != 10001):
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_mode & 0o077
+                or owner_uid(candidate) != 10001
+            ):
                 raise PreflightError("membership_database_requires_private_uid_10001_file")
     try:
         # Do not instantiate Operations: it owns migrations and writes. A read transaction
         # includes committed WAL state; immutable=1 would silently ignore current members.
-        with membership_reader_owner(path), closing(
-            sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=2),
-        ) as db:
+        with (
+            membership_reader_owner(path),
+            closing(
+                sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=2),
+            ) as db,
+        ):
             db.execute("PRAGMA query_only=ON")
             db.execute("BEGIN")
             if db.execute("PRAGMA user_version").fetchone() != (4,):
@@ -244,8 +304,10 @@ def check_console(secrets: dict[str, str], state: Path) -> dict[str, str]:
                 "WHERE role='admin' AND status='active'",
             ).fetchall()
             if any(row[2] == secrets[names[0]] and row[3] and row[4] for row in admins):
-                return {"browser_console": "configured_not_live_qualified",
-                        "membership": "hub_operations_active_admin"}
+                return {
+                    "browser_console": "configured_not_live_qualified",
+                    "membership": "hub_operations_active_admin",
+                }
             pending = db.execute(
                 "SELECT value FROM settings WHERE key='membership_bootstrap_pending_admin'",
             ).fetchone()
@@ -253,24 +315,31 @@ def check_console(secrets: dict[str, str], state: Path) -> dict[str, str]:
                 "SELECT id,email,issuer,subject,access_subject FROM identity_members "
                 "WHERE role='admin' AND status='invited'",
             ).fetchall()
-            if (not admins and pending and len(invited) == 1
-                    and pending == (invited[0][0],)
-                    and invited[0][2] == secrets[names[0]]
-                    and isinstance(invited[0][1], str)
-                    and re.fullmatch(r"[^\s@]+@[^\s@]+", invited[0][1])
-                    and len(invited[0][1]) <= 254
-                    and invited[0][3] is None and invited[0][4] is None
-                    and not db.execute(
-                        "SELECT 1 FROM identity_members WHERE status='active'",
-                    ).fetchone()
-                    and not db.execute("SELECT 1 FROM identity_users").fetchone()
-                    and not db.execute(
-                        "SELECT 1 FROM devices WHERE owner_subject IS NOT NULL",
-                    ).fetchone()
-                    and not db.execute("SELECT 1 FROM identity_sessions").fetchone()):
-                return {"browser_console": "bootstrap_pending",
-                        "membership": "hub_operations_first_admin_invited",
-                        "warning": "FIRST_ADMIN_LOGIN_REQUIRED"}
+            if (
+                not admins
+                and pending
+                and len(invited) == 1
+                and pending == (invited[0][0],)
+                and invited[0][2] == secrets[names[0]]
+                and isinstance(invited[0][1], str)
+                and re.fullmatch(r"[^\s@]+@[^\s@]+", invited[0][1])
+                and len(invited[0][1]) <= 254
+                and invited[0][3] is None
+                and invited[0][4] is None
+                and not db.execute(
+                    "SELECT 1 FROM identity_members WHERE status='active'",
+                ).fetchone()
+                and not db.execute("SELECT 1 FROM identity_users").fetchone()
+                and not db.execute(
+                    "SELECT 1 FROM devices WHERE owner_subject IS NOT NULL",
+                ).fetchone()
+                and not db.execute("SELECT 1 FROM identity_sessions").fetchone()
+            ):
+                return {
+                    "browser_console": "bootstrap_pending",
+                    "membership": "hub_operations_first_admin_invited",
+                    "warning": "FIRST_ADMIN_LOGIN_REQUIRED",
+                }
             raise PreflightError("membership_active_admin_required")
     except sqlite3.Error:
         raise PreflightError("membership_database_unreadable_or_incompatible") from None
@@ -312,19 +381,30 @@ def check_configuration(config: Path, *, allow_compute: bool = False) -> dict[st
         raise PreflightError("admin_credential_too_short")
     endpoint = urlsplit(secrets["STPD_S3_ENDPOINT"])
     if (
-        endpoint.scheme != "https" or not endpoint.hostname
-        or endpoint.username or endpoint.password
-        or endpoint.query or endpoint.fragment
+        endpoint.scheme != "https"
+        or not endpoint.hostname
+        or endpoint.username
+        or endpoint.password
+        or endpoint.query
+        or endpoint.fragment
     ):
         raise PreflightError("private_store_https_endpoint_required")
     if secrets["STPD_S3_BUCKET"] == secrets["STPD_INGRESS_BUCKET"]:
         raise PreflightError("separate_ingress_and_artifact_buckets_required")
     return {
-        "configuration": "PASS", "credential_values": "not_reported",
+        "configuration": "PASS",
+        "credential_values": "not_reported",
         **check_compute(values, secrets, state, allow_compute=allow_compute),
         **check_console(secrets, state),
-        "checks_not_performed": ["DNS ownership", "TLS issuance", "bucket privacy", "cloud IAM",
-                                 "loaded OCI identity", "real upload", "real GPU"],
+        "checks_not_performed": [
+            "DNS ownership",
+            "TLS issuance",
+            "bucket privacy",
+            "cloud IAM",
+            "loaded OCI identity",
+            "real upload",
+            "real GPU",
+        ],
     }
 
 
@@ -353,22 +433,34 @@ def host_checks() -> dict[str, Any]:
         raise PreflightError("docker_engine_and_compose_required")
     safe_status = SAFE_STATUS_DIRECTORY
     private = safe_status.parent
-    if (not private.is_dir() or private.is_symlink()
-            or private.stat().st_mode & 0o777 != 0o700 or owner_uid(private) != 0):
+    if (
+        not private.is_dir()
+        or private.is_symlink()
+        or private.stat().st_mode & 0o777 != 0o700
+        or owner_uid(private) != 0
+    ):
         raise PreflightError("private_backup_status_directory_requires_root_mode_0700")
-    if (not safe_status.is_dir() or safe_status.is_symlink()
-            or safe_status.stat().st_mode & 0o777 != 0o755 or owner_uid(safe_status) != 0):
+    if (
+        not safe_status.is_dir()
+        or safe_status.is_symlink()
+        or safe_status.stat().st_mode & 0o777 != 0o755
+        or owner_uid(safe_status) != 0
+    ):
         raise PreflightError("safe_backup_status_directory_requires_preparation_mode_0755")
     result = subprocess.run(
-        ["docker", "compose", "version", "--short"], capture_output=True, text=True,
-        check=False, timeout=10,
+        ["docker", "compose", "version", "--short"],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=10,
     )
     match = re.match(r"v?(\d+)\.(\d+)\.(\d+)", result.stdout.strip())
     if result.returncode or match is None or tuple(map(int, match.groups())) < (2, 30, 0):
         raise PreflightError("compose_2_30_or_newer_required")
     memory = int(os.sysconf("SC_PAGE_SIZE")) * int(os.sysconf("SC_PHYS_PAGES"))
     return {
-        "host": "PASS", "physical_memory_mib": memory // 1024**2,
+        "host": "PASS",
+        "physical_memory_mib": memory // 1024**2,
         "capacity_note": "4_GiB_recommended_measure_before_raising_limits",
     }
 
@@ -378,16 +470,31 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--config", type=Path)
     parser.add_argument("--backup", type=Path)
     parser.add_argument("--host", action="store_true")
-    parser.add_argument("--capacity", action="store_true",
-                        help="capacity-only check; run normal configuration preflight separately")
-    parser.add_argument("--image-store", type=Path,
-                        help="actual host filesystem containing Docker/containerd image data")
-    parser.add_argument("--additional-bytes", type=int,
-                        help="reviewed peak extra bytes; explicit 0 for already present images")
-    parser.add_argument("--additional-inodes", type=int,
-                        help="reviewed peak extra inode allocation; unknown is not zero")
-    parser.add_argument("--allow-compute", action="store_true",
-                        help="validate an explicitly authorized nonzero compute budget")
+    parser.add_argument(
+        "--capacity",
+        action="store_true",
+        help="capacity-only check; run normal configuration preflight separately",
+    )
+    parser.add_argument(
+        "--image-store",
+        type=Path,
+        help="actual host filesystem containing Docker/containerd image data",
+    )
+    parser.add_argument(
+        "--additional-bytes",
+        type=int,
+        help="reviewed peak extra bytes; explicit 0 for already present images",
+    )
+    parser.add_argument(
+        "--additional-inodes",
+        type=int,
+        help="reviewed peak extra inode allocation; unknown is not zero",
+    )
+    parser.add_argument(
+        "--allow-compute",
+        action="store_true",
+        help="validate an explicitly authorized nonzero compute budget",
+    )
     args = parser.parse_args(argv)
     try:
         if not (args.config or args.backup or args.host or args.capacity):
@@ -396,15 +503,25 @@ def main(argv: list[str] | None = None) -> int:
         if args.capacity:
             if not args.config or not args.image_store:
                 raise PreflightError("capacity_requires_config_and_image_store")
-            if (args.additional_bytes is None or args.additional_inodes is None
-                    or args.additional_bytes < 0 or args.additional_inodes < 0):
+            if (
+                args.additional_bytes is None
+                or args.additional_inodes is None
+                or args.additional_bytes < 0
+                or args.additional_inodes < 0
+            ):
                 raise PreflightError("explicit_nonnegative_additional_capacity_required")
-            capacity = check_capacity(args.config, args.image_store,
-                                      additional_bytes=args.additional_bytes,
-                                      additional_inodes=args.additional_inodes)
+            capacity = check_capacity(
+                args.config,
+                args.image_store,
+                additional_bytes=args.additional_bytes,
+                additional_inodes=args.additional_inodes,
+            )
             report["capacity"] = capacity
             report["checks_not_performed"] = [
-                "configuration validity", "OCI identity", "capacity reservation", "image cleanup",
+                "configuration validity",
+                "OCI identity",
+                "capacity reservation",
+                "image cleanup",
             ]
             if capacity["status"] != "ok":
                 report["error"] = "capacity_attention_required"

@@ -1,119 +1,49 @@
-# STS2 AI Platform
+# SpireAgent — STS2 Project
 
-STS2 AI Platform is the shared, model-neutral environment foundation for
-programs that use the real Slay the Spire 2 runtime. It brings the runtime,
-fair-player automation, native-human evidence, evidence logistics, and
-operator surfaces into one workspace without merging their authorities.
-
-Platform is not a strategy, model, reward function, training system, research
-projection, or second game-rules engine. STPD and other research projects are
-independent consumers of versioned Platform contracts. STS2 remains the owner
-of rules, RNG, effects, native legality, and Commit.
-
-## How the pieces fit
-
-```text
-STS2 game truth
-  -> Native Foundation: shared game-side semantic decisions and lifecycle
-  -> Host Runtime: process lifecycle, isolation, recovery, exact identity
-  -> Connector: fair-player Snapshot, Read, finite BoundAction, Receipt, successor
-  -> external strategy and research consumers
-
-Native human play
-  -> Human Annotator: witness correlation and immutable recording evidence
-  -> Platform Evidence: typed verification, store, transfer, receiver receipts
-  -> external evidence consumers
-
-External policy adapter
-  -> Policy Runtime: model-neutral mode/controller/delivery lifecycle
-  -> Connector-owned finite actions
-
-Workbench and Platform Live UI
-  -> typed status and bounded application commands, never domain authority
-```
-
-| Path | Responsibility |
-|---|---|
-| `components/native-foundation` | Shared STS2 semantic decisions, lifecycle, and owner lineage |
-| `components/connector` | Fair-player Player Environment and native action binding |
-| `components/host-runtime` | Runtime discovery, isolation, lifecycle, recovery, and qualification support |
-| `components/annotator` | Native-human witness recording, audit, and immutable session bundles |
-| `components/evidence` | Typed artifact verification and immutable evidence logistics |
-| `components/policy-runtime` | Model-neutral policy and controller lifecycle over Connector contracts |
-| `apps/workbench` | Typed operational status and bounded Policy Runtime commands |
-| `apps/ingame-ui` | In-game status and application controls |
-| `apps/game-mod` | The one production STS2 Mod build, deploy, load, and rollback path |
-
-The detailed dependency graph and ownership matrix live in
-[Architecture](docs/ARCHITECTURE.md) and [Components](docs/COMPONENTS.md).
+One repository for the fair-player STS2 environment, Human collection, local/cloud
+project tools and STPD research. STS2 owns rules and native execution; project
+applications and models consume declared interfaces.
 
 ## Start here
 
-- New to the project: follow the [New Engineer Guide](docs/NEW_ENGINEER_GUIDE.md).
-- Making a change: read [AGENTS.md](AGENTS.md), then the
-  [development workflow](docs/DEVELOPMENT_WORKFLOW.md) and the owning
-  component's guide.
-- Designing or reviewing a change: use
-  [Engineering Governance](docs/ENGINEERING_GOVERNANCE.md) for fact ownership,
-  abstraction admission, change classes, test selection, and evidence claims.
-- Starting a Codex task: run `npm run project:context` or select a component,
-  for example `npm run project:context -- --component connector`.
-- Using a repeated high-risk workflow: see the
-  [repository Skill index](.agents/skills/README.md); ordinary work normally
-  needs no Skill.
-- Checking current claims: read [Status](docs/STATUS.md) and the bounded
-  [current context](docs/memory/CURRENT.md).
-- Debugging runtime behavior: use the Host Runtime or Game Mod guide, then the
-  exact evidence named by Status.
-- Reviewing proof: read [Testing and Evidence](docs/TESTING.md), then load only
-  the relevant dated evidence report.
+- [Migration progress and acceptance](docs/MONOREPO_MIGRATION.md): the new candidate
+  is not yet a qualified replacement for the existing installation or Hub.
+- [Architecture and component ownership](docs/ARCHITECTURE.md).
+- [Developer workflow](docs/DEVELOPMENT_WORKFLOW.md), [testing](docs/TESTING.md),
+  [engineering governance](docs/ENGINEERING_GOVERNANCE.md), [skills](.agents/skills/README.md).
+- [Collection, member setup and maintenance](python/docs/B_PIPELINE_HANDOFF.md).
+- [Cloud deployment and recovery](python/deploy/hub/RUNBOOK.md).
+- [Research and data](python/docs/FULLRUN_RESEARCH.md).
 
-The [Document Map](docs/DOCUMENT_MAP.md) is the short routing index. Historical
-evidence remains discoverable without being part of the default reading path.
+## Workspace
 
-## Collect and view project data
+`components/` owns native environment, Host, Connector, Annotator, Evidence and
+Policy Runtime. `apps/game-mod` builds one game Mod; `apps/ingame-ui` is its UI.
+`python/spireagent` owns Hub, local Workbench, shared console and artifact services.
+`python/stpd` owns research projections, models, training and evaluation.
+`python/deploy` owns cloud recipes. `tools/` owns the root checks and provenance.
+The old Platform Workbench is retained as diagnostics during UI consolidation.
 
-The default SpireAgent collection workflow uses one qualified `STS2_PLATFORM` game Mod and
-one external project workbench. Start from the [STPD developer releases](https://github.com/rsgcsg/STS2-The-Perfect-Defect/releases)
-and follow the [shared project handoff](https://github.com/rsgcsg/STS2-The-Perfect-Defect/blob/main/docs/B_PIPELINE_HANDOFF.md)
-for the exact supported combination, invited email login, computer binding and dedicated campaign.
-A collector does not need to build this repository or install research/model dependencies.
+## Developer setup
 
-Record in the game, press Recorder **Close**, then inspect **采集记录** in the local workbench:
-sealed evidence moves through packing, the persistent queue, upload and receiver verification.
-The [cloud console](https://hub.2-fire-2.com/app/) shows the same authorized received records;
-only the local workbench knows that computer's unuploaded queue. Login and background device
-upload authorization are separate. A received bundle is not automatically a training Dataset.
+Install Node 20+, uv, and the .NET SDK required by Platform checks. From this root:
 
-[Collection and incident response](docs/ANNOTATOR_COLLECTION.md) owns the Platform half:
-exact Mod/tool identity, native decision quality, immutable evidence and failure reports.
-STPD owns workbench accounts, Hub deployment, cloud operations and research admission.
-The commands below are for **Platform development**, not the everyday collector entry.
-
-## Portable quick start
-
-The root workspace requires Node.js 20 or newer. Component checks also discover
-the required .NET and Python toolchains.
-
-```bash
+```sh
 npm ci
-npm run doctor
+npm ci --prefix python
+npm run setup:python
 npm run check
 ```
 
-These commands prove portable source/test facts only. They do not prove an
-exact build, package, installation, loaded Mod, live mutation, native-human
-origin, journey, or qualification. Evidence levels never transfer to another
-artifact merely because source was merged or rebuilt.
+`npm run check:platform` and `npm run check:python` select existing component gates.
+`npm run workbench -- --config /ABS/project.json --hub-url https://hub.2-fire-2.com`
+opens the single project collector workflow. Models are separate downloads;
+recording and upload still require the user's configured consent and device.
+Exact-game build/install/load and Human gates are separate from portable checks.
 
-## Development boundary
+## Source and data history
 
-Normal work starts from current `origin/develop`, uses one short-lived topic
-branch and worktree, and targets `develop` through a pull request. `main` is the
-governed release/hotfix landing line. Never commit proprietary game files,
-decompiled source, raw human data, `.local/`, credentials, model weights, or
-installed artifacts.
-
-See [Project System](docs/PROJECT_SYSTEM.md) for documentation, style, Skill,
-and anti-drift governance; [Contributing](CONTRIBUTING.md) for the concise
-contributor contract; and [Security](SECURITY.md) for reporting concerns.
+Original Platform and STPD commits remain in this history, including prior imported
+component histories. `migration/project-import.json` records exact source mapping.
+Old recordings, dataset IDs, model manifests and evidence retain their original
+producer identity. New source, package, service and scientific claims are separate.
