@@ -2,6 +2,11 @@
 
 Status: accepted. Browser activation, deployment and Human usability evidence remain separate.
 
+The shared-shell decision remains current. Its file-based roster, historical roles and
+read-only personal scope below are superseded by
+[ADR-0006](0006-project-members-and-local-models.md); retained text explains the prior design,
+not the current authorization contract. No historical qualification is upgraded by that change.
+
 ## Problem and owner
 
 The B pipeline has an operational upload/receipt path, but the developer page presents nested

@@ -28,29 +28,60 @@ ROOT = Path(__file__).resolve().parents[1]
 README = """# SpireAgent developer kit
 
 Verify this archive's SHA256 against the approved GitHub release before extraction.
-combination.json inventories the packaged bytes and exact STPD source/lock. Its identity
-is not proof of native compatibility, Human origin, cloud deployment or research admission.
-Read the associated release notes for supported systems, actual gates and rollback.
+combination.json inventories packaged bytes and exact STPD source/lock. Read that release's
+supported systems, actual qualification gates and rollback before installing.
 
 Install Git, Python 3.11 with uv, Node 20+ and the collection tool's declared .NET runtime.
-Clone https://github.com/rsgcsg/STS2-The-Perfect-Defect.git and checkout the exact
-stpd_source_revision in combination.json. No Platform clone or model weights are required.
-From that checkout, follow docs/B_PIPELINE_HANDOFF.md and run tools/open_workbench.py
-with your operator-approved Hub URL or existing --config /ABS/project.json.
+Node and .NET must stay on PATH: the fixed tool uses them for native setup and packaging.
+Clone https://github.com/rsgcsg/STS2-The-Perfect-Defect.git and check out the exact
+stpd_source_revision from combination.json. Model weights are not needed for collection.
+Initial Mod installation is operator-assisted: the operator also retains the exact Platform
+checkout specified by the release and follows docs/DEVELOPER_KIT_INSTALL.md. The ZIP has no
+standalone installer. Everyday member collection uses the fixed tool without a Platform clone.
+Install mod/ with the game closed; retain the previous compatible Mod/tool pair. Keep
+collection-tool/ complete, including its setup helper and provenance. Verify its embedded BOM
+separately from the kit root's pinned distribution BOM; the two may have identical bytes.
 
-The operator installs mod/ according to the exact Platform release, with the game closed,
-one unified Mod and the previous version retained for rollback. Keep collection-tool/
-complete; independently verify its release ID. Its embedded historical BOM remains intact;
-platform-bom.json at the kit root is the separately pinned distribution BOM.
+Use one private absolute --config path for this computer on every command. The launcher default
+is %LOCALAPPDATA%/spireagent/workbench/project.json on Windows, or
+~/.local/share/spireagent/workbench/project.json elsewhere. Use its resolved absolute path;
+other accounts need separate private directories. From the exact STPD checkout, replace
+/ABS/project.json and /ABS/kit below with your chosen locations and quote paths with spaces:
 
-Invited email login and explicit computer approval do not grant campaign upload consent.
-A new collector still needs a dedicated campaign, Human attestation, delivery preflight
-and its own bounded Recorder Close-to-cloud-receipt check. Do not enroll historical data.
-Closing a browser tab does not stop delivery. After reboot, reopen the same configuration.
+```bash
+python tools/open_workbench.py --config /ABS/project.json --hub-url https://hub.2-fire-2.com
+```
+
+An administrator invites your email in the cloud. In the local workbench open account/device
+setup, log in with that email and approve the matching computer name and pairing code.
+Then stop the workbench, register the complete tool with its independently approved release ID,
+and reopen. Closing a browser tab alone does not release the registration lock.
+
+```bash
+uv run --locked python -m stpd.workbench project stop --config /ABS/project.json
+uv run --locked python -m stpd.workbench project collection-tool --config /ABS/project.json \\
+  --tool-directory /ABS/kit/collection-tool --tool-release-id EXACT_APPROVED_ID
+uv run --locked python -m stpd.workbench project open --config /ABS/project.json
+```
+
+Open 录制与上传. Review the daily default and explicitly confirm Human origin, upload and
+project-member sharing; login never supplies consent. Prepare the local recording configuration.
+Close the game, enter its installation directory and bind the recording root. Launch the game,
+refresh the current connection check, then explicitly enable uploads. Optional topic activities
+are in advanced options. Opening a page or preparing files does not start recording or upload.
+
+Record through the game Recorder, press Close and check this session's cloud receipt in
+采集记录. Setup status is saved; the receipt remains separate. After reboot, reopen the same
+configuration. Keep the workbench running for uploads; closing a tab does not stop delivery.
+
+Daily consent v2 does not pin software, but an existing outbox retains its exact tool release.
+Registering a new tool does not upgrade a saved queue. Use the documented stopped-workbench
+collection-upgrade procedure for an eligible v2 completed queue; retain the old valid tool. Never
+rewrite an outbox identity or enroll an old recording archive to force an upgrade.
+
 Retain raw recordings, failed evidence and outbox IDs. Never copy credentials into reports.
-
-See docs/PROJECT_CONSOLE.md for local/cloud views and deploy/hub/RUNBOOK.md for operators.
-Native capture and evidence incidents belong to Platform; Hub/accounts and research to STPD.
+See docs/B_PIPELINE_HANDOFF.md for the full workflow, docs/PROJECT_CONSOLE.md for screen meaning
+and deploy/hub/RUNBOOK.md for operators. Packaging proves no native/Human/cloud qualification.
 This is a developer distribution, not a player installer. Models are distributed separately.
 """
 
@@ -104,20 +135,38 @@ def package(
     owner = CollectionTool(collection_tool, tool_release_id)
     tool_manifest = owner.manifest
     tool_manifest_raw = read_regular(collection_tool / "collection-tool.json")
-    if (
-        decode_json(tool_manifest_raw) != tool_manifest
-        or set(tool_manifest) != {"schema", "release_id", "identity"}
-    ):
+    if decode_json(tool_manifest_raw) != tool_manifest or set(tool_manifest) != {
+        "schema",
+        "release_id",
+        "identity",
+    }:
         raise BoundaryError("developer_kit", "tool_manifest_changed_or_unexpected_fields")
     for row in tool_manifest["identity"]["files"]:
         raw = PinnedFile(collection_tool / row["path"], row["sha256"]).read()
         if len(raw) != row["bytes"]:
             raise BoundaryError("developer_kit", "tool_file_size_changed")
         files[f"collection-tool/{row['path']}"] = raw
+    identity = tool_manifest["identity"]
+    setup = "setup/apps/game-mod/collection-setup.mjs"
+    provenance = "game-mod/build-provenance.json"
+    if (
+        identity.get("collection_setup_entrypoint") != setup
+        or identity.get("collection_setup_provenance") != provenance
+        or f"collection-tool/{setup}" not in files
+        or f"collection-tool/{provenance}" not in files
+    ):
+        raise BoundaryError("developer_kit", "collection_setup_capability_required")
+    native = decode_json(files[f"collection-tool/{provenance}"])
+    if (
+        not isinstance(native, dict)
+        or native.get("schema") != "sts2.platform/game-mod-build-provenance-1"
+        or not isinstance(native.get("artifact"), dict)
+        or native["artifact"].get("sha256") != mod_dll.sha256
+    ):
+        raise BoundaryError("developer_kit", "collection_setup_mod_identity_mismatch")
     files["collection-tool/collection-tool.json"] = tool_manifest_raw
     if owner.verify() != tool_manifest:
         raise BoundaryError("developer_kit", "tool_changed_during_packaging")
-    identity = tool_manifest["identity"]
     manifest = {
         "schema": "spireagent/developer-kit-v1",
         "stpd_source_revision": producer.source_revision,
@@ -170,7 +219,9 @@ def main() -> int:
     parser.add_argument("--collection-tool", required=True, type=Path)
     parser.add_argument("--tool-release-id", required=True)
     parser.add_argument(
-        "--output", required=True, type=Path,
+        "--output",
+        required=True,
+        type=Path,
         help="New ZIP in an existing directory outside Git or under ignored .local/",
     )
     args = parser.parse_args()

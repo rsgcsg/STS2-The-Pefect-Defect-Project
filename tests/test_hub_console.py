@@ -14,9 +14,15 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 from stpd.artifact_contracts import Manifest, Parent, Producer
 from stpd.hub.application import HubApplication
-from stpd.hub.console_auth import AccessVerifier, ConsolePrincipal, configured_access
+from stpd.hub.console_auth import (
+    AccessVerifier,
+    ConsolePrincipal,
+    configured_access,
+    load_legacy_allowlist,
+)
 from stpd.hub.console_index import ConsoleIndex, pagination
 from stpd.hub.database import Operations
+from stpd.hub.membership import MembershipService
 from stpd.hub.uploads import LocalStaging, UploadService
 from stpd.json_boundary import BoundaryError, FrozenObject
 from stpd.storage.local import LocalBlobStore
@@ -37,20 +43,7 @@ def signed() -> Any:
         calls.append(1)
         return {"keys": [public]}
 
-    verifier = AccessVerifier(
-        ISSUER,
-        AUDIENCE,
-        [
-            {
-                "email": "owner@example.org",
-                "subject": "known-subject",
-                "role": "operator",
-                "devices": ["one", "two"],
-            },
-            {"email": "collector@example.org", "role": "collector", "devices": ["one"]},
-        ],
-        fetch_keys=fetch,
-    )
+    verifier = AccessVerifier(ISSUER, AUDIENCE, fetch_keys=fetch)
 
     def token(**overrides: Any) -> str:
         claims = {
@@ -63,6 +56,12 @@ def signed() -> Any:
             "email": "owner@example.org",
         }
         claims.update(overrides)
+        if (
+            "email" in overrides
+            and "sub" not in overrides
+            and str(overrides["email"]).casefold() != "owner@example.org"
+        ):
+            claims["sub"] = str(overrides["email"]).casefold()
         return jwt.encode(claims, key, algorithm="RS256", headers={"kid": "test-key"})
 
     return verifier, token, calls
@@ -72,6 +71,25 @@ def service(tmp_path: Path) -> UploadService:
     ops = Operations(tmp_path / "operations.sqlite")
     ops.register("one", "one" * 16)
     ops.register("two", "two" * 16)
+    MembershipService(ops).bootstrap(
+        issuer=ISSUER,
+        admin_email="owner@example.org",
+        legacy_principals=[
+            {
+                "email": "owner@example.org",
+                "subject": "known-subject",
+                "role": "operator",
+                "devices": ["one", "two"],
+                "enroll_devices": True,
+            },
+            {
+                "email": "collector@example.org",
+                "role": "collector",
+                "devices": ["one"],
+                "enroll_devices": False,
+            },
+        ],
+    )
     return UploadService(
         ops,
         LocalStaging(tmp_path / "stage", "http://127.0.0.1:8765"),
@@ -113,16 +131,19 @@ def call(
 
 def test_access_verifies_signature_claims_subject_and_negative_cache(signed: Any) -> None:
     verifier, token, calls = signed
-    assert verifier.authenticate(token()).role == "operator"
-    assert verifier.authenticate(token(email="COLLECTOR@example.org")).devices == ("one",)
+    assert verifier.authenticate(token()).role == "authenticated"
+    assert verifier.authenticate(token(email="COLLECTOR@example.org")).devices == ()
+    assert (
+        verifier.authenticate(token(email="other@example.org", sub="other")).role == "authenticated"
+    )
     for overrides in (
         {"exp": 1},
         {"iss": "https://evil.invalid"},
         {"aud": "b" * 64},
         {"iat": int(time.time()) + 500},
         {"nbf": int(time.time()) + 500},
-        {"email": "other@example.org"},
-        {"sub": "other"},
+        {"email": "invalid-address"},
+        {"sub": ""},
         {"type": "org"},
     ):
         with pytest.raises(BoundaryError, match="unauthorized"):
@@ -199,10 +220,10 @@ def test_scoped_summary_pagination_never_reads_intent_or_raw_store(
     assert len(page2["items"]) == 55 and page2["next_offset"] is None
     own = call(app, "/v1/console/collections", bearer="one" * 16, query="limit=100")[1]
     assert own["total"] == 77 and {r["device_id"] for r in own["items"]} == {"one"}
-    denied = call(
+    shared = call(
         app, "/app/api/collections/" + f"{0:032x}", token=token(email="collector@example.org")
     )
-    assert denied[0] == "404 Not Found"
+    assert shared[0] == "200 OK"  # Both Human roles share project collection metadata.
     details = call(app, "/v1/console/collections/" + f"{1:032x}", bearer="one" * 16)[1]["item"]
     assert details["summary"]["counts"]["real_failures"] == 1
     assert details["status"] == "verified" and details["summary_status"] == "available"
@@ -241,12 +262,9 @@ def test_safe_artifact_metadata_roles_and_unknown_lineage(tmp_path: Path, signed
         call(app, "/v1/artifacts/" + dataset.artifact_id, bearer="one" * 16)[0]
         == "401 Unauthorized"
     )
-    assert (
-        call(app, "/app/api/models", token=token(email="collector@example.org"))[1]["items"][0][
-            "parents"
-        ]
-        == []
-    )
+    assert call(app, "/app/api/models", token=token(email="collector@example.org"))[1]["items"][0][
+        "parents"
+    ] == [{"role": "dataset", "artifact_id": dataset.artifact_id}]
     models = call(app, "/app/api/models", token=token())[1]
     assert models["items"][0]["parents"] == [
         {"role": "dataset", "artifact_id": dataset.artifact_id}
@@ -273,7 +291,7 @@ def test_private_config_absence_partial_issuer_and_permissions(tmp_path: Path) -
         ISSUER + "/",
     ):
         with pytest.raises(BoundaryError, match="invalid_access_issuer"):
-            AccessVerifier(issuer, AUDIENCE, [])
+            AccessVerifier(issuer, AUDIENCE)
     allowlist = tmp_path / "allowlist.json"
     allowlist.write_text(
         json.dumps(
@@ -291,11 +309,15 @@ def test_private_config_absence_partial_issuer_and_permissions(tmp_path: Path) -
         "STPD_ACCESS_ALLOWLIST": str(allowlist),
     }
     allowlist.chmod(0o600)
+    with pytest.raises(BoundaryError, match="explicit_membership_import"):
+        configured_access(env)
+    assert load_legacy_allowlist(allowlist)[0]["role"] == "operator"
+    env.pop("STPD_ACCESS_ALLOWLIST")
     assert configured_access(env) is not None
     if __import__("os").name != "nt":
         allowlist.chmod(0o644)
         with pytest.raises(BoundaryError, match="private_bounded"):
-            configured_access(env)
+            load_legacy_allowlist(allowlist)
     for query in (
         "limit=0",
         "limit=101",
@@ -381,7 +403,7 @@ def test_bundle_summary_refresh_preserves_receipt_and_uses_verified_owner(
     assert owner.verify_pending() == 1 and len(called) == 1
     before = owner.operations.upload(upload_id)
     original_manifests = owner.store.manifest_ids()
-    principal = ConsolePrincipal("operator", ("one",))
+    principal = ConsolePrincipal("admin", ("one",))
     row = owner.console_index.collections(principal, limit=1, offset=0)["items"][0]
     assert row["summary"] == summary and row["status"] == "verified"
     assert owner.intent("one", intent)["upload_id"] == upload_id
@@ -417,7 +439,7 @@ def test_dataset_usage_links_exact_received_identity_without_raw_closure(tmp_pat
         },
     )
     result = owner.console_index.collections(
-        ConsolePrincipal("reviewer", ("one",)), limit=1, offset=0, upload_id=upload["id"]
+        ConsolePrincipal("member", ("one",)), limit=1, offset=0, upload_id=upload["id"]
     )["item"]
     assert result["research"]["dataset_ids"] == [dataset.artifact_id]
     assert result["research"]["status"] == "dataset_references_present"
@@ -481,7 +503,7 @@ def test_public_landing_links_public_source_without_private_scope(tmp_path: Path
 
 def test_jwks_outage_is_bounded_and_never_reuses_expired_cache(signed: Any) -> None:
     verifier, token, _ = signed
-    assert verifier.authenticate(token()).role == "operator"
+    assert verifier.authenticate(token()).role == "authenticated"
     calls = []
 
     def failed() -> None:
@@ -526,7 +548,7 @@ def test_sealed_evaluations_and_gold_do_not_enter_discovery(tmp_path: Path) -> N
     for manifest in (sealed, gold, dev):
         owner.console_index.artifact(manifest)
     result = owner.console_index.artifacts(
-        ConsolePrincipal("operator", ("one",)), "models", limit=25, offset=0
+        ConsolePrincipal("admin", ("one",)), "models", limit=25, offset=0
     )
     assert [row["artifact_id"] for row in result["items"]] == [dev.artifact_id]
     assert sealed.artifact_id not in json.dumps(result) and gold.artifact_id not in json.dumps(

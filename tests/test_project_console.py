@@ -34,13 +34,24 @@ def test_shared_shell_has_no_embedded_runtime_data_or_external_dependencies():
     for mode, api in [("local", "/api/console"), ("cloud", "/app/api")]:
         page = render_shell(mode, api, "https://hub.example")
         assert 'lang="zh-CN"' in page and 'data-api="' + api in page
+        assert "录制与上传" in page
         assert "http-equiv" not in page
         assert "localStorage" not in asset("console.js")[1].decode()
         assert "innerHTML" not in asset("console.js")[1].decode()
         assert "unsafe-inline" not in CSP
-        for view in ("collections", "datasets", "jobs", "models", "system"):
+        for view in (
+            "collections",
+            "datasets",
+            "research",
+            "models",
+            "statistics",
+            "downloads",
+            "system",
+        ):
             assert 'data-view="' + view in page
     assert asset("../developer.py") is None
+    assert 'data-view="local-models"' in render_shell("local", "/api/console")
+    assert 'data-view="local-models"' not in render_shell("cloud", "/app/api")
     assert asset("missing.js") is None
     with pytest.raises(ValueError):
         render_shell("cloud", "/arbitrary")
@@ -158,6 +169,8 @@ def test_local_console_uses_isolated_owner_projection_and_keeps_dispositions(tmp
     assert "source" not in row and "private" not in json.dumps(row)
     assert row["attempts"] == 5 and row["summary"]["counts"]["real_failures"] == 0
     assert row["research"]["status"] == "not_assessed"
+    assert row["local_delivery"] is True
+    assert "collection_context" not in row
     assert "--summary" in calls[0] and calls[0][-1] == "100"
     overview = console.overview()
     # Global quality must come from the owner aggregate, not the current page.
@@ -184,6 +197,7 @@ def test_local_detail_requires_exact_remote_content_and_preserves_offline_receip
     result = console.collection_detail("a" * 64)
     assert result["item"]["status"] == "verified"
     assert result["item"]["remote"]["status"] == "unavailable"
+    assert "collection_context" not in result["item"]
 
 
 def test_local_detail_keeps_local_and_remote_delivery_observations(tmp_path, monkeypatch):
@@ -202,6 +216,7 @@ def test_local_detail_keeps_local_and_remote_delivery_observations(tmp_path, mon
             "content_id": "c" * 64,
             "status": "verified",
             "receipt": {"receipt_id": "b" * 32},
+            "collection_context": {"kind": "default", "name": "Daily"},
         },
         "observed_at": "2026-09-13T00:00:00Z",
     }
@@ -210,6 +225,12 @@ def test_local_detail_keeps_local_and_remote_delivery_observations(tmp_path, mon
     assert value["status"] == "pending"
     assert value["remote"]["delivery_status"] == "verified"
     assert value["remote"]["receipt"]["receipt_id"] == "b" * 32
+    assert value["collection_context"] == {"kind": "default", "name": "Daily"}
+    remote["status"] = "stale"
+    cached = console.collection_detail("a" * 64)["item"]
+    assert cached["collection_context"] == value["collection_context"]
+    assert cached["remote"]["status"] == "stale"
+    assert cached["remote"]["observed_at"] == remote["observed_at"]
     remote["item"]["upload_id"] = "d" * 32
     with pytest.raises(BoundaryError, match="remote_identity_mismatch"):
         console.collection_detail("a" * 64)

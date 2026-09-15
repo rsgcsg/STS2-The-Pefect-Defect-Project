@@ -71,7 +71,8 @@ not copied source trees, shared branches or submodules.
 ## Default project workflow and cloud B implementation
 
 - [Shared local/cloud project console](PROJECT_CONSOLE.md)
-- [ADR-0005: console authority and authentication](adr/0005-local-cloud-console.md)
+- [ADR-0005: original console authority and authentication](adr/0005-local-cloud-console.md)
+- [ADR-0006: Hub members, sharing and local model boundaries](adr/0006-project-members-and-local-models.md)
 
 - [Download, collect, view, maintain and freeze the training plan](B_PIPELINE_HANDOFF.md)
 
@@ -86,6 +87,18 @@ not copied source trees, shared branches or submodules.
 - [Unified workflow release and bounded account/service qualification](evidence/B_UNIFIED_WORKFLOW_RELEASE_2026-09-13.md)
 
 [Account and device protocol](IDENTITY_PROTOCOL.md) defines invited membership, approval,
-personal sessions, scoped devices, credential recovery and operations schema migration.
+personal sessions, current member/admin permissions, scoped devices, credential recovery and
+operations schema-4 migration. The [Hub runbook](../deploy/hub/RUNBOOK.md) owns explicit bootstrap,
+Access identity policy, exact deployment, backups and compatible rollback.
+Its [host operations companion](../deploy/hub/OPERATIONS.md) covers operator-only SSH,
+verified source-IP changes, lost access and daily capacity/backup inspection.
 
 [Packaging identity correction](evidence/B_WORKFLOW_PACKAGING_IDENTITY_CORRECTION_2026-09-13.md) records exact BOM file bytes and distinct tool revisions.
+
+[Measured Hub access and capacity recovery](evidence/HUB_ACCESS_CAPACITY_REPAIR_2026-09-14.md)
+records the predecessor incident separately from later candidate qualification.
+
+- [Developer kit initial installation](DEVELOPER_KIT_INSTALL.md): operator-assisted exact binary installation and rollback.
+- [Daily collection Human audit](evidence/B_DEFAULT_COLLECTION_HUMAN_AUDIT_2026-09-15.md): actual transfer/access PASS and one unresolved native event Continue; not Full-Run PASS.
+
+[Bounded B workflow acceptance](evidence/B_WORKFLOW_BOUNDED_ACCEPTANCE_2026-09-15.md) records the new zero-failure continued-run audit and owner-authorized engineering integration; continuous Full-Run remains unclaimed.

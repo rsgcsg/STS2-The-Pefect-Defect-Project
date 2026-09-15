@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
 from pathlib import Path
 from typing import Any
 
 from ..json_boundary import BoundaryError
+from .backup_status import freshness as backup_freshness
+from .backup_status import project as project_backup_status
+from .capacity import filesystem_capacity
 from .console_auth import ConsolePrincipal
 from .console_index import SCHEMA, pagination, timestamp
 from .uploads import UploadService
@@ -40,17 +42,18 @@ class ConsoleRoutes:
             "browser_auth": "cloudflare_access_application_jwt",
             "browser_access_configured": self.browser_enabled,
             "terminal_presence": "not_observed",
-            "raw_downloads": "not_available_in_console",
+            "raw_downloads": "explicit_project_sharing_grant_required",
             "backup": {"availability": "not_authorized"},
             "external_alerting": "not_qualified",
             "whole_host_recovery": "not_qualified",
         }
-        if principal.role == "operator":
-            disk = shutil.disk_usage(self.service.operations.path.parent)
+        if principal.role in {"operator", "admin"}:
+            capacity = filesystem_capacity(self.service.operations.path.parent)
             result["storage"] = {
-                "total_bytes": disk.total,
-                "free_bytes": disk.free,
+                "total_bytes": capacity["total_bytes"],
+                "free_bytes": capacity["free_bytes"],
                 "scope": "hub_state_filesystem",
+                "capacity": capacity,
             }
             result["backup"] = self.backup()
             result["projection"] = self.service.console_index.health()
@@ -64,23 +67,13 @@ class ConsoleRoutes:
             if path.is_symlink() or not path.is_file() or path.stat().st_size > 16384:
                 raise ValueError
             value = json.loads(path.read_bytes())
-            if value.get("schema") != "stpd/hub-backup-status-v1":
-                raise ValueError
+            safe = project_backup_status(value)
             return {
-                "availability": "available",
-                "scope": "operations_database_backup",
-                **{
-                    key: value[key]
-                    for key in (
-                        "last_attempt_at",
-                        "last_success_at",
-                        "last_status",
-                        "last_backup_receipt",
-                    )
-                    if key in value and isinstance(value[key], str)
-                },
+                "availability": "available", "scope": "operations_database_backup",
+                **safe, **backup_freshness(safe),
                 "external_notification": "not_configured_by_this_tool",
             }
+
         except (OSError, ValueError, TypeError, AttributeError):
             return {"availability": "unavailable", "error": "backup_status_unreadable"}
 
@@ -95,13 +88,17 @@ class ConsoleRoutes:
             return index.collections(principal, limit=1, offset=0, upload_id=resource.split("/")[1])
         if status is not None:
             raise BoundaryError("console", "status_filter_requires_collections")
-        if re.fullmatch(r"(datasets|models)/[a-f0-9]{64}", resource):
+        if re.fullmatch(r"(datasets|models|training|evaluations|analyses)/[a-f0-9]{64}", resource):
             if query:
                 raise BoundaryError("console", "unexpected_query")
             kind, artifact_id = resource.split("/")
             return index.artifacts(principal, kind, limit=1, offset=0, artifact_id=artifact_id)
-        if resource in {"datasets", "models"}:
+        if resource in {"datasets", "models", "training", "evaluations", "analyses"}:
             return index.artifacts(principal, resource, limit=limit, offset=offset)
+        if resource == "statistics":
+            if query:
+                raise BoundaryError("console", "unexpected_query")
+            return index.statistics(principal)
         if resource == "jobs":
             return index.jobs(limit=limit, offset=offset)
         if resource == "system":

@@ -29,12 +29,13 @@ shipped STS2 / qualified Platform Host Runtime
 
 The default project workflow is one qualified Platform game Mod, one STPD workbench and the
 same invited account in the local workbench and [cloud portal](https://hub.2-fire-2.com/).
-Record in the game, press Recorder **Close**, then inspect packaging, upload and remote
-acceptance in **采集记录**. The local **这台电脑** scope also shows the unuploaded queue.
+Open **录制与上传** for the project's daily recording setup; topic activities are optional.
+After setup, record in the game, press Recorder **Close**, then inspect packaging, upload and
+remote acceptance in **采集记录**. The local **这台电脑** scope also shows the unuploaded queue.
 
 Follow [download, install, account/device setup, collection and maintenance](docs/B_PIPELINE_HANDOFF.md).
 It is the canonical everyday procedure, including the exact release combination to obtain,
-one-time campaign consent/configuration and recovery when a step fails. Choose a reviewed
+one-time recording consent/configuration and recovery when a step fails. Choose a reviewed
 release or explicitly non-stable candidate; do not infer a supported build from a branch name.
 
 From that approved STPD checkout, the collector entry is:
@@ -45,8 +46,11 @@ python tools/open_workbench.py --config /ABS/project.json --hub-url https://hub.
 
 The launcher installs the locked lightweight `cloud` dependencies and opens the workbench.
 Use the same private `--config` path on every launch. First-time collectors still need the
-qualified Mod/tool, invited login, device approval and operator-prepared campaign; opening
-the page alone does not start recording or authorize uploads. Models are separate downloads.
+qualified Mod/tool, invited login, device approval and explicit Human/upload/project-sharing
+consent. In **录制与上传**, prepare local files, bind the recording directory with the game
+closed, then start the game and refresh its connection check before enabling uploads. Setup
+status survives a page refresh or restart; an uploaded receipt remains a separate result.
+Opening the page alone does not start recording or authorize uploads. Models are separate downloads.
 See [the console guide](docs/PROJECT_CONSOLE.md) for screen meanings and
 [scoped release evidence](docs/evidence/B_UNIFIED_WORKFLOW_RELEASE_2026-09-13.md) for what has
 actually been tested. Uploaded evidence, an admitted Dataset and trained model quality are
@@ -84,9 +88,18 @@ then [B pipeline operations](docs/CLOUD_PIPELINE_B.md).
 The [shared project console](docs/PROJECT_CONSOLE.md) connects local delivery status with
 scoped cloud records, immutable Dataset/job/model lineage and operational evidence.
 One invited account can view the same authorized project data in both shells and explicitly
-bind its computers. Personal sessions remain separate from background device uploads. Project
-data views are read-only; identity approval and local recovery are deliberate actions. The
+bind its computers. Hub owns the current `member`/`admin` roster; login shows the profile before
+device setup. Members see actual coverage and select explicitly shareable immutable downloads.
+Administrators manage invitations/quotas in the cloud browser; personal sessions remain separate
+from background device uploads. Recording consent and native setup remain deliberate actions. The
 lightweight collector launcher above uses the same workbench implementation.
+The daily-default workflow and new member/export/local-model capabilities require their own
+exact release/service and Human gates; use the capability scope in published release notes.
+Daily consent v2 is independent of software versions, while every tool, queue and native load
+retains its exact identity. Registering a new tool does not upgrade an existing outbox;
+[maintenance](docs/B_PIPELINE_HANDOFF.md#daily-work-upgrades-and-incidents) describes this limit.
+Model download, optional Runtime installation and readiness are separate. The retained S1
+combat adapter is narrow; Full-Run online model/input parity remains blocked.
 Real corpus sufficiency, actual storage/GPU qualification, Human Gold and STS2 live evaluation
 remain separately gated; source/test success is not service or scientific qualification.
 

@@ -2,6 +2,15 @@
 
 ## Current Full-Run architecture
 
+[ADR-0006](adr/0006-project-members-and-local-models.md) defines the member console.
+Hub Operations schema4 owns the sole live member/admin roster, stable device ownership and
+explicit collection enrollments. Cloudflare supplies verified browser identity. Shared
+statistics and fixed export inventories consume owner facts and explicit sharing grants;
+they do not admit research data. The loopback Workbench owns trusted local tool registration,
+verified downloads and supported Policy Runtime supervision. Its personal session cannot
+perform browser administration or become a device upload credential.
+See [identity](IDENTITY_PROTOCOL.md) and [console semantics](PROJECT_CONSOLE.md).
+
 GitHub owns source. Local tools own control and analysis; generic S3-compatible or local
 ArtifactStore owns immutable artifacts. SQLite Registry is a rebuildable manifest projection.
 The B Hub operations SQLite separately owns mutable upload/attempt/budget state and must be

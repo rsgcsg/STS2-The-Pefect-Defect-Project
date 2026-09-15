@@ -11,6 +11,9 @@ combination from its reviewed release notes before applying this runbook. A main
 does not deploy the Hub, update a collector or qualify a new runtime. This is the one host
 procedure; campaigns link here rather than copying a second deployment recipe.
 
+[Daily host operations](OPERATIONS.md) covers SSH access, safe network changes, lost access
+and capacity inspection. It is this runbook's operator companion, not a second deployment flow.
+
 ## Bootstrap the authorized Linux host
 
 Prepare Docker Engine and Compose >=2.30 using the host vendor's supported installation path.
@@ -25,6 +28,8 @@ sudo install -d -m 0700 /etc/stpd
 sudo install -d -m 0700 -o 10001 -g 10001 /srv/stpd/hub
 sudo install -d -m 0700 -o 10001 -g 10001 /srv/stpd/hub/work /srv/stpd/hub/backups
 sudo install -d -m 0700 /srv/stpd/caddy /srv/stpd/caddy/data /srv/stpd/caddy/config
+sudo install -d -m 0700 /var/lib/stpd-maintenance
+sudo install -d -m 0755 /var/lib/stpd-maintenance/safe-status
 sudo install -m 0600 deploy/hub/deployment.env.example /etc/stpd/deployment.env
 sudo install -m 0600 deploy/hub/runtime.env.example /etc/stpd/hub-runtime.env
 sudo install -m 0600 deploy/hub/backup.env.example /etc/stpd/hub-backup.env
@@ -37,6 +42,12 @@ R2 buckets (ingress, artifacts, operator backups) and exact immutable OCI refere
 Record reviewed source SHA, lock hash, both image digests and a hash of the non-secret config.
 Keep the previous deployment config/image identities for rollback; never log the secret file.
 
+The empty `safe-status` directory is valid before the first database/backup exists. Compose
+requires it for a read-only directory mount; `preflight --host` checks its preparation. Do not
+create a placeholder success JSON. Fresh installation creates the directory, performs the
+explicit membership/database bootstrap below, then runs and verifies a real backup before
+claiming backup readiness. `maintenance.py status` is read-only and cannot initialize it.
+
 Define command helpers in the operator shell; these read the external files through Compose:
 
 ```bash
@@ -48,8 +59,11 @@ dc config -q
 ```
 
 `config -q` is deliberately silent; plain `config` can expose runtime env values. Preflight is
-read-only. Missing Docker, credentials, DNS or image identity remains a real external blocker.
-Do not treat a source test as permission to skip it.
+read-only with respect to application data; SQLite may maintain WAL reader bookkeeping.
+Missing Docker, credentials, DNS or image identity remains a real external blocker. Before
+enabling browser configuration on a new or schema-3 database, perform the explicit membership
+bootstrap below; preflight never initializes or migrates Operations. Do not treat a source test
+as permission to skip it.
 
 ## First load and verification
 
@@ -59,10 +73,16 @@ Pull only the configured digest references, then validate Caddy without starting
 dc pull
 dc run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 dc run --rm --no-deps hub status --root /opt/stpd --state /var/lib/stpd --store s3 --staging s3
+sudo python3 /opt/stpd-deploy/source/deploy/hub/maintenance.py backup
 dc up -d
 dc ps
 curl --fail --silent --show-error http://127.0.0.1:8765/health
 ```
+
+Review each result before continuing. The database bootstrap must already be complete for
+that exact schema/image, and the backup must report verified off-host success and published
+status before starting the service. Complete the separate retrieval drill below as well;
+the safe-status display alone is not a restore qualification.
 
 Verify `https://<owned-hostname>/health` from a separate machine and inspect the certificate.
 An unauthenticated request to `/v1/status` must be rejected. Check the actual listening sockets
@@ -115,8 +135,16 @@ terminal's unuploaded queue. There is no cloud-to-local game control or browser 
 
 Use one Cloudflare Access self-hosted application for exact `/app` and `/app/*` (including
 `/app/api/*` and assets); leave `/v1/*` and `/health` outside this browser application.
-Use an allow policy for explicitly approved email identities and email one-time PIN or the
-team's existing identity provider. Do not create a Bypass policy. Configure no paid plan.
+Enable One-time PIN for the application and configure **Allow → Include → Login Methods →
+One-time PIN**. Remove the per-email project roster from the Access policy; Hub membership is
+the only project authorization list. This intentionally admits any successfully OTP-authenticated
+email to the Hub, whose JWT and current-membership checks must reject nonmembers on every
+protected route. Cloudflare recommends email/domain restrictions for apps relying on Access
+alone; this project instead performs authorization in Hub. Never create a Bypass policy. See
+[common policies](https://developers.cloudflare.com/cloudflare-one/access-controls/policies/common-policies/)
+and [OTP setup](https://developers.cloudflare.com/cloudflare-one/integrations/identity-providers/one-time-pin/).
+Configure no paid plan. Apply this edge policy only after the exact Hub candidate enforces its
+member checks and negative origin tests pass; a docs change does not activate the policy.
 Before enabling browser access, confirm the Cloudflare zone is proxied and TLS is Full (strict).
 Keep browser-only edge checks off the machine API through one narrowly scoped Configuration
 Rule (`set_config`, only `bic: false`). For this deployment the expression is:
@@ -139,35 +167,28 @@ The Hub validates the JWT at the origin; a spoofed email header or direct-IP req
 bypass login. JWT key discovery uses only the configured Cloudflare team origin and is bounded.
 
 The account owner supplies the team domain and application AUD after creating the application.
-An operator prepares `/var/lib/stpd/console-access.json` in mounted private Hub state, owned
-by uid 10001 and mode 0600, using this format with real explicitly allowed devices:
+The runtime env has `STPD_ACCESS_ISSUER` and `STPD_ACCESS_AUDIENCE`. Hub Operations schema 4 is
+now the sole project-membership authority. Administrators invite and manage `member`/`admin`
+accounts through the authenticated console; Cloudflare establishes signed identity, not a
+project role. The authentication-method policy above replaces the former per-email edge roster
+once the exact membership-enforcing Hub is qualified. Keep operator credentials out
+of the console and collectors. Device tokens remain independent background-upload credentials.
 
-```json
-{"schema":"stpd/console-access-v1","principals":[
-  {"email":"collector@example.org","role":"collector","devices":["developer-device-01"]},
-  {"email":"new-collector@example.org","role":"collector","devices":[],"enroll_devices":true},
-  {"email":"reviewer@example.org","role":"reviewer","devices":["developer-device-01"]}
-]}
-```
-
-The new-collector entry explicitly permits first-device enrollment; omit it for people who
-must only view existing devices. Enrollment defaults to false, including for operators.
-The earlier CLI registration path remains available for a pre-provisioned device; claiming it
-requires its existing device credential and explicit device scope. Follow the
-[account protocol](../../docs/IDENTITY_PROTOCOL.md) and
+`STPD_ACCESS_ALLOWLIST` is retired as runtime configuration, even when set to an empty value.
+Preflight rejects it with `legacy_runtime_allowlist_membership_migration_required`; the old
+private JSON is only explicit one-time migration input. It must never be a fallback after a
+member is disabled. Follow the migration below before replacing an existing identity-enabled
+Hub. Missing issuer and audience disable the browser console; partial or malformed values
+fail closed. Neither login, membership nor device binding grants Human/upload/sharing consent.
+Follow the [account protocol](../../docs/IDENTITY_PROTOCOL.md) and
 [local first-login steps](../../docs/PROJECT_CONSOLE.md#download-sign-in-bind-once).
-Neither enrollment nor login grants recording/upload consent.
 
-The optional `subject` pins the exact validated Access subject in addition to email. Roles:
-`collector` sees listed or personally owned devices' collections and shared result metadata;
-`reviewer` additionally sees project Dataset metadata; `operator` also sees private operational
-status. No role gets raw/Dataset payload download or research/job writes through the console.
-Identity approval/denial is the separately guarded exception; see the account protocol guide.
-Research metadata roles are project-wide permissions, independent of the explicit device list.
-Use `STPD_ACCESS_ISSUER`, `STPD_ACCESS_AUDIENCE`, `STPD_ACCESS_ALLOWLIST` from the runtime env
-example, run preflight, then replace only the exact Hub candidate. Missing configuration keeps
-`/app` disabled. Partial or malformed configuration fails startup. Allowlist changes require a
-Hub restart; device revoke continues to affect Bearer access independently.
+Preflight opens the existing private uid-10001 `operations.sqlite` read-only, including committed
+WAL state. It requires schema 4, explicit initialized membership and a bound active administrator
+for the configured issuer. It reports `configured_not_live_qualified`, not successful browser
+qualification. The sole exception is a fresh, explicitly marked first-admin bootstrap, reported
+as `bootstrap_pending` with `FIRST_ADMIN_LOGIN_REQUIRED`; this is not an existing-site recovery
+or a way to bypass a missing administrator. No database repair or role grant happens in preflight.
 
 After a candidate changes owner summary support, explicitly rebuild its **derived index** once:
 
@@ -190,19 +211,125 @@ scheduler completion reports expose `console_index_status` separately; optional 
 change success into a publication/compute failure. Explicit `console-refresh` itself fails visibly
 when its requested repair cannot complete; do not suppress failures of that operator command.
 
-The backup panel optionally consumes the existing maintenance owner's bounded status file via
-`STPD_HUB_BACKUP_STATUS`; make only that safe projection readable inside mounted state. Do not
-mount backup credentials or whole host directories. Absent projection means `not_configured`,
-not a claim that backups are failing or passing. Whole-host recovery and external alert delivery
-remain unqualified until their own exact evidence exists.
+The supported Compose configuration sets `STPD_HUB_BACKUP_STATUS` to
+`/var/lib/stpd-status/backup-status.json` and mounts only the host's
+`/var/lib/stpd-maintenance/safe-status` directory read-only. The maintenance owner publishes
+an allowlisted projection there; the private parent remains mode 0700, the projection directory
+0755 and its JSON 0644. Missing/unreadable projection means backup visibility is unavailable,
+not evidence that a backup passed or failed. Do not mount backup credentials or the private
+parent directory. Whole-host recovery and external alert delivery remain separately qualified.
 
 Before real browser qualification, exercise missing/expired/wrong-audience/tampered JWT,
 plain email-header spoofing, direct-origin bypass, collector cross-device access, and preserved
-raw/Dataset restrictions. Then an allowlisted Human starts local login, compares the computer
+raw/Dataset restrictions. Then an invited project member starts local login, compares the computer
 name and pairing code, approves enrollment or connection of the intended existing device,
 and checks the same receipt and device scope locally and in the cloud. Local logout must clear
 personal views while retaining the device upload grant; reconnect must preserve that device ID.
 This is a login/UI gate, not GPU or new Human recording evidence.
+
+## Migrate schema 3 identities to Hub membership schema 4
+
+This is an explicit, paused service migration. Select the new exact source/lock/image and keep
+the previous schema-3 source/image/config plus private allowlist and identity master key as a
+paired recovery point. The import preserves matching existing account subjects, device owners,
+credentials, uploads and receipts; it does not rewrite Human evidence. Only the explicitly chosen
+bootstrap account becomes `admin`; former allowlist roles do not confer administrator authority.
+Ambiguous/mismatched account identity must be investigated, not remapped or silently re-created.
+
+1. Under the **old** deployment, pause dispatch and stop the backup timer. Wait for any backup
+   service/container to finish, then stop both proxy and Hub so there are no API writers. Stopping
+   the Hub does not stop external compute: reconcile any actual provider attempts first. Keep the
+   compute budget at zero and optional Modal configuration absent throughout this migration.
+
+   ```bash
+   hubctl pause
+   sudo systemctl stop stpd-backup.timer
+   sudo systemctl status stpd-backup.service --no-pager
+   sudo docker ps --filter name=stpd-backup-
+   dc stop caddy hub
+   ```
+
+2. Use the [backup helper](#consistent-private-off-host-backup) with the **old exact image** to
+   create and retrieve a closed, paused schema-3 snapshot. Do this before invoking any schema-4
+   command: construction of the new `Operations` may migrate its schema even if a later membership
+   import fails. Retain the receipt, old image/config identities and private recovery material.
+   Never copy the live main SQLite file alone or overwrite an existing retrieval destination.
+
+   ```bash
+   backupctl backup
+   backupctl restore-check --receipt EXACT_SCHEMA3_BACKUP_RECEIPT_SHA256 --destination /var/lib/stpd/backups/pre-membership-verified.sqlite
+   ```
+
+3. Keep all API, verifier and backup writers stopped. Inspect the exact `operations.sqlite`
+   and any existing `-wal`/`-shm` files in the configured private state directory: each must be
+   a regular non-symlink file owned by UID 10001, beneath the UID-10001 directory with mode 0700.
+   Older SQLite creation under umask 022 may have left mode 0644. Record each file's identity,
+   mode, size and SHA256; explicitly apply mode 0600 **as UID 10001 to only those verified files**,
+   then verify the same identity/size/hash and the new mode. Do not use recursive chmod, change
+   ownership, remove sidecars or checkpoint the database as part of this permission repair.
+   New Operations databases and snapshots are created privately before data is written; existing
+   files are never silently chmodded by startup or preflight.
+
+   Select the reviewed schema-4 image in the external deployment env and pull it. Keep the Hub
+   stopped. Review the old allowlist file against retained subjects and devices; its path below
+   is container-relative mounted private state, not a new runtime env setting. Inject the chosen
+   existing administrator's email into the operator environment as `STPD_BOOTSTRAP_ADMIN_EMAIL`
+   through the secure operator facility. Its value never appears in command arguments or logs.
+   Run the explicit bootstrap with the new image:
+
+   ```bash
+   dc pull hub
+   sudo --preserve-env=STPD_BOOTSTRAP_ADMIN_EMAIL docker compose --env-file /etc/stpd/deployment.env -f "$STPD_HUB_COMPOSE_FILE" run --rm --no-deps -e STPD_BOOTSTRAP_ADMIN_EMAIL hub members-bootstrap --state /var/lib/stpd --legacy-allowlist /var/lib/stpd/console-access.json
+   unset STPD_BOOTSTRAP_ADMIN_EMAIL
+   ```
+
+   The command opens no cloud store, starts no API and uses no GPU. It reads `STPD_ACCESS_ISSUER`
+   from the existing runtime env. It is intentionally one-time: an initialized membership DB
+   is not imported again on restart. Inspect its sanitized result and verify retained account
+   subjects, device IDs/owners and upload/receipt identities against the pre-migration inventory.
+   Use an existing verified account as admin for a populated installation; otherwise preflight
+   correctly blocks an admin-less migration. Resolve the import/identity cause before proceeding.
+
+4. Remove `STPD_ACCESS_ALLOWLIST` entirely from the runtime env through the secure editor. Retain
+   its old bytes privately with the old-image recovery material; changing that file no longer
+   changes access. Keep issuer/audience and the existing identity master/admin key unchanged.
+   Run the schema-4 preflight and start only the exact reviewed candidate:
+
+   ```bash
+   sudo python3 deploy/hub/preflight.py --config /etc/stpd/deployment.env --host
+   dc config -q
+   dc up -d
+   hubctl status
+   ```
+
+   Verify actual source/lock/OCI identity, health/TLS, missing/forged authentication rejection,
+   administrator login, retained device connection and exact existing receipts. Verify disabling
+   a member immediately denies cached personal access without relying on a Hub restart. These
+   are service/identity gates, not new Human recording, Dataset admission or training evidence.
+   Produce and retrieve a **new schema-4** backup with the new exact image before restarting the
+   backup timer. Keep dispatch paused until recovery/unknown-attempt checks permit unpausing.
+
+### Fresh installation and rollback boundary
+
+For a genuinely empty installation, run the same explicit `members-bootstrap` command without
+`--legacy-allowlist`; do not invent historical account/device bindings. The sole administrator
+starts as invited, with an owning `membership_bootstrap_pending_admin` marker. Preflight permits
+only that marker's one invited administrator, matching issuer and a valid email, with no active
+members, existing user identities, owned devices or personal sessions. Its
+`FIRST_ADMIN_LOGIN_REQUIRED` warning means the named person must log in through verified Access.
+Activation clears the marker in the same owning transaction. Rerun preflight to establish the
+active-admin state before claiming account setup complete. Never edit SQLite to simulate login,
+re-create the marker for recovery, or disable browser authorization to bypass it.
+
+A schema-4 DB cannot be downgraded by starting the schema-3 image, deleting new tables, changing
+`user_version`, or reintroducing the runtime allowlist. Rollback pairs the exact old image with
+its pre-migration paused backup and compatible private configuration, including the old allowlist
+only when that old image requires it. Use [paused restore](#restore-into-paused-state) into a fresh
+state directory, leaving migrated state intact for audit. Newer uploads, grants, revocations and
+attempts are not present in the older recovery point; account for those differences and reconcile
+external objects/provider work before opening access. No restore may silently revive a revoked
+credential or treat a missing receipt as permission to resubmit an unknown operation. Prefer a
+forward repair when discarding post-migration operational state would lose authoritative facts.
 
 ## Normal operations and incident handling
 
@@ -286,6 +413,12 @@ runner parses raw values without shell expansion; it reads the current exact ima
 ephemeral backup container has only the separate backup credential and the state mount; it
 has no Docker socket, Modal credentials or compute scheduling command.
 
+For an existing site, the new host maintenance script can first run with the **old exact
+deployment image/config** to preserve its compatible pre-upgrade backup and publish the safe
+status projection. Then perform the runbook's schema/image migration and qualify a new backup.
+On a fresh site, prepare the empty directory during bootstrap and create the Operations
+database before requesting a backup; do not reverse those prerequisites.
+
 After a manual backup and retrieval pass, install and exercise the actual service once:
 
 ```bash
@@ -312,6 +445,14 @@ failed, interrupted, future-dated or more-than-26-hour-old success. Immutable of
 remain the authority; this status file is not itself a backup. Copy each verified receipt to
 the protected off-host operator recovery inventory; do not depend on this host-local projection
 to find the recovery point after host loss.
+
+Each `maintenance.py backup` also atomically publishes the narrow safe-status copy consumed
+by Compose; ordinary `status` never writes it. If publication fails, `status_projection` is
+`unavailable` and the command exits nonzero so visibility is repaired. This does not rewrite a
+verified remote backup receipt or make its independent `backup_health` fail. Inspect both
+outcomes. `status` also reports read-only host capacity using the configured state and actual
+image-store filesystems; see [daily operations](OPERATIONS.md#daily-check-and-before-any-deployment-or-build)
+for the explicit image-store argument and separate capacity/configuration admission checks.
 
 ```bash
 sudo python3 /opt/stpd-deploy/source/deploy/hub/maintenance.py status
@@ -398,8 +539,8 @@ sudo docker ps --filter name=stpd-backup-
 Confirm no backup container remains before proceeding; stopping a service/client alone does
 not prove container termination. Select the exact image/config paired with the recovery point
 before invoking `backupctl restore-check`: it checks the backup schema against that image's
-schema. In particular, a schema-3 to schema-2 rollback uses the predecessor image and its
-pre-migration backup, never the migrated live database. Preserve the matching identity
+schema. In particular, schema-4 to schema-3 (or historical schema-3 to schema-2) rollback uses the
+predecessor image and its pre-migration backup, never the migrated live database. Preserve the matching identity
 master/admin key in external private recovery configuration; SQLite does not contain it.
 Then stop the Hub and retrieve the selected recovery point:
 
@@ -413,14 +554,14 @@ sudo install -d -m 0700 -o 10001 -g 10001 /srv/stpd/hub /srv/stpd/hub/work /srv/
 sudo install -m 0600 -o 10001 -g 10001 "$STPD_RETIRED_STATE/backups/recovery-verified.sqlite" /srv/stpd/hub/operations.sqlite
 ```
 
-If Access is configured, restore the reviewed private allowlist before preflight. The following
-uses the retained file only after reviewing its current membership and compatibility with the
-recovery image; whole-host recovery instead retrieves its separately retained private copy.
-Use the actual host path corresponding to `STPD_ACCESS_ALLOWLIST` if it differs:
-
-```bash
-sudo install -m 0600 -o 10001 -g 10001 "$STPD_RETIRED_STATE/console-access.json" /srv/stpd/hub/console-access.json
-```
+For a schema-4 recovery image, membership, roles, bindings and the initialized marker come from
+the compatible Operations backup; do not bootstrap it again or restore a runtime allowlist.
+Restore issuer/audience and the matching external identity master/admin key, then check a current
+active administrator and reconcile revocations since the backup before opening access. A missing
+administrator is an identity-recovery failure, not a reason to change role rows manually. Only
+when deliberately restoring the paired **old schema-3 image and schema-3 backup** should its
+reviewed old allowlist and `STPD_ACCESS_ALLOWLIST` runtime configuration be restored from private
+recovery material. Use that image's matching preflight; the schema-4 preflight correctly rejects it.
 
 Do not copy prior maintenance status, WAL/shm or scratch files. Missing Access configuration
 must remain fail-closed; disabling login checks is not a recovery step. Then validate and start:
@@ -463,7 +604,7 @@ Retirement disables the backup timer, stops services and confirms no paid comput
 images/config references and recovery material according to retention policy. Do not delete
 state volumes or immutable evidence merely to remove stopped containers.
 
-### Source-only image refresh with an unchanged dependency lock
+### Refresh from a qualified image
 
 A full worker build temporarily retains downloaded, compressed and unpacked training
 libraries. Measure free disk before building on a small Hub; keep the running/rollback
@@ -471,9 +612,9 @@ image and all operational/evidence state. Disposable build cache and unreference
 image copies may be removed; their public immutable registry objects are separate.
 
 For a source-only update, `deploy/cloud-worker/refresh.Dockerfile` can reuse a previously
-qualified exact worker image. It checks a clean parent checkout, an exact new Git revision,
-an unchanged `uv.lock`, locked offline synchronization and a clean resulting source. It
-fails closed on a dependency change; use the normal full Dockerfile in that case.
+qualified exact worker image. With no new-lock argument it checks a clean parent checkout,
+an exact new Git revision, an unchanged `uv.lock`, locked offline synchronization, installed
+dependency consistency and a clean resulting source. An unexpected lock change fails closed.
 
 ```bash
 docker build -f deploy/cloud-worker/refresh.Dockerfile \
@@ -482,6 +623,30 @@ docker build -f deploy/cloud-worker/refresh.Dockerfile \
   -t ghcr.io/rsgcsg/stpd-worker:EXACT_NEW_HEAD .
 ```
 
+For a reviewed small dependency change, such as an exact Platform Evidence update, the same
+recipe accepts an explicit **old source + old lock + new lock** tuple. All three must match
+the actual parent checkout and new source. It then runs the ordinary online
+`uv sync --locked --all-extras` and `uv pip check`. Existing matching dependency layers can be
+reused; changed packages are resolved and installed from the new lock. This does not claim an
+unchanged lock or bypass dependency installation. Do not use manual `pip --no-deps` replacement.
+
+```bash
+docker build -f deploy/cloud-worker/refresh.Dockerfile \
+  --build-arg QUALIFIED_WORKER_IMAGE=ghcr.io/rsgcsg/stpd-worker@sha256:EXACT_PARENT_DIGEST \
+  --build-arg QUALIFIED_SOURCE_REVISION=EXACT_PARENT_SOURCE \
+  --build-arg QUALIFIED_LOCK_SHA256=EXACT_PARENT_LOCK_SHA256 \
+  --build-arg STPD_SOURCE_REVISION=EXACT_NEW_HEAD \
+  --build-arg EXPECTED_NEW_LOCK_SHA256=EXACT_NEW_LOCK_SHA256 \
+  -t ghcr.io/rsgcsg/stpd-worker:EXACT_NEW_HEAD .
+```
+
+Review the package delta and measure capacity before choosing this path. It is not a disk
+reservation: a large Torch/CUDA change may still require the normal full build on a host
+with more free space. A changed Python/base-system/toolchain requirement uses the normal
+Dockerfile and a reviewed base image. Preserve the running image, a compatible rollback
+image and their operations backups; do not use broad pruning to make a build fit.
+
 Record parent digest and recipe with the resulting digest. Rerun latest-head source/CI
-checks and independently verify fresh-container source/lock/assets, public service,
+checks and independently verify fresh-container source/lock/assets and the actual installed
+dependency inventory (including the Evidence direct-source revision), public service,
 R2 and backup/restore. Parent qualification never qualifies changed source automatically.

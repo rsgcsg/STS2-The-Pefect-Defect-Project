@@ -4,9 +4,10 @@ import test from 'node:test';
 import vm from 'node:vm';
 
 class Element {
-  constructor(tag) { this.tag = tag; this.children = []; this.value = ''; }
+  constructor(tag) { this.tag = tag; this.children = []; this.value = ''; this.dataset = {}; }
   append(...items) { this.children.push(...items); }
   replaceChildren(...items) { this.children = items; }
+  addEventListener() {}
   get options() { return this.children; }
 }
 function setup() {
@@ -14,7 +15,7 @@ function setup() {
   const calls = [];
   const context = vm.createContext({
     document: {body: {dataset: {mode: 'local'}}, getElementById: key => nodes.get(key),
-      createElement: tag => new Element(tag)}, window: {},
+      createElement: tag => new Element(tag), querySelector: () => null}, window: {},
     location: {assign() {}}, history: {pushState() {}}, Date, URLSearchParams, AbortSignal,
     setTimeout, clearTimeout,
     fetch: (url, options) => new Promise(resolve => calls.push({url, options,
@@ -69,8 +70,9 @@ function pageSetup(view, identity, connectContent = async () => 'connection fact
   let scope = 'owner';
   const context = vm.createContext({
     document: {body: {dataset: {mode: 'cloud'}}, getElementById: get,
-      createElement: element, querySelectorAll: () => [], addEventListener() {}},
-    window: {addEventListener() {}, SpireIdentity: {
+      createElement: element, createDocumentFragment: element, querySelectorAll: () => [], addEventListener() {}},
+    Node: Element,
+    window: {addEventListener() {}, SpireProject: {}, SpireIdentity: {
       context: () => scope, isLocal: () => false, refresh: async () => identity,
       renderDevices: () => 'account facts', renderConnect: connectContent, connect() {},
     }},
@@ -129,4 +131,86 @@ test('switching connection flow removes the previous approval panel before its r
   assert.equal(get('content').children.includes('approval for first flow'), false);
   finish('approval for second flow'); await loading;
   assert.deepEqual(get('content').children, ['approval for second flow']);
+});
+
+
+test('system preserves capacity attention and missing observations without claiming backup success', async () => {
+  const {context} = pageSetup('devices', {status: 'signed_in'});
+  await settled();
+  const flatten = element => [element.textContent || '', ...(element.children || []).map(
+    child => typeof child === 'string' ? child : flatten(child))].join(' ');
+  for (const [status, phrase] of [['attention', '容量不足'], ['unknown', '容量未完整观测']]) {
+    context.capacityFixture = {storage: {free_bytes: null, total_bytes: null,
+      capacity: {status, free_inodes: null, reserve_bytes: 6442450944, reserve_inodes: 100000}},
+      backup: {availability: 'unavailable'}};
+    const rendered = flatten(vm.runInContext('system(capacityFixture)', context)).replace(/\s+/g, ' ');
+    assert.match(rendered, new RegExp(phrase));
+    assert.match(rendered, /可用 \/ 总容量 未观测 \/ 未观测/);
+    assert.match(rendered, /备份新鲜度 未观测/);
+    assert.match(rendered, /不会自动删除数据或镜像/);
+    assert.doesNotMatch(rendered, /运行余量充足|在有效期内/);
+  }
+});
+
+
+test('bound member continues into recording setup without the old configuration handoff', async () => {
+  const {ui, calls} = setup();
+  const initial = ui.refresh(true);
+  calls.shift().answer({...person(), hub_configured: true, device_credential_present: true,
+    delivery_configured: false});
+  await initial;
+  const page = ui.renderDevices();
+  const flatten = element => [element.textContent || '', ...(element.children || []).map(flatten)].join(' ');
+  assert.match(flatten(page), /确认日常录制授权/);
+  assert.doesNotMatch(flatten(page), /领取活动配置/);
+  assert.equal(page.children.find(item => item.textContent === '继续录制与上传 →')?.href,
+    '?view=campaigns');
+});
+
+test('record list and detail use the verified activity association without guessing from campaign IDs', async () => {
+  const {context} = pageSetup('devices', {status: 'signed_in'});
+  await settled();
+  const flatten = element => [element.textContent || '', ...(element.children || []).map(
+    child => typeof child === 'string' ? child : flatten(child))].join(' ');
+  for (const [association, expected] of [
+    [{kind: 'default', name: '每日练习'}, '日常录制 · 每日练习'],
+    [{kind: 'activity', name: '专题一'}, '专题活动 · 专题一'],
+    [{kind: 'unlinked', name: null}, '未关联专题活动'],
+    [undefined, '录制用途尚未关联'],
+  ]) {
+    context.recordFixture = {id: 'a'.repeat(32), campaign_id: 'campaign-looking-like-a-default',
+      collection_context: association};
+    for (const expression of ['collectionTable([recordFixture])', 'detail({item: recordFixture})']) {
+      const rendered = flatten(vm.runInContext(expression, context));
+      assert.ok(rendered.includes(expected), expression + ' must preserve association status');
+    }
+  }
+});
+
+test('local list distinguishes an unqueried cloud association from a missing enrollment', async () => {
+  const {context} = pageSetup('devices', {status: 'signed_in'});
+  await settled();
+  context.localRecordFixture = {local_delivery: true, campaign_id: 'campaign-looking-like-a-default'};
+  assert.equal(vm.runInContext('collectionContext(localRecordFixture)', context),
+    '本机记录 · 云端归属见详情');
+  context.localRecordFixture.collection_context = {kind: 'default', name: '日常真人采集'};
+  assert.equal(vm.runInContext('collectionContext(localRecordFixture)', context),
+    '日常录制 · 日常真人采集');
+});
+
+test('overview still presents recording setup when this computer has no delivery configuration', async () => {
+  const {context, get} = pageSetup('devices', {status: 'signed_in'});
+  await settled();
+  const rendered = [];
+  context.window.SpireProject.render = async (view, identity) => {
+    rendered.push([view, identity.status]);
+    return 'durable setup steps';
+  };
+  context.window.SpireIdentity.api = route => '/app/api/' + route;
+  context.fetch = async () => ({ok: true, json: async () => ({status: 'not_configured'})});
+  context.AbortSignal = AbortSignal;
+  context.location.search = '?view=overview';
+  await vm.runInContext('readLocation(); load(true)', context);
+  assert.deepEqual(rendered, [['collection-overview', 'signed_in']]);
+  assert.equal(get('content').children[0].children[0], 'durable setup steps');
 });

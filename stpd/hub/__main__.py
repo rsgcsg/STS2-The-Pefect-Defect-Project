@@ -65,6 +65,9 @@ def main() -> int:
             "enqueue",
             "retry-upload",
             "console-refresh",
+            "members-bootstrap",
+            "statistics-refresh",
+            "collection-sharing",
         ],
     )
     parser.add_argument("--root", type=Path, default=Path.cwd())
@@ -97,6 +100,11 @@ def main() -> int:
     )
     parser.add_argument("--isolated", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--evidence", help="operator-reviewed provider stop evidence reference")
+    parser.add_argument("--legacy-allowlist", type=Path)
+    parser.add_argument("--dataset-id", action="append", default=[])
+    sharing = parser.add_mutually_exclusive_group()
+    sharing.add_argument("--approve-sharing", action="store_true")
+    sharing.add_argument("--revoke-sharing", action="store_true")
     parser.add_argument(
         "--budget-units",
         type=int,
@@ -109,6 +117,20 @@ def main() -> int:
             from .verification_worker import constrain_worker
 
             constrain_worker()
+        if args.command == "members-bootstrap":
+            from .console_auth import load_legacy_allowlist
+            from .membership import MembershipService
+
+            issuer = os.environ.get("STPD_ACCESS_ISSUER", "")
+            email = os.environ.get("STPD_BOOTSTRAP_ADMIN_EMAIL", "")
+            if not issuer or not email:
+                raise BoundaryError("membership", "explicit_bootstrap_identity_required")
+            legacy = load_legacy_allowlist(args.legacy_allowlist) if args.legacy_allowlist else []
+            result = MembershipService(Operations(args.state / "operations.sqlite")).bootstrap(
+                issuer=issuer, admin_email=email, legacy_principals=legacy
+            )
+            print(json.dumps(result, sort_keys=True))
+            return 0
         service = configured_service(args)
         ops = service.operations
         if args.command == "register":
@@ -146,6 +168,35 @@ def main() -> int:
             print(json.dumps({"reconciled": args.job}))
         elif args.command == "console-refresh":
             print(json.dumps(service.refresh_console(upload_id=args.upload)))
+        elif args.command == "statistics-refresh":
+            from .member_api import refresh_project_statistics
+
+            print(
+                json.dumps(
+                    refresh_project_statistics(
+                        service,
+                        upload_ids=(args.upload,) if args.upload else (),
+                        dataset_ids=tuple(args.dataset_id),
+                    )
+                )
+            )
+        elif args.command == "collection-sharing":
+            from .member_api import grant_collection_sharing
+
+            if (
+                not args.upload
+                or not args.evidence
+                or not (args.approve_sharing or args.revoke_sharing)
+            ):
+                raise BoundaryError("sharing", "explicit_upload_approval_evidence_required")
+            grant_collection_sharing(
+                service,
+                upload_id=args.upload,
+                approved=args.approve_sharing,
+                evidence_ref=args.evidence,
+                actor="operator-cli",
+            )
+            print(json.dumps({"upload_id": args.upload, "sharing_approved": args.approve_sharing}))
         elif args.command == "verify":
             print(json.dumps({"processed": service.verify_pending(args.upload)}))
         elif args.command == "retry-upload":
@@ -217,7 +268,7 @@ def main() -> int:
         else:
             from waitress import serve  # type: ignore[import-untyped]
 
-            from .verification_worker import run_verifier
+            from .verification_worker import supervise_pending_upload
 
             secret = os.environ.get("STPD_HUB_ADMIN_TOKEN", "")
             from .console_auth import configured_access
@@ -282,12 +333,12 @@ def main() -> int:
                         "--upload",
                         pending["id"],
                     ]
-                    if not run_verifier(arguments, shutdown=shutdown) and not shutdown.is_set():
-                        ops.verification_failure(
-                            pending["id"], "verifier_resource_or_process_limit", now=time.time()
-                        )
+                    disposition = supervise_pending_upload(
+                        ops, pending["id"], arguments, shutdown,
+                    )
+                    if disposition in {"retry_pending", "capacity_deferred"}:
                         print(
-                            json.dumps({"stage": "verification", "state": "retry_pending"}),
+                            json.dumps({"stage": "verification", "state": disposition}),
                             flush=True,
                         )
                     shutdown.wait(5)

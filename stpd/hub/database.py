@@ -5,21 +5,38 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import secrets
 import sqlite3
 import time
 from collections.abc import Iterator
-from contextlib import closing, contextmanager
+from contextlib import closing, contextmanager, suppress
 from pathlib import Path
 from typing import Any, cast
 
 from ..json_boundary import BoundaryError
 
-CURRENT_SCHEMA = 3
+CURRENT_SCHEMA = 4
 
 
 def token_hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
+
+
+def create_private_database(path: Path) -> None:
+    """Own the new inode before SQLite writes private state or creates WAL sidecars.
+
+    Exclusive creation never adjusts an existing database or a symlink target.
+    Existing deployment permissions remain an explicit operator/preflight contract.
+    """
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        if hasattr(os, "fchmod"):
+            os.fchmod(descriptor, 0o600)
+        else:
+            path.chmod(0o600)
+    finally:
+        os.close(descriptor)
 
 
 class Operations:
@@ -28,9 +45,11 @@ class Operations:
     def __init__(self, path: Path) -> None:
         self.path = path
         path.parent.mkdir(parents=True, exist_ok=True)
+        with suppress(FileExistsError):
+            create_private_database(path)
         with self.transaction() as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version not in {0, 1, 2, CURRENT_SCHEMA}:
+            if version not in {0, 1, 2, 3, CURRENT_SCHEMA}:
                 raise BoundaryError("hub", "unsupported_operations_schema")
             schema = """
                 CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -76,6 +95,17 @@ class Operations:
                 CREATE TABLE IF NOT EXISTS identity_rates(
                     source TEXT NOT NULL, bucket INTEGER NOT NULL, count INTEGER NOT NULL,
                     PRIMARY KEY(source,bucket));
+                CREATE TABLE IF NOT EXISTS identity_members(
+                    id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, issuer TEXT NOT NULL,
+                    access_subject TEXT, subject TEXT UNIQUE,
+                    role TEXT NOT NULL CHECK(role IN ('member','admin')),
+                    status TEXT NOT NULL CHECK(status IN ('invited','active','disabled')),
+                    enroll_devices INTEGER NOT NULL DEFAULT 1 CHECK(enroll_devices IN (0,1)),
+                    device_quota INTEGER NOT NULL DEFAULT 3 CHECK(device_quota BETWEEN 0 AND 128),
+                    created_at REAL NOT NULL, updated_at REAL NOT NULL);
+                CREATE TABLE IF NOT EXISTS identity_claim_scopes(
+                    member_id TEXT NOT NULL, device_id TEXT NOT NULL,
+                    PRIMARY KEY(member_id,device_id));
             """
             # These fixed statements contain no embedded semicolons. executescript would
             # implicitly commit our transaction and expose a partially applied migration.
@@ -89,11 +119,19 @@ class Operations:
             for name, kind in (("name", "TEXT"), ("owner_subject", "TEXT"), ("last_seen", "REAL")):
                 if name not in device_columns:
                     db.execute(f"ALTER TABLE devices ADD COLUMN {name} {kind}")
+            from .campaigns import create_campaign_tables
+
+            create_campaign_tables(db)
             db.execute(f"PRAGMA user_version={CURRENT_SCHEMA}")
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
-        db = sqlite3.connect(self.path, timeout=30, isolation_level=None)
+        db = sqlite3.connect(
+            self.path.resolve().as_uri() + "?mode=rw",
+            uri=True,
+            timeout=30,
+            isolation_level=None,
+        )
         db.row_factory = sqlite3.Row
         try:
             db.execute("PRAGMA journal_mode=WAL")
@@ -127,12 +165,29 @@ class Operations:
 
     def authenticate(self, token: str) -> str:
         with self.transaction() as db:
-            row = db.execute(
-                "SELECT id FROM devices WHERE token_hash=? AND active=1", (token_hash(token),)
+            return str(self.authenticated_device(db, token)["id"])
+
+    @staticmethod
+    def device_authorized(db: sqlite3.Connection, device: str) -> bool:
+        """Every credential/capability seam also respects its bound owner's revocation."""
+        return (
+            db.execute(
+                "SELECT 1 FROM devices d WHERE d.id=? AND d.active=1 AND "
+                "(d.owner_subject IS NULL OR EXISTS(SELECT 1 FROM identity_members m "
+                "WHERE m.subject=d.owner_subject AND m.status='active'))",
+                (device,),
             ).fetchone()
-            if row is None:
-                raise BoundaryError("hub", "unauthorized")
-            return str(row["id"])
+            is not None
+        )
+
+    @classmethod
+    def authenticated_device(cls, db: sqlite3.Connection, token: str) -> sqlite3.Row:
+        row = db.execute(
+            "SELECT * FROM devices WHERE token_hash=?", (token_hash(token),)
+        ).fetchone()
+        if row is None or not cls.device_authorized(db, row["id"]):
+            raise BoundaryError("hub", "unauthorized")
+        return cast(sqlite3.Row, row)
 
     def revoke(self, device: str) -> None:
         with self.transaction() as db:
@@ -145,10 +200,19 @@ class Operations:
             raise BoundaryError("hub", "invalid_device_credential")
         with self.transaction() as db:
             row = db.execute(
-                "SELECT token_hash,active FROM devices WHERE id=?", (device,)
+                "SELECT token_hash,active,owner_subject FROM devices WHERE id=?", (device,)
             ).fetchone()
             if row is None or row["token_hash"] == token_hash(token):
                 raise BoundaryError("hub", "device_rotation_not_applicable")
+            if (
+                row["owner_subject"]
+                and db.execute(
+                    "SELECT 1 FROM identity_members WHERE subject=? AND status='active'",
+                    (row["owner_subject"],),
+                ).fetchone()
+                is None
+            ):
+                raise BoundaryError("hub", "device_owner_disabled")
             db.execute(
                 "UPDATE devices SET token_hash=?,active=1 WHERE id=?", (token_hash(token), device)
             )
@@ -560,12 +624,16 @@ class Operations:
             )
 
     def backup(self, destination: Path) -> None:
-        if destination.exists():
-            raise BoundaryError("hub", "backup_exists")
         destination.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            create_private_database(destination)
+        except FileExistsError:
+            raise BoundaryError("hub", "backup_exists") from None
         with (
-            closing(sqlite3.connect(self.path)) as source,
-            closing(sqlite3.connect(destination)) as target,
+            closing(sqlite3.connect(self.path.resolve().as_uri() + "?mode=ro", uri=True)) as source,
+            closing(
+                sqlite3.connect(destination.resolve().as_uri() + "?mode=rw", uri=True)
+            ) as target,
         ):
             source.backup(target)
             target.execute("UPDATE settings SET value='1' WHERE key='paused'")

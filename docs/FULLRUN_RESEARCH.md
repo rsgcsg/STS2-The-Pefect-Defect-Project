@@ -99,3 +99,12 @@ ModelView, exact frozen-Qwen FeatureSet, TrainingInput, provider-neutral worker,
 models and evaluations consume these immutable identities. ArtifactStore, Registry, analysis
 and dashboard remain peripheral. No source/test result here proves a real Full-Run corpus,
 Human Gold, pretrained-Qwen advantage, cloud qualification or live-game capability.
+
+
+## Partial-decision follow-up
+
+Useful verified decisions in a failed/partial source remain preserved and projectable.
+A separate versioned decision/segment admission path is the accepted follow-up design in
+[B pipeline maintenance](B_PIPELINE_HANDOFF.md#partial-recordings-and-practical-maintenance).
+It is not implemented by the current complete-run `admit` function. Do not drop rows, renumber
+steps or weaken its checks to claim a partial source is a Full-Run Dataset.
