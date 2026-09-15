@@ -68,7 +68,8 @@ def verified_archive(archive: Path, expected: str) -> tuple[dict[str, Any], dict
             p = PurePosixPath(name)
             mode = info.external_attr >> 16
             if (
-                name in files
+                name != info.orig_filename
+                or name in files
                 or p.is_absolute()
                 or ".." in p.parts
                 or str(p) != name

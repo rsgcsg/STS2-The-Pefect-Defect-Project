@@ -10,8 +10,8 @@ not establish Human origin or visually inspect the browser. This is Scheme 2
 
 | Object | Exact identity |
 |---|---|
-| Workbench / kit producer | `6fcd735e4618c29967528e9d3457d898d2e8283d` |
-| Developer kit ZIP SHA256 | `0652c24b34e3b57a20639f92c2222f287f0e4c4d72d14ef0843350a66f9244a6` |
+| Human-tested Workbench / kit producer | `6fcd735e4618c29967528e9d3457d898d2e8283d` |
+| Human-tested kit ZIP SHA256 | `0652c24b34e3b57a20639f92c2222f287f0e4c4d72d14ef0843350a66f9244a6` |
 | Hub producer | `25777cbce106ec9d64ceeef9e55b889abdbc3d3a` |
 | Hub OCI | `ghcr.io/rsgcsg/spireagent-hub@sha256:9271a619f16e427f3c338f5589052894467968d46067896d183afd4f5cf30d85` |
 | Python lock SHA256 | `5f228ae57b5b8610dfd7977a6b465ec391b01eea933c2c80ad87ffb126566ba7` |
@@ -23,8 +23,10 @@ not establish Human origin or visually inspect the browser. This is Scheme 2
 
 The kit reuses the preceding qualified native bytes and BOM with their original
 provenance. Its changed Python installation tools do not relabel native source.
-The installer-only fix after the Hub build, and later test/documentation changes,
-do not require another Hub build or a different runtime kit.
+Installer-only fixes after the Hub build do not require another Hub build.
+The final publication receipt identifies the kit including the later ZIP-name
+guard. Workbench/recording implementation bytes remain identical to this Human
+candidate; packaging/initialization checks apply separately to that final kit.
 
 Managed prepare/locked initialization and actual Workbench doctor/start passed.
 The first clean installation exposed missing Workbench-side Node SDKs; the
@@ -102,8 +104,11 @@ guards and UI/compatibility regressions passed.
 Two earlier Windows failures are retained: a 500ms wait for unchanged Policy
 HTTP stop arrival timed out (local 50/50 recheck and the next hosted attempt
 passed), then the unsafe-backslash ZIP fixture was normalized by Python on
-Windows. The final fixture preserves the literal archive name on every OS;
-rejection assertions and production security behavior were not weakened.
+Windows, including during archive reading. The fixture preserves the literal
+archive name, and the installer rejects a parsed filename that differs from its
+original name. A reader-normalization regression runs on every OS; rejection
+assertions were not weakened. This guard does not affect the already-tested
+canonical ZIP entries or native/Workbench behavior.
 
 [PR #5](https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project/pull/5) records
 final task-head and integration CI. Source integration and formal publication

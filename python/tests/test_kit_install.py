@@ -61,6 +61,22 @@ def test_unsafe_archive_names_fail_before_any_extraction(tmp_path, extra):
     assert set(p.name for p in tmp_path.iterdir()) == {"kit.zip"}
 
 
+def test_reader_normalization_cannot_hide_an_unsafe_name(tmp_path, monkeypatch):
+    path, expected = archive(tmp_path, extra="a\\b")
+    original = zipfile.ZipInfo
+
+    class NormalizingReader(original):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            # Reproduce Windows ZipInfo reader normalization on every test OS.
+            self.filename = self.filename.replace("\\", "/")
+
+    monkeypatch.setattr(zipfile, "ZipInfo", NormalizingReader)
+    with pytest.raises(BoundaryError, match="unsafe"):
+        install.verified_archive(path, expected)
+    assert set(p.name for p in tmp_path.iterdir()) == {"kit.zip"}
+
+
 def test_wrong_native_game_and_running_game_never_deploy(tmp_path, monkeypatch):
     monkeypatch.setattr(install, "status", lambda _: {"status": "prepared"})
     data = tmp_path / "game"
