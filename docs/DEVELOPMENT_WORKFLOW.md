@@ -40,7 +40,10 @@ released dependencies needed to read old data; current installation must have on
 reviewed release composition. Replacing a pin requires consumer compatibility tests.
 
 Build an immutable candidate, verify it, promote the same bytes, and retain the
-previous image/config. Rebuilds are new artifacts. One production scheduler owns
+previous image/config. Keep a running collector in a separate checkout at the sealed
+release commit; do development and merges in another worktree. Never move the live
+collector checkout underneath a recording or upload process. Rebuilds are new artifacts.
+One production scheduler owns
 operations state; backup/restore remains independent of rebuildable indexes.
 
 ## Retirement

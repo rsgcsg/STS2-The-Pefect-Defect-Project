@@ -15,3 +15,11 @@ Root `npm run check` covers both systems. Work from current origin/develop by PR
 main/develop are the only long-lived branches. Resolve live merge refs and CI
 from GitHub. Keep existing credentials, raw data, old tools and outboxes private.
 Compute budget remains zero. No GPU-worker, scientific or model-quality claim.
+
+Resolve live GitHub refs, CI, source and deployed identity; current source/runtime
+authorities override this file.
+
+## Remaining Platform non-claims
+
+This bounded acceptance does not qualify unseen native surfaces, arbitrary game
+versions, the incomplete second run as complete, or scientific/model quality.
