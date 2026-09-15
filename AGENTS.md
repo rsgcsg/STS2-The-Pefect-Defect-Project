@@ -71,7 +71,7 @@ checks merely to accommodate a provenance-rewriting merge method.
 
 Classify the change (`G0`-`G6`), identify the first incorrect fact and owning
 layer, preserve dependency direction, add the lowest-cost faithful regression,
-run the component and root gates, then report evidence at its exact level.
+run the component and selected root gates defined in docs/TESTING.md, then report evidence at its exact level.
 Hosted CI must remain source/test-only; game-bound changes additionally use the
 local exact-game/build/runtime gates defined in `docs/TESTING.md`.
 

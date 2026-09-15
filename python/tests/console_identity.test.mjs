@@ -152,6 +152,24 @@ test('system preserves capacity attention and missing observations without claim
   }
 });
 
+test('system distinguishes local and cloud sources and never recommends automatic SHA alignment', async () => {
+  const {context} = pageSetup('devices', {status: 'signed_in'});
+  await settled();
+  vm.runInContext('local = true', context);
+  context.versionFixture = {identity: {source_revision: 'a'.repeat(40)},
+    cloud: {producer: {source_revision: 'b'.repeat(40)}}, cloud_status: 'stale'};
+  const flatten = element => [element.textContent || '', ...(element.children || []).map(
+    child => typeof child === 'string' ? child : flatten(child))].join(' ');
+  const rendered = flatten(vm.runInContext('system(versionFixture)', context));
+  assert.match(rendered, /本机工作台来源/);
+  assert.match(rendered, /Hub 来源/);
+  assert.match(rendered, /来源不同不等于不兼容/);
+  assert.match(rendered, /不会随 main 自动安装/);
+  assert.match(rendered, /stale/);
+  assert.match(rendered, /a{40}/);
+  assert.match(rendered, /b{40}/);
+});
+
 
 test('bound member continues into recording setup without the old configuration handoff', async () => {
   const {ui, calls} = setup();

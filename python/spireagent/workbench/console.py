@@ -300,12 +300,15 @@ class LocalConsole:
 
     def system(self) -> dict[str, Any]:
         remote = self.remote("system")
+        cloud_status = remote.get("status", "available")
+        if cloud_status == "available" and remote.get("schema") != "stpd/console-v1":
+            cloud_status = "unsupported_console_schema"
         result: dict[str, Any] = {
             "schema": "stpd/console-v1",
             "observed_at": observed_at(),
             "identity": self.identity,
             "delivery_status": self.delivery_process(),
-            "cloud_status": remote.get("status", "available"),
+            "cloud_status": cloud_status,
             "access": {"role": "device", "read_only": True},
             "cloud": remote,
         }
