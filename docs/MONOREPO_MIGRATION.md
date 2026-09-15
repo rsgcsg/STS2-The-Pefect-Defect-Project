@@ -1,7 +1,9 @@
 # Single-repository migration
 
 The project repository is `rsgcsg/STS2-The-Pefect-Defect-Project`.
-This document defines the default project workflow and links exact qualification evidence.
+This document records migration ownership and exact qualification evidence. The
+[development workflow](DEVELOPMENT_WORKFLOW.md) owns ongoing branch, release, cloud and
+maintenance coordination; the [member handoff](NEW_MEMBER_HANDOFF.zh-CN.md) explains it in Chinese.
 
 ## Accepted ownership
 
@@ -24,8 +26,9 @@ remote handles; Hub owns budgets and durable attempts. Unknown submission is not
 6. Human gate: install/cold launch, record, Close, pack, upload, receive, select/download.
 7. Audit exact candidate, merge develop/main, verify CI, then retire old repositories.
 
-Until steps 4–6 pass, production and old repositories remain available. No existing
-recording, queue, consent, manifest or model is relabelled. No new GPU budget is granted.
+These acceptance steps passed for the dated release linked below; both source predecessors
+are now archived. Their histories and releases remain available. No existing recording,
+queue, consent, manifest or model is relabelled. No new GPU budget is granted.
 
 ## Traceability and rollback
 
@@ -43,7 +46,7 @@ Do not use a database restore to silently resurrect revoked access or retry unkn
 ## Accepted release and daily workflow
 
 The sealed code/runtime candidate is `45ef463e3c13cd82db55601c122a292c37aaae2e`.
-[Release and exact distribution](https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project/releases/tag/candidate/monorepo-20260915)
+[Release and exact distribution](https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project/releases/tag/project/2026-09-15)
 contains the tested developer kit, hashes and operational identity.
 [The Human acceptance report](evidence/MONOREPO_HUMAN_GATE_2026-09-15.md) records
 580/580 decisions proved/canonical, zero real failures, Close packaging, cloud verification

@@ -22,13 +22,15 @@ reconciliation. Changing a Git branch is not a rollback of database or R2 state.
 Run commands only after account/region, resource budget and credentials are authorized.
 This document is a procedure, not a record that deployment happened. The source checkout,
 worker image, Caddy image and deployment config each have an independently recorded identity.
-Use an exact clean checkout of the approved STPD revision. Do not edit code on a running host.
+Use an exact clean checkout of the approved project revision. Do not edit code on a running host.
 
 [The default project workflow](../../docs/B_PIPELINE_HANDOFF.md) owns download, terminal
 onboarding, everyday collection/views and incident routing. Select the exact source/lock/OCI
 combination from its reviewed release notes before applying this runbook. A main/develop merge
 does not deploy the Hub, update a collector or qualify a new runtime. This is the one host
 procedure; campaigns link here rather than copying a second deployment recipe.
+[Root workflow](../../../docs/DEVELOPMENT_WORKFLOW.md) owns promotion and update policy.
+Existing hosts do not repeat bootstrap for new members or routine application updates.
 
 [Daily host operations](OPERATIONS.md) covers SSH access, safe network changes, lost access
 and capacity inspection. It is this runbook's operator companion, not a second deployment flow.

@@ -4,8 +4,8 @@ For the default download, account/device onboarding, collection, incident and mo
 freeze workflow, start with [the project procedure](B_PIPELINE_HANDOFF.md). This document
 owns the lower-level data and operator commands, not a second onboarding path.
 
-This is one STPD developer workbench consuming one independently released Platform Mod and
-its public collection tools. Repositories stay separate and packages are exact pins. Models
+This is one project Workbench consuming a Platform Mod and its public collection tools.
+One repository owns the components; public packages retain exact artifact pins. Models
 are separate immutable artifacts. This scope connects existing research services; it does
 not add a Full-Run model, Mac Qwen backend, cloud inference, cloud STS2 or RL.
 

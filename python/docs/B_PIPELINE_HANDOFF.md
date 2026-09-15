@@ -3,8 +3,9 @@
 This is the default developer workflow for the whole project.
 All Python commands below run from `python/` of the one project checkout; native
 `npm run game-mod:*` commands run at its repository root. Download/checkout once.
-The monorepo candidate is not a qualified release until its own acceptance report passes. The B pipeline is its current
-implementation: one Platform game Mod, one project workbench, one protected cloud portal and
+The [unified release acceptance](../../docs/MONOREPO_MIGRATION.md) records the deployed baseline.
+The B pipeline is its current implementation: one Platform game Mod, one project workbench,
+one protected cloud portal and
 separately downloaded models. [B operations](CLOUD_PIPELINE_B.md) owns data/worker commands;
 the [Hub runbook](../deploy/hub/RUNBOOK.md) owns deployment and recovery commands;
 the [console guide](PROJECT_CONSOLE.md) explains the screens and account/device behavior.
@@ -14,13 +15,12 @@ The project cloud entry is [hub.2-fire-2.com](https://hub.2-fire-2.com/). Its ac
 protected; it is not a public dataset browser. Select the exact supported combination from
 reviewed release notes, then follow this guide. A branch name or an old private candidate ZIP
 is not a release identity. Current bounded qualification is recorded in
-[the unified workflow release report](evidence/B_UNIFIED_WORKFLOW_RELEASE_2026-09-13.md).
+[the monorepo acceptance](../../docs/MONOREPO_MIGRATION.md); older workflow reports remain historical.
 
-The daily-default recording, member/admin, export and local-model changes here are a source candidate
-until their exact release, deployed schema-4 migration and browser/Human gates pass. An existing
-v1 release remains qualified only for its published scope. Select a release that explicitly
-includes these capabilities; do not treat this document or an older successful receipt as a
-production rollout. [ADR-0006](adr/0006-project-members-and-local-models.md) records the design.
+Use the [root workflow](../../docs/DEVELOPMENT_WORKFLOW.md) for branches, releases,
+compatibility and maintenance policy, and the [complete member/Agent handoff](../../docs/NEW_MEMBER_HANDOFF.zh-CN.md)
+for first setup. Dated evidence remains scoped to its original release. Source documentation
+does not imply a GPU/model or arbitrary-version qualification.
 
 ## The everyday path
 
@@ -157,7 +157,8 @@ receipt is observed. Its browser tab can close independently; there is no OS aut
 | Owner | Delivers | Does not decide |
 |---|---|---|
 | Platform | one game Mod; fixed collection tool; Evidence package/outbox; policy lifecycle | research admission, model, training, GPU provider |
-| STPD | one developer workbench; projection/Dataset; Hub; worker/provider adapter; model policy adapter | native rules, legal actions, Human/Commit/successor truth |
+| Project applications (`spireagent`) | one Workbench/Hub, accounts, storage and provider operations | native or research truth |
+| Research (`stpd`) | projection/Dataset, training/evaluation and model policy adapter | native rules, legal actions, Human/Commit/successor truth |
 | Operator | exact approved combination, device access, budget, backup and deployment | rewriting failed evidence or changing a frozen experiment retrospectively |
 | Model artifact | immutable weights, representation/support manifest and provenance | installing an unpinned environment or activating gameplay automatically |
 
@@ -172,9 +173,9 @@ Do not put private payloads in image layers and then delete them in a later laye
 B remains a developer distribution, not a one-click player installer. Platform developers and
 release builders need its source; the operator also retains an exact Platform checkout on the
 game computer for initial binary installation, lifecycle and rollback. The daily workbench uses
-the fixed tool without reading that checkout. Both repositories retain independent versions and
-source authority. The approved combination links their artifacts; it does not
-create a third source repository or a floating sibling dependency.
+the fixed tool without reading that checkout. Components keep explicit contracts and artifact
+identities within the one repository. The reviewed combination links artifacts without
+floating dependencies or lockstep updates; root workflow owns release coordination.
 
 The release builder produces the fixed collection-tool directory once, from a clean exact
 Platform checkout, using its `publish:collection-tool` command. Distribute the entire directory,
@@ -186,7 +187,7 @@ A reviewable terminal handoff contains:
 
 - exact Platform workspace/component/BOM and installed Mod identity; exact collection-tool
   inventory/release ID and required .NET runtime; never the game binaries;
-- exact STPD commit/lock and developer combination, public Evidence dependency pin;
+- exact project application commit/Python lock and developer combination, public Evidence dependency pin;
 - public Hub URL and explicit HTTPS upload-host allowlist;
 - Hub project membership invitation and browser-approved device enrollment (legacy private token
   provisioning remains an operator recovery route);
@@ -244,9 +245,9 @@ A corrected release uses a new tag/asset identity; never overwrite the previous 
 
 ## First terminal and real-upload gate
 
-1. Complete source review/root gates/latest-head CI in each repository. Prepare the exact Mod
-   and tool artifacts; an unmerged candidate is explicitly non-stable. Update the STPD pin only
-   after the Platform candidate is durable and reviewed. Requalify the final Hub image at its
+1. Complete source review/root gates/latest-head CI in the unified repository. Prepare exact Mod
+   and tool artifacts; an unmerged candidate is explicitly non-stable. Update consumer pins only
+   after the referenced artifact is durable and reviewed. Requalify an affected Hub image at its
    new source/lock; old cloud receipts remain historical. No merge transfers runtime evidence.
 2. Separate qualification from collection: preserve the synthetic Hub state/prefix and prepare
    fresh collection state/prefix with budget zero, private permissions, backup/status checks and
@@ -280,13 +281,14 @@ The Human can keep playing offline; upload state is not native decision validity
 ## Daily work, upgrades and incidents
 
 Before distributing a new combination, stop the owned local process, retain its configuration,
-credentials, raw sessions, bundles and outbox, and move the clean checkout to the reviewed exact
-revision. Use explicit replacement setup with the same state/campaign settings, run doctor,
+credentials, raw sessions, bundles and outbox. Prepare a new durable checkout at the reviewed
+exact revision and retain the old checkout for rollback. Use explicit replacement setup with
+the same state/campaign settings, run doctor,
 then reopen. The launcher does not silently replace a changed combination. Recheck local/cloud
 identity and receipt continuity; repeat the owning native or delivery canary when affected.
 Roll back with the recorded compatible source/tool/config pair, never by rewriting evidence.
 
-For an STPD configuration/combination refresh, stop first and preserve every configured value:
+For a project application configuration/combination refresh, stop first and preserve every configured value:
 
 ```bash
 uv run --locked python -m spireagent.workbench project stop --config /ABS/project.json
@@ -313,7 +315,7 @@ only a newly prepared generation receives future recordings. No new member, devi
 or consent declaration is created. This is an explicit maintenance command, not an automatic
 upgrade when the game version changes. Legacy v1 constraints remain unchanged.
 
-1. Stop the game and workbench. Upgrade to the approved STPD combination with the existing
+1. Stop the game and workbench. Upgrade to the approved project application combination with the existing
    config values as above. Install the approved compatible Mod through the owner lifecycle,
    keeping the game closed. Register its complete tool with `--replace-tool`.
 2. Use the existing enrollment ID from the collection settings' technical details. Prepare:
@@ -483,7 +485,7 @@ A correction produces a new artifact/report; it never makes an old failed receip
 The current implementation preserves and projects partial verified sources, but
 `fullrun.data.admit` still requires complete runs and rejects unresolved/failed-closed sources.
 It does **not** yet automatically admit the good subset of such a source for training.
-The separate decision-dataset candidate is specified by [ADR-0007](adr/0007-fixed-decision-datasets.md).
+The separate decision-dataset contract is specified by [ADR-0007](adr/0007-fixed-decision-datasets.md).
 It adds preview/build and a reproducing loader without changing that strict training entry point:
 
 - Admit a decision only from its own proved state, complete execution catalog, exact choice
@@ -498,8 +500,9 @@ It adds preview/build and a reproducing loader without changing that strict trai
   the derived manifest. Keep all parts of a run and duplicate-related components in one split.
   Report coverage and selection bias; rare failures must not disappear from benchmark reports.
 
-This candidate has separate codec/selection/reprojection tests; production promotion and
-research training use require their own exact evidence.
+The [decision-dataset closeout](evidence/DECISION_DATASETS_CLOSEOUT_2026-09-15.md) records its
+bounded deployed selection/download acceptance. Research training use remains a separate gate;
+selection/download tests are not evidence of a completed training run.
 Do not relax the existing Full-Run contract to implement it. Collection can continue meanwhile;
 verified storage, useful projection, training eligibility and complete-run certification are
 four different facts. The [bounded acceptance](evidence/B_WORKFLOW_BOUNDED_ACCEPTANCE_2026-09-15.md)

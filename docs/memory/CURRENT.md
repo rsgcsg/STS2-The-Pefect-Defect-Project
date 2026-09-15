@@ -11,6 +11,10 @@ The deployed release is sealed at `45ef463e3c13cd82db55601c122a292c37aaae2e`.
 upload and member download passed. Later documentation/integration commits do
 not silently change that deployed producer. Historical evidence is unchanged.
 
+[One workflow](../DEVELOPMENT_WORKFLOW.md) owns branches, intentional releases, compatible
+pinned deployments and maintenance. A documentation merge does not update running clients.
+[Member/Agent handoff](../NEW_MEMBER_HANDOFF.zh-CN.md) is the entry for new people.
+
 Root `npm run check` covers both systems. Work from current origin/develop by PR;
 main/develop are the only long-lived branches. Resolve live merge refs and CI
 from GitHub. Keep existing credentials, raw data, old tools and outboxes private.

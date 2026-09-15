@@ -1,7 +1,9 @@
 # New Engineer Guide
 
-This is the shortest safe path from a fresh checkout to a legitimate first
-Platform pull request. If you only collect/view SpireAgent data, use the
+Start with the [complete project handoff (中文)](NEW_MEMBER_HANDOFF.zh-CN.md)
+for accounts, first installation, collection, research and operator access.
+This page is the short engineering path to a legitimate first project PR.
+If you only collect/view SpireAgent data, use the
 [collection workbench route](ANNOTATOR_COLLECTION.md#default-project-workflow); building
 Platform is not a collector prerequisite.
 
@@ -10,7 +12,8 @@ Platform is not a collector prerequisite.
 Platform connects the real STS2 runtime to fair-player automation,
 native-human evidence, evidence logistics, and model-neutral policy lifecycle.
 It does not own strategy, rewards, models, training, research admission, or a
-second legality engine. STPD is an external research consumer.
+second legality engine. STPD is the research consumer in `python/stpd`;
+sharing this repository does not transfer native or evidence authority.
 
 Authority is deliberately split:
 
@@ -39,6 +42,8 @@ and npm are required.
 git fetch --prune origin
 git switch --create chore/platform/my-change origin/develop
 npm ci
+npm ci --prefix python
+npm run setup:python
 ```
 
 Use a short-lived branch in its own worktree when another person or agent is

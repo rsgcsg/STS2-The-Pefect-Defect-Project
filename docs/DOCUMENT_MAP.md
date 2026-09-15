@@ -5,6 +5,8 @@ Use the smallest route that answers the task.
 ## New here
 
 - [README](../README.md): zero-context product boundary and next steps.
+- [Complete member and Agent handoff (中文)](NEW_MEMBER_HANDOFF.zh-CN.md): accounts,
+  first installation, daily collection, development, operations and incident reporting.
 - [New Engineer Guide](NEW_ENGINEER_GUIDE.md): first-day setup and first PR.
 - [Collection and maintenance](ANNOTATOR_COLLECTION.md): default workbench handoff, native capture and incident ownership.
 
