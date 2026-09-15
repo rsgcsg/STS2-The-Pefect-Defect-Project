@@ -101,3 +101,8 @@ causal and mutation-admission behavior. New SHA/MVID and source identities still
 require their own exact build/install/load evidence. The historical rc.4 Human
 artifact and published Host rc.7 package remain pinned to their original bytes;
 their qualification/publication is not transferred to this candidate.
+
+New build provenance publishes only assembly SHA256/MVID for the Mod and game assembly.
+The identity CLI can still return a private operator path, but the distribution builder
+selects only those identity fields. Existing build/installed evidence is not rewritten.
+The owning lifecycle compares exact hashes/MVID and compiled source, not builder paths.

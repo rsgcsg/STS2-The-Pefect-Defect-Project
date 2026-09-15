@@ -25,7 +25,7 @@ export function packageRuntime(outputDirectory, { allowDirty = false } = {}) {
   if (!allowDirty && identity.source_worktree_status !== "clean") throw new Error("Commit Policy Runtime source before creating an external candidate package");
   const sdkName = "@rsgcsg/sts2-connector-client";
   const sdk = lock.packages[`node_modules/${sdkName}`];
-  if (source.dependencies[sdkName] !== sdk?.resolved || !/^https:\/\/github\.com\/rsgcsg\/STS2-AI-PLATFORM\/releases\/download\/consumer-sdk\/v[^/]+\/rsgcsg-sts2-connector-client-[^/]+\.tgz$/u.test(sdk.resolved) || !/^sha512-/u.test(sdk.integrity)) throw new Error("Policy Runtime requires an exact released Connector SDK URL and integrity");
+  if (source.dependencies[sdkName] !== sdk?.resolved || !/^https:\/\/github\.com\/rsgcsg\/STS2-The-Pefect-Defect-Project\/releases\/download\/compat\/platform-import-v1\/rsgcsg-sts2-connector-client-[^/]+\.tgz$/u.test(sdk.resolved) || !/^sha512-/u.test(sdk.integrity)) throw new Error("Policy Runtime requires an exact released Connector SDK URL and integrity");
   const stage = mkdtempSync(path.join(os.tmpdir(), "sts2-policy-package-stage-"));
   try {
     const packedPackage = { ...source, files: ["bin", "dist", "README.md", "LICENSE", "package-identity.json", "npm-shrinkwrap.json"] };

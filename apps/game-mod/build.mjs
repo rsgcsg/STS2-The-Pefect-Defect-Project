@@ -47,7 +47,7 @@ function exactIdentity(file) {
     encoding: "utf8"
   });
   if (result.status !== 0) throw new Error(result.stderr || `identity tool exited with ${result.status}`);
-  return JSON.parse(result.stdout);
+  return publicAssemblyIdentity(JSON.parse(result.stdout));
 }
 
 const hostApi = await loadHostRuntimeWorkstationApi(

@@ -515,7 +515,7 @@ export function formatContext(workspaceRoot = root, options = {}) {
   const lines = [
     "# Platform task context",
     "",
-    `- Repository: rsgcsg/STS2-AI-PLATFORM`,
+    `- Repository: rsgcsg/STS2-The-Pefect-Defect-Project`,
     `- Branch: ${branch}`,
     `- HEAD: ${sha}`,
     `- Known integration base: origin/develop at ${base}`,
