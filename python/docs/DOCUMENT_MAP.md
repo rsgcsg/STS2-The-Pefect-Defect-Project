@@ -1,0 +1,107 @@
+# Document Map
+
+Routing only: exact source/contracts/tests and scoped artifact/runtime evidence establish
+facts. Canonical documents describe supported claims; ADRs/plans define accepted intent;
+working memory and historical conversations do not prove implementation. Separate evidence
+classes are defined in [Engineering Governance](ENGINEERING_GOVERNANCE.md).
+
+## Entry and engineering
+
+| Document | Responsibility |
+|---|---|
+| [Default project workflow](B_PIPELINE_HANDOFF.md) | approved download/install, account/device, collection/cloud views, upgrades and incidents |
+| [New Engineer Guide](NEW_ENGINEER_GUIDE.md) | first checkout and ownership orientation |
+| [Status](STATUS.md) | implemented/measured state and non-claims |
+| [Project System](PROJECT_SYSTEM.md) | context/check/closeout and bounded memory |
+| [Development Workflow](DEVELOPMENT_WORKFLOW.md) | branches, PRs, releases and exact dependencies |
+| [Engineering Governance](ENGINEERING_GOVERNANCE.md) | ownership, failure models, review and evidence |
+| [Testing](TESTING.md) | complete portable gate and external qualification boundaries |
+| [Code Style](CODE_STYLE.md) | language, typed interfaces and determinism |
+| [Architecture](ARCHITECTURE.md) | research/environment dependency direction |
+| [Interfaces](INTERFACES.md) | versioned environment, data, model and artifact contracts |
+
+## Research and operations
+
+| Document | Responsibility |
+|---|---|
+| [Data and Provenance](DATA_AND_PROVENANCE.md) | admission, zones, splits and external data |
+| [Data Lifecycle](DATA_LIFECYCLE.md) | canonical storage, derived features and staging |
+| [Human Corpus](HUMAN_CORPUS.md) | profiles, verified bundles and corpus admission |
+| [Qwen Integration](QWEN_INTEGRATION.md) | pinned backbone and cache contract |
+| [Qwen L2 Operations](QWEN_L2_OPERATIONS.md) | exact weight admission and owner gates |
+| [Live S1 Operations](LIVE_S1_OPERATIONS.md) | historical S1 policy adapter/parity |
+| [Benchmarks](BENCHMARKS.md) | B0-B7 mechanics and evidence scope |
+| [Scientific Protocol](SCIENTIFIC_EXPERIMENT_PROTOCOL.md) | historical combat-v0 protocol |
+| [v0 Plan](V0_EXECUTION_PLAN.md) | retained combat-v0 study |
+| [Roadmap](ROADMAP.md) | priorities and phase definitions |
+| [Pre-Qwen Operations](PRE_QWEN_OPERATIONS.md) | historical L1 handoff |
+
+## Evidence, decisions and memory
+
+[AgenticSTS Audit](evidence/AGENTICSTS_DATA_ADMISSION_AUDIT_2026-08-22.md) and
+[Data Lifecycle Closeout](evidence/DATA_LIFECYCLE_ENGINEERING_CLOSEOUT_2026-08-29.md)
+remain scoped historical records. The Platform Annotator schema is externally owned;
+stpd/data/human_annotator.py consumes it without making this map a second schema authority.
+
+[ADR Index](adr/README.md), [ADR-0001](adr/0001-project-boundaries-and-current-smoke.md),
+[ADR-0002](adr/0002-versioned-unified-human-serialization.md),
+[Memory Instructions](memory/README.md), [Current Context](memory/CURRENT.md),
+[Decisions](memory/DECISIONS.md), [Open Questions](memory/OPEN_QUESTIONS.md),
+[Latest Handoff](memory/HANDOFF.md), and [Machine Contracts](../schemas/README.md).
+
+Platform owns model-neutral environment/runtime/evidence contracts. STPD owns research,
+data, representation, training and evaluation. External repositories are exact dependencies,
+not copied source trees, shared branches or submodules.
+
+[Local-First manifest ADR](adr/0003-local-first-manifest-research.md)
+
+[Full-Run Research](FULLRUN_RESEARCH.md)
+
+[Full-Run Training](FULLRUN_TRAINING.md)
+
+## Pre-Full-Run convergence
+
+- [Local operations and exact Worker launch](PREFULLRUN_OPERATIONS.md)
+- [Local DuckDB and dashboard](LOCAL_WORKBENCH.md)
+- [Gold and E0-E7 engineering tooling](FULLRUN_GOLD.md)
+
+- [Pre-Full-Run AI closeout](PREFULLRUN_AI_CLOSEOUT.md)
+- [Human and external-input handoff](PREFULLRUN_HUMAN_HANDOFF.md)
+
+## Default project workflow and cloud B implementation
+
+- [Shared local/cloud project console](PROJECT_CONSOLE.md)
+- [ADR-0005: original console authority and authentication](adr/0005-local-cloud-console.md)
+- [ADR-0006: Hub members, sharing and local model boundaries](adr/0006-project-members-and-local-models.md)
+
+- [Download, collect, view, maintain and freeze the training plan](B_PIPELINE_HANDOFF.md)
+
+- [B operations and external gates](CLOUD_PIPELINE_B.md)
+- [Execution scope and acceptance plan](CLOUD_PIPELINE_B_PLAN.md)
+- [ADR-0004: durable Hub](adr/0004-developer-cloud-hub.md)
+
+- [B architecture and operational closeout review](evidence/B_PIPELINE_QUALITY_CLOSEOUT_2026-09-12.md)
+
+- [First dedicated Human upload and projection audit](evidence/B_PIPELINE_FIRST_HUMAN_UPLOAD_2026-09-13.md)
+
+- [Unified workflow release and bounded account/service qualification](evidence/B_UNIFIED_WORKFLOW_RELEASE_2026-09-13.md)
+
+[Account and device protocol](IDENTITY_PROTOCOL.md) defines invited membership, approval,
+personal sessions, current member/admin permissions, scoped devices, credential recovery and
+operations schema-4 migration. The [Hub runbook](../deploy/hub/RUNBOOK.md) owns explicit bootstrap,
+Access identity policy, exact deployment, backups and compatible rollback.
+Its [host operations companion](../deploy/hub/OPERATIONS.md) covers operator-only SSH,
+verified source-IP changes, lost access and daily capacity/backup inspection.
+
+[Packaging identity correction](evidence/B_WORKFLOW_PACKAGING_IDENTITY_CORRECTION_2026-09-13.md) records exact BOM file bytes and distinct tool revisions.
+
+[Measured Hub access and capacity recovery](evidence/HUB_ACCESS_CAPACITY_REPAIR_2026-09-14.md)
+records the predecessor incident separately from later candidate qualification.
+
+- [Developer kit initial installation](DEVELOPER_KIT_INSTALL.md): operator-assisted exact binary installation and rollback.
+- [Daily collection Human audit](evidence/B_DEFAULT_COLLECTION_HUMAN_AUDIT_2026-09-15.md): actual transfer/access PASS and one unresolved native event Continue; not Full-Run PASS.
+
+[Bounded B workflow acceptance](evidence/B_WORKFLOW_BOUNDED_ACCEPTANCE_2026-09-15.md) records the new zero-failure continued-run audit and owner-authorized engineering integration; continuous Full-Run remains unclaimed.
+
+- [Fixed decision datasets and version updates](adr/0007-fixed-decision-datasets.md): permissive
+  decision selection, immutable versions, run/fragment classification and exact compatibility.

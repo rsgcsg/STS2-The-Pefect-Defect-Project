@@ -1,0 +1,303 @@
+# Current Status
+
+## Default workflow and B pipeline
+
+Current source adds Hub-owned `member`/`admin` membership (Operations schema 4), explicit
+activity consent and fresh local preparation, immutable sharing-gated exports, actual summary
+coverage statistics, and optional local model catalog/Runtime controls. The
+[account protocol](IDENTITY_PROTOCOL.md), [console guide](PROJECT_CONSOLE.md) and
+[ADR-0006](adr/0006-project-members-and-local-models.md) describe that candidate. The
+[multi-profile review](evidence/B_MULTI_PROFILE_REVIEW_2026-09-14.md) records the deployed
+schema-4 account readback and a new member's login/logout/reconnect at `a5593758`;
+new browser-cookie and Runtime instance fixes require their own final service receipts. Select a
+published exact combination and its own current service receipts before adoption. Predecessor
+service evidence below cannot qualify these changes. S1 remains a narrow historical combat
+adapter; Full-Run online input parity and compatible model evaluation remain **BLOCKED**.
+
+The B workstream implements collection delivery, independent bundle3 ingestion/projection,
+a durable CPU Hub, frozen feature jobs, disposable Modal execution and one developer entry.
+[The project workflow](B_PIPELINE_HANDOFF.md) is the default entry for approved downloads,
+account/device setup, collection, cloud views and maintenance. [Operations](CLOUD_PIPELINE_B.md)
+owns the data/worker commands. Current scoped account/service evidence is recorded in the
+[unified workflow release report](evidence/B_UNIFIED_WORKFLOW_RELEASE_2026-09-13.md): real Human
+login/approval occurred at `974c770493572746dd27fa23d894629aa6f8baa2`, and the existing account,
+device and receipt continuity were checked at `3555f0962f82b0e9b2ddb13b93cad7568cdcbafd`.
+Those exact receipts do not qualify later source, new users/devices, actual logout/relogin,
+GPU execution, sufficient real training corpus or model quality. Resolve any newer published
+combination and its own CI/service receipts before deployment. Scoped predecessor
+Hub/OCI/TLS/R2/backup/restore receipts at source
+`78896eee009e39933b5a1548da3567eda94bad6b` are retained in
+`refs/notes/stpd-hub-public-qualification` and `refs/notes/stpd-hub-live-qualification`.
+They used synthetic uploads and do not qualify a changed candidate, production Human
+collection, GPU execution or whole-host recovery. Read [current handoff](B_PIPELINE_HANDOFF.md)
+for terminal/distribution/maintenance and the ordered training-plan freeze gates.
+The first dedicated new Human campaign passed Close-to-R2 readback and 412-record
+research projection at source `99aa8199dbbcee7c600fcdb5b923168214e92635`; see the
+[bounded Human audit](evidence/B_PIPELINE_FIRST_HUMAN_UPLOAD_2026-09-13.md). Dataset
+admission correctly requires more independent runs. New repairs need their own
+current source/CI/service receipts. Historical qualification below remains tied to its original refs.
+
+## Pre-Full-Run engineering closeout
+
+The coherent Local-First implementation is delivered through convergence PR #7. Its exact
+latest-source qualification and integrated develop SHA are attached to that commit in
+`refs/notes/stpd-prefullrun`, with hosted Linux/Windows/locked-python and clean CPU E2E
+receipts. See [AI closeout](PREFULLRUN_AI_CLOSEOUT.md) for retrieval and evidence boundaries,
+and [Human handoff](PREFULLRUN_HUMAN_HANDOFF.md) for external gates. A missing/stale receipt
+never establishes readiness. All historical statements below retain their original scope.
+
+## Repository governance
+
+Public `main` commit `4c4bbca5e5bf16656bd7c0ba175ff5c069c81818`
+is preserved as the non-release `baseline/pre-governance-stpd-20260827`. It is
+the frozen historical integration baseline, not yet a stable research-release
+claim. `develop` was created from that exact commit and is now the only normal
+integration target. No public history was rewritten. See
+[Development Workflow](DEVELOPMENT_WORKFLOW.md).
+
+GitHub branch enforcement is an operational fact and must be inspected directly;
+this source document does not by itself prove that repository rules are active.
+
+## Historical combat-v0 verdict and evidence
+
+**STPD is pre-alpha; full-weight Qwen L2, bounded tiny-overfit engineering admission,
+the 1,962-record unified Human corpus Gate-0 lane, and the owner-run S1 behavior smoke are
+complete. The exact trained policy now has a thin Platform Policy Adapter and
+versioned Manifest at source/test; scientific Core remains blocked by missing Human Gold.**
+The repository contains a real frozen pretrained backend and same-architecture random
+control, but no scientific Core model result, Human Gold result, B6 result, or final STPD
+v0 claim.
+
+The data lifecycle now has a measured, manifest-first engineering path. A read-only profiler
+keeps the canonical `ResearchTransition`/Parquet representation after object-reference and
+dictionary probes were larger on the biggest corpus physically available on this Mac. Scheme
+1 pooled Qwen features are immutable rebuildable artifacts, and training-host staging is
+content-addressed, incremental, tamper-evident and bound to exact corpus/model-view/Qwen/STPD
+source/`uv.lock` identities. Staging remains unauthorized for training. The full 1,962-row
+corpus, exact Qwen weights and a remote training host were unavailable here, so full-scale
+storage, GPU compile and remote-transfer performance remain unmeasured. See
+[End-to-End Data Lifecycle](DATA_LIFECYCLE.md).
+
+## Exact environment lane
+
+| Layer | Current identity |
+|---|---|
+| Game | macOS arm64 STS2 `v0.111.0/41cef1ea`, assembly `9cb4f1a.../57785517...` |
+| Host Runtime code | Platform package `1.1.0-rc.7`, source `dce2c26...`, tree `c5a0beb...`, package `b77fb79...` |
+| Managed candidate | predecessor operational artifact `8dc622b0.../7228541c...`; platform-specific candidates remain independently audited |
+| Managed Host | upstream `d11aa883...`, macOS patch `8ced088b...`, artifact `8dc622b0.../7228541c...` |
+| Connector Reference | `v1.1.0-rc.1/e065102...`, artifact `c1877f1a.../64765ea1...` |
+| Player Environment | protocol `1.0.0`; Platform SDK package `1.1.0-rc.1`, policy `player_visible_v1` |
+
+Windows x64 has separate candidate evidence for game `v0.111.0/41cef1ea`; it does not
+inherit the macOS operational freeze or formal H1.0 authority.
+
+## Implemented and tested before owner training
+
+- Python 3.11-only `uv` lock, CI/package, canonical docs and strict schemas;
+- ResearchState/Action/Transition, deterministic Lite/Standard/Full serialization and B0;
+- canonical Parquet/manifests/splits/dedup and fail-closed provenance handling;
+- fail-closed Human Annotator import through the existing research projection,
+  whole-run split, canonical Parquet and B0 path;
+- Platform-verified V1/V2 Human bundle consumption, with V1 verifier parity and
+  V2 `run_deck`/`combat_piles` projection into both state and successor;
+- versioned exact Human Collection Profiles, immutable checksummed session
+  bundles, pseudonymous multi-worker registry, strict multi-session corpus
+  admission, whole-run/semantic-component splits, multi-source provenance,
+  immutable corpus snapshots, Standard token profiling and frozen smoke handoff;
+- an independent exact Windows x64 human collection profile/campaign bound to
+  the cold-loaded game, Connector, Annotator and observer Modset identities;
+- a thin final cross-profile merger that consumes only admitted immutable
+  snapshots, preserves nested provenance and globally reruns collision/dedup,
+  whole-run splitting, B0 and Standard profiling;
+- Scheme 1, S2-Simple and S2-SDT with ranking/successor/anchor objectives;
+- optimizer/checkpoint/evaluation mechanics and B1-B7 report/gate tooling;
+- immutable Qwen3-0.6B-Base L1/L2 pin, exact full-weight CUDA/BF16 backend and random control;
+- deterministic real-Qwen representation, VRAM/latency and all-three-family backward-only smokes;
+- frozen 10-configuration/three-seed Core matrix, controls, Gates 0-5 and Gold/B6 boundary.
+
+## Runtime and engineering evidence
+
+A bounded exact Managed collection reached natural game over with 10 Combat transitions,
+complete finite action catalogs, exact Receipts/successors, complete `run_deck` and
+`combat_piles` Reads, canonical Parquet and B0 pass. The pinned tokenizer profile contains
+180 `turn_action` joint samples: Full max/P95 `3334/3334`, Lite and Standard `2501/2501`.
+Natural `card_selection` and `card_choice` were not exercised.
+
+Four audited HumanSession bundles are admitted: one macOS session with 775
+records and three Windows sessions with 16, 407 and 764 records. Seven other
+Windows recording directories remain preserved but rejected because their
+decision record file is absent. No raw evidence was edited. The admitted
+population contains 1,962 exact-unique decisions across 14 whole runs: 1,571
+card plays and 391 end turns, with 775 macOS and 1,187 Windows records.
+
+The `human-combat-unified-v2` plan combines only immutable profile corpora and
+globally reruns collision/deduplication, semantic-component/root-safe splitting,
+B0 and token profiling. It reports zero exact duplicates, zero semantic duplicate
+groups and zero cross-split leakage; train/dev/test contain 11/1/2 whole runs.
+Serializer v1 retains the complete evidence but removes the redundant Standard
+combat referent rendering. Standard profiling covers 11,348 state/action samples
+and passes unchanged limits at P95 2,883 and max 4,110 tokens. B0 passes all
+1,962 records. The final local READY artifact binds the exact clean source,
+corpus and Qwen identities after all tracked changes are committed.
+
+The owner-run `S1-1K-2K-SMOKE` completed 1,659 steps from source
+`caddbcc71a990b5d0970c0bf574823f16d501eb2`. Final checkpoint SHA-256 is
+`c70c482ca1af52c9dc5477a45623f7ad531222400ba6eefd3c17c87b7cc922d3`;
+checkpoint identity is `4da5b472371330b0a6b7257f5998b079516055751f2ddea5755ce1d720249c64`.
+Behavior-dev mean listwise NLL changed from `1.7769335006` to `1.2975336015`
+and Top-1 from `0.3421052632` to `0.4473684211`. This passes only the frozen
+behavior engineering smoke criteria and makes no policy-quality or Core claim.
+
+The experimental live v1 lane loads that checkpoint with the exact frozen Qwen,
+serializer v1, Standard input and Scheme1 linear head. It uses Connector SDK
+package `1.1.0-rc.1` from the immutable Platform release as strict transport
+decoder; the exact loaded Connector remains the sole action authority. The lane
+admits only whole complete Defect A0
+ordinary-Combat catalogs containing `play`/`end_turn`, under the exact
+Platform observer Modset `acb0373e...`, whose three non-gameplay Mods are
+bound by a process-local canary. Unsupported catalogs and
+unknown delivery fail closed; local Receipts/successors/handoffs are append-only
+under `.local/live-s1/`.
+Transient HTTP 409 `stale_state` races during Snapshot-bound Read prefetch now
+discard and refresh the whole observation transaction with bounded backoff;
+they do not weaken coherence or taint an otherwise safe Human/Qwen handoff.
+The live bridge preserves Connector Reads as a multi-instance array instead of
+keying by kind. A full provenance audit found 39 per-card `surface_card`
+descriptors across 10 accepted successor frames, but Human import projected
+all 1,962 state/successor pairs with `reads={}` and serializer v1 emitted no
+`READS=` training lines. Live S1 therefore explicitly prefetches the exact empty
+checkpoint Read subset while retaining advertised descriptors in Snapshot evidence.
+This remains the frozen V1 checkpoint contract. The first exact native-human
+V2 session is now independently verified from immutable Platform Evidence
+object `b92778bed35ab129...`. It contributes 30 ordinary-Combat decisions (23
+card plays and 7 end turns) from runtime `abb6b2d8...`; all 30 state/successor
+pairs materialize `run_deck` and `combat_piles`, and strict STPD import accepted
+30/30 with no rejection. The local transfer receipt is `promoted` with no
+findings. This does not change the frozen 1,962-record V1 corpus or authorize
+V2 training. Generated-card choice remains `not exercised` in native-human V2
+evidence.
+
+The new production direction preserves those admission/model rules in
+`stpd.policy.s1` and exposes only a decision-only adapter. Platform Policy
+Runtime now owns controller lifecycle, Human/Shadow/One-Step/Auto, stale bundle
+refresh, request/Receipt/successor handling and Agent evidence. The adapter
+returns only one score per unchanged Connector candidate plus a selected index.
+The Manifest pins the complete checked-in STPD Python policy source closure,
+frozen config, exact Host/Connector/Modset and checkpoint. Adapter initialization
+rejects any cross-pin drift before emitting its parent-verified startup identity.
+The original `stpd.live.s1` implementation remains a non-runnable golden regression until exact-model
+Shadow, One-Step and bounded Auto parity pass; its generic runtime code is not a
+template for future policies. The current Mac lacks the checkpoint file named by
+the Manifest, so the new live path is `not exercised` here.
+
+On Windows, exact Qwen revision `da87bfb...` loaded 596,049,920 pretrained parameters on
+CUDA/BF16. Synthetic 1,024-token extraction measured 0.145 seconds and 1,394,181,120 bytes
+peak allocated VRAM on the RTX 4070 Laptop GPU. These remain engineering smokes only.
+
+## Owner L2-TINY-OVERFIT attempts
+
+Attempt-001, original 64-step budget:
+
+```text
+initial mean NLL       1.7887210548
+final mean NLL         0.9022365957
+relative reduction     49.5596816%
+memorized Top-1        25% -> 100%
+finite values          pass
+Qwen gradients         absent/pass
+elapsed                27.8884 s
+status                 fail
+```
+
+Attempt-002, protocol-r1 256-step budget:
+
+```text
+initial mean NLL       1.7887210548
+final mean NLL         0.2385502681
+relative reduction     86.6636406%
+memorized Top-1        100%
+finite values          pass
+Qwen gradients         absent/pass
+elapsed                17.9047 s
+status                 fail
+```
+
+Attempt-002 intermediate NLL:
+
+```text
+64   0.9022365957
+128  0.5347326919
+192  0.3452932015
+256  0.2385502681
+```
+
+Attempt-003, protocol-r2 512-step budget:
+
+```text
+initial mean NLL       1.7887210548
+final mean NLL         0.0850893874
+relative reduction     95.2430041%
+memorized Top-1        100%
+finite values          pass
+Qwen gradients         absent/pass
+elapsed                17.9055 s
+status                 pass
+```
+
+All unchanged criteria passed. Attempts 001 and 002 remain retained failures; attempt 003
+is the successful optimizer/memorization-plumbing admission. The three local result files
+are bound respectively to exact sources
+`a95ab022b8d81e6e697e8784893ece9c5eb1f59d`,
+`d837edeb82958fc115143d34c969e90b62cf8d19`, and
+`938199aec4768f27c7231a26335abe66f2d8d12e`; they are not overwritten or relabelled.
+
+This resolves only the tiny-overfit engineering admission. It does not pass Gate 1, establish
+pretrained representation value, or justify any architecture/model-quality claim.
+
+## AgenticSTS data-admission audit
+
+The official `AlayaLab/AgenticSTS-trajectories` subset was pinned at immutable revision
+`20f5170c420584935ec20e004498b4d4a3621f8b`. Its `trajectories/` and
+`runs_history.jsonl` scope is CC-BY-4.0; mixed-license competitor archives remain excluded.
+
+Every one of the 305 available trajectory logs was audited. They contain 198,600 decision
+events, including 139,211 combat decisions with reconstructable player-visible states.
+However, there are zero explicit complete legal-action catalogs, zero game seeds, zero
+exact environment identities, and therefore zero rank-eligible accepted rows (`0.0%`).
+No AgenticSTS extractor or training dataset was created; the S1 smoke instead uses the
+strictly admitted unified Human corpus.
+
+## Historical combat-v0 non-claims and remaining work
+
+- Tiny-overfit attempts prove neither pretrained advantage nor policy quality; they are
+  optimizer/memorization-plumbing evidence only.
+- No Human Gold, B1-B7 scientific result, 30-run Core matrix, v0 winner or policy claim exists.
+- The bounded ranking fixture is not a production corpus or broad semantic qualification.
+- Historical AgenticSTS states do not authorize reconstructing missing legality, seeds,
+  successors, or current-patch identities.
+- Natural selector action families remain unsupported and were not admitted.
+- Human Gold is unavailable, so scientific Core and Gold/B6 remain blocked even
+  though the behavior S1 smoke completed.
+- Annotator audit and explicit owner attestation do not machine-prove operator
+  identity or non-interference. Existing owner-completed sessions validate only
+  the exact ordinary-combat source envelope, not other workers, platforms or
+  unsupported families.
+
+The immediate bounded step is to provision the exact checkpoint outside Git,
+then run Platform Runtime Shadow, One-Step and bounded Auto against the retained
+legacy golden path. Until then there is no owner live gate to execute. Do not
+interpret future live parity as Core/B6 or open Gold-test. See the
+[AgenticSTS audit](evidence/AGENTICSTS_DATA_ADMISSION_AUDIT_2026-08-22.md),
+[Data and Provenance](DATA_AND_PROVENANCE.md), and [Roadmap](ROADMAP.md).
+
+The unified account path implements invited login, browser-approved computer binding, private
+local personal sessions, matching local/cloud project scope and typed same-device upload
+recovery. The preceding deployed account lane used schema 3; current source uses explicitly
+migrated Hub schema 4 with member/admin authority. The scoped release report above owns only
+its actual login/service evidence; source implementation alone does not qualify migration.
+Each deployment retains a compatible backup/image pair and verifies its current account/receipt continuity.
+
+For release artifact checks use the [packaging identity correction](evidence/B_WORKFLOW_PACKAGING_IDENTITY_CORRECTION_2026-09-13.md). It corrects an unsupported
+BOM digest and distinguishes the fixed tool component revision from its workspace provenance.
+Original reports, archives and evidence remain unchanged.

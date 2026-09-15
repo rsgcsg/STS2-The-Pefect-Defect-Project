@@ -1,0 +1,40 @@
+# STPD Schemas
+
+The research state/action/transition schemas are the frozen structural v0 contracts. Their
+fair-player semantic payloads remain extensible inside `facts` and `reads`; top-level meaning
+is closed and versioned.
+
+- `research-state-v0.schema.json`: one coherent fair-player semantic decision state;
+- `research-action-v0.schema.json`: one legal candidate's visible semantic meaning;
+- `research-transition-v0.schema.json`: one provenance-bound stable-successor transition;
+- `data-manifest-v0.schema.json`: checksummed source, split, deduplication, and file lineage;
+- `experiment-manifest-v0.schema.json`: one reproducible training or benchmark run;
+- `model-artifact-manifest-v0.schema.json`: one frozen model/checkpoint artifact.
+- `human-collection-profile-v1.schema.json`: one exact collection envelope;
+- `human-collection-campaign-v1.schema.json`: one profile's worker and row target;
+- `human-corpus-combination-v1.schema.json`: exact cross-profile compatibility
+  and the final combined-corpus target.
+- `frozen-joint-feature-manifest-v1.schema.json`: one immutable, rebuildable pooled-feature
+  cache bound to exact corpus, serializer, input profile, and Qwen identity;
+- `training-input-manifest-v1.schema.json`: one content-addressed training-host handoff that
+  separates canonical research data from derived model views and caches.
+
+Rules:
+
+- bump the schema identifier for incompatible changes;
+- update `docs/INTERFACES.md`, tests, migration notes, and all producers/consumers together;
+- never change the meaning of an existing field while retaining the same schema ID;
+- validate manifests before training or evaluation;
+- payload openness is not permission to add hidden state or runtime authority; executable
+  leakage tests are the second line of defense.
+
+
+The separately versioned Full-Run V1/V2 transition and SourceProjection boundaries are owned
+by the executable strict codecs in `stpd/fullrun/contracts.py`, with round-trip and tamper
+regressions. V2 preserves exact native decision lineage and execution catalog authority;
+old V1 payloads/identities remain unchanged. Dataset loading also reruns the version-pinned
+source adapter; structural decoding alone is not source qualification or research admission.
+
+Developer combination/project v1 schemas bind installed public package identities and local
+paths/endpoints. They contain no credentials. Compute/upload/receipt contracts are strict
+executable codecs in cloud_jobs and hub; their IDs are separate from native evidence schemas.

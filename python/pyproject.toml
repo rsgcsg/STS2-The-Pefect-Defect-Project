@@ -1,0 +1,91 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sts2-the-perfect-defect"
+version = "0.1.0"
+description = "Reproducible STPD research, data, model, training, and evaluation system"
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+  "numpy>=2.0,<3",
+  "pyarrow>=18,<24",
+  "rsgcsg-sts2-platform-evidence @ git+https://github.com/rsgcsg/STS2-AI-PLATFORM.git@e26b7c76a3c007c63f7ae9eee285e6dc3d78cd73#subdirectory=components/evidence",
+]
+
+[project.optional-dependencies]
+cloud = ["waitress>=3,<4", "modal==1.5.5", "python-dotenv>=1.1,<2", "PyJWT[crypto]>=2.10,<3"]
+research = [
+  "boto3>=1.35,<2",
+  "duckdb>=1.4,<2",
+]
+l1 = [
+  "huggingface-hub>=0.34,<2",
+  "tokenizers>=0.21,<1",
+]
+ml = [
+  "torch>=2.7,<3",
+]
+l2 = [
+  "safetensors>=0.5,<1",
+  "transformers>=5,<6",
+]
+
+[dependency-groups]
+dev = [
+  "jsonschema>=4.23,<5",
+  "mypy>=1.16,<2",
+  "pytest>=8.4,<10",
+  "ruff>=0.12,<1",
+  "types-jsonschema>=4.23,<5",
+]
+
+[tool.setuptools.package-data]
+"stpd.console" = ["*.css", "*.js"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["stpd*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "deploy/hub"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.11"
+check_untyped_defs = true
+disallow_incomplete_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = true
+exclude = ["^data/", "^artifacts/"]
+
+[[tool.mypy.overrides]]
+module = "sts2_headless"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["pyarrow", "pyarrow.*", "tokenizers", "tokenizers.*"]
+ignore_missing_imports = true
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cu128", marker = "sys_platform == 'win32'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[[tool.mypy.overrides]]
+module = ["boto3", "botocore", "botocore.*"]
+ignore_missing_imports = true

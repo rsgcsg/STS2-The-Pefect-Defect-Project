@@ -1,0 +1,22 @@
+# Architecture Decision Records
+
+Use ADRs for durable decisions that change ownership, public interfaces, model/data
+assumptions, evaluation validity, or migration cost.
+
+File names use `NNNN-short-title.md`. Each ADR includes context, decision, alternatives,
+consequences, evidence, and status. Supersede old ADRs; do not erase them.
+
+Current records:
+
+- [ADR-0001: project boundaries and current smoke](0001-project-boundaries-and-current-smoke.md)
+- [ADR-0002: versioned unified Human serialization](0002-versioned-unified-human-serialization.md)
+
+[ADR-0003: Local-First manifest research](0003-local-first-manifest-research.md)
+
+[ADR-0004: Developer cloud Hub](0004-developer-cloud-hub.md)
+
+[ADR-0005: one local/cloud project console](0005-local-cloud-console.md)
+
+[ADR-0006: Hub membership, project sharing and local models](0006-project-members-and-local-models.md)
+
+[ADR-0007: fixed decision datasets and compatible versions](0007-fixed-decision-datasets.md)
