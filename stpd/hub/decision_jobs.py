@@ -153,7 +153,8 @@ class DecisionJobs:
                 "WHERE j.owner='receiver' AND j.state='failed' AND s.approved=1 "
                 "AND NOT EXISTS (SELECT 1 FROM decision_jobs newer WHERE newer.owner='receiver' "
                 "AND newer.state='completed' AND newer.updated>j.updated AND "
-                "json_extract(newer.request,'$.uploads[0]')=json_extract(j.request,'$.uploads[0]')) "
+                "json_extract(newer.request,'$.uploads[0]')="
+                "json_extract(j.request,'$.uploads[0]')) "
                 "ORDER BY j.created DESC LIMIT 100"
             ).fetchall()
         games: dict[str, Any] = {}
