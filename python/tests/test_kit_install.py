@@ -126,5 +126,7 @@ def test_initialize_refuses_a_running_profile_before_changing_dependencies(tmp_p
         install.initialize(directory, profile)
     assert calls == []
     assert install.initialize(directory, profile)["environment"] == "initialized"
-    assert calls[0] == ["npm", "ci"] and "--locked" in calls[1]
+    assert calls[0] == ["npm", "ci"]
+    assert calls[1] == ["npm", "ci", "--prefix", "python"]
+    assert "--locked" in calls[2]
     assert selected.to_dict() == json.loads(profile.read_bytes())

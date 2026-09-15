@@ -288,6 +288,9 @@ def initialize(directory: Path, config_path: Path) -> dict[str, Any]:
         status(directory)
         source = directory / "source"
         run(["npm", "ci"], source)
+        # Workbench's transport SDKs are a separate locked consumer environment.
+        # Root native dependencies alone cannot satisfy its doctor/start checks.
+        run(["npm", "ci", "--prefix", "python"], source)
         run(["uv", "sync", "--project", "python", "--locked", "--extra", "cloud"], source)
         result = status(directory)
         result["environment"] = "initialized"
