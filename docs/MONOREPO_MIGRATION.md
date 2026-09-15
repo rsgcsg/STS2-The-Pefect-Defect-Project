@@ -42,5 +42,12 @@ Do not use a database restore to silently resurrect revoked access or retry unkn
 
 ## Remaining gates
 
-The initial import is complete locally. Namespace, source-path, packaging and CI
-integration are in progress. No new service, installer, Human or training PASS is claimed.
+History import, namespace separation, source-path handling and unified CI are implemented.
+Linux, Windows and local portable gates passed candidate `d9860ad`; its exact-game
+gate exposed a missing build-helper import, now corrected. This does not transfer
+those receipts to a later source revision. Re-run the final candidate gates before
+promotion and retain their exact refs in the release evidence.
+
+The Hub image can be built independently of the production service. Production
+cutover, installed/cold-loaded Mod identity, distribution and a new Human Close/upload
+gate remain distinct acceptance steps. No Human or training PASS is claimed by migration.
