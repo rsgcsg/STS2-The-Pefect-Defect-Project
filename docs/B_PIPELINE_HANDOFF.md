@@ -462,3 +462,41 @@ Deployment of code does not qualify a Cloudflare Access application or an actual
 browser login. The Hub runbook records that external activation gate. Deliberate member exports,
 activity enrollment and local model controls are separate from viewing pages; none bypasses
 consent, native compatibility or compute authorization. Opening a page never starts a GPU.
+
+
+## Partial recordings and practical maintenance
+
+A failed decision does not make every other decision worthless. Keep the original recording
+and all owner dispositions, upload it when transport/integrity/consent checks pass, and inspect
+**采集记录 → 详情** for canonical, real failures, cancellations, diagnostics and owner reasons.
+The project data statistics aggregate known quality counts; unknown is not zero. The current
+**incidents** endpoint covers quarantined/failed delivery, not every recording defect. Check
+collection quality too. There is no automatic issue creation or tested off-host notification.
+
+For maintenance, keep one issue per owning failure mechanism with affected source/game/Mod
+versions, private evidence/receipt references, decision IDs, reason counts and regression/fix
+release. Public issues use redacted aggregates. Deduplicate reports without deleting evidence.
+A correction produces a new artifact/report; it never makes an old failed receipt green.
+
+The current implementation preserves and projects partial verified sources, but
+`fullrun.data.admit` still requires complete runs and rejects unresolved/failed-closed sources.
+It does **not** yet automatically admit the good subset of such a source for training.
+The accepted next data-workstream design is a separate, versioned decision/segment dataset:
+
+- Admit a decision only from its own proved state, complete execution catalog, exact choice
+  and necessary Commit/successor evidence; exclude the failed decision and dependent evidence.
+- Preserve original run/occurrence IDs and parent/root lineage. Missing parent evidence or
+  uncertain scope excludes affected descendants; a global integrity/identity failure blocks
+  the whole unverifiable source. Never renumber surviving rows to disguise a gap.
+- For history, memory and multi-step targets, stop at a gap and restart only at an independently
+  proved boundary. Never stitch the previous successor to the next retained state. Outcome
+  labels need their own witnessed terminal/run linkage; missing start is not a fabricated start.
+- Freeze included/excluded IDs, reasons, source hashes, selection-policy version and counts in
+  the derived manifest. Keep all parts of a run and duplicate-related components in one split.
+  Report coverage and selection bias; rare failures must not disappear from benchmark reports.
+
+This separate path needs codec/admission/load tamper tests and research review before use.
+Do not relax the existing Full-Run contract to implement it. Collection can continue meanwhile;
+verified storage, useful projection, training eligibility and complete-run certification are
+four different facts. The [bounded acceptance](evidence/B_WORKFLOW_BOUNDED_ACCEPTANCE_2026-09-15.md)
+records the owner's engineering release scope without claiming continuous Full-Run PASS.

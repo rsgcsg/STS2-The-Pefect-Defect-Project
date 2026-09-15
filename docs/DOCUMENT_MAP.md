@@ -100,3 +100,5 @@ records the predecessor incident separately from later candidate qualification.
 
 - [Developer kit initial installation](DEVELOPER_KIT_INSTALL.md): operator-assisted exact binary installation and rollback.
 - [Daily collection Human audit](evidence/B_DEFAULT_COLLECTION_HUMAN_AUDIT_2026-09-15.md): actual transfer/access PASS and one unresolved native event Continue; not Full-Run PASS.
+
+[Bounded B workflow acceptance](evidence/B_WORKFLOW_BOUNDED_ACCEPTANCE_2026-09-15.md) records the new zero-failure continued-run audit and owner-authorized engineering integration; continuous Full-Run remains unclaimed.
