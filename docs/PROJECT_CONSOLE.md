@@ -302,3 +302,9 @@ again; revocation also blocks future downloads of derived decision bytes.
 
 This candidate does not start training. The strict old Full-Run loader remains unchanged;
 training integration must explicitly select the new decision-dataset contract.
+
+Member data calls have bounded transport deadlines (10 seconds for reads, 20 seconds
+for submissions), separate from the four-second login polling deadline. Export creation
+checks remote source manifests and current sharing grants. A lost submission response is
+reported as **result unknown**, not a rejected operation; the client never automatically
+resubmits it. These deadlines do not weaken source authorization or byte verification.
