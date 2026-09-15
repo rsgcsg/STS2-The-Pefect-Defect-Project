@@ -107,3 +107,24 @@ def test_registration_uses_selected_owner_and_never_replaces_existing_tool(tmp_p
     assert cwd == tmp_path / "source"
     assert "--replace-tool" not in args and "collection-tool" in args
     assert "--locked" in args and "build" not in args
+
+
+def test_initialize_refuses_a_running_profile_before_changing_dependencies(tmp_path, monkeypatch):
+    from test_project_console import config
+
+    from spireagent.workbench.developer_server import instance_lock
+
+    selected = config(tmp_path)
+    profile = tmp_path / "project.json"
+    profile.write_text(json.dumps(selected.to_dict()))
+    directory = tmp_path / "release"
+    directory.mkdir()
+    calls = []
+    monkeypatch.setattr(install, "status", lambda _: {"status": "prepared"})
+    monkeypatch.setattr(install, "run", lambda args, cwd: calls.append(args) or "")
+    with instance_lock(selected.state_dir / "instance.lock"), pytest.raises(BoundaryError):
+        install.initialize(directory, profile)
+    assert calls == []
+    assert install.initialize(directory, profile)["environment"] == "initialized"
+    assert calls[0] == ["npm", "ci"] and "--locked" in calls[1]
+    assert selected.to_dict() == json.loads(profile.read_bytes())

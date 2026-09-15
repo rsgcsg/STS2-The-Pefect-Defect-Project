@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import sys
 from contextlib import closing
 
 import preflight
@@ -86,3 +87,59 @@ def test_plan_output_contains_no_runtime_credentials(tmp_path, monkeypatch):
     old, new = configs(tmp_path, monkeypatch)
     result = rollout.plan(old, new, "c" * 40, "d" * 64)
     assert "synthetic" not in json.dumps(result)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="production apply uses Linux flock")
+@pytest.mark.parametrize("failure", ["backup", "drift", "compose", None])
+def test_apply_preserves_recovery_and_never_restores_database(tmp_path, monkeypatch, failure):
+    old, new = configs(tmp_path, monkeypatch)
+    initial = old.read_bytes()
+    selected = rollout.plan(old, new, "c" * 40, "d" * 64)
+    receipts = tmp_path / "receipts"
+    receipts.mkdir(mode=0o700)
+    backup_path = tmp_path / "backup.json"
+    backup_path.write_text(json.dumps({"worker_image": OLD, "last_backup_receipt": "e" * 64}))
+    monkeypatch.setattr(preflight, "host_checks", lambda: {})
+    monkeypatch.setattr(preflight, "check_configuration", lambda _: {})
+    monkeypatch.setattr(preflight, "check_capacity", lambda *a, **kw: {"status": "ok"})
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        preflight,
+        "operational_owner",
+        lambda _: SimpleNamespace(
+            freshness=lambda _: {"freshness": "attention" if failure == "backup" else "ok"},
+        ),
+    )
+    monkeypatch.setattr(rollout, "require_same_schema", lambda *a: None)
+    monkeypatch.setattr(rollout, "verify", lambda _: {"status": "service_identity_verified"})
+    calls = []
+
+    def execute(args):
+        calls.append(args)
+        if "inspect" in args and failure == "drift":
+            new.write_bytes(new.read_bytes() + b"\n")
+        if "up" in args and failure == "compose":
+            raise preflight.PreflightError("simulated_interruption")
+        return ""
+
+    monkeypatch.setattr(rollout, "command", execute)
+    args = (old, new, "c" * 40, "d" * 64, selected["plan_sha256"], receipts, backup_path, tmp_path)
+    if failure:
+        with pytest.raises(preflight.PreflightError):
+            rollout.apply(*args)
+        assert old.read_bytes() == initial
+    else:
+        assert rollout.apply(*args)["status"] == "applied_service_verified"
+        assert old.read_bytes() == new.read_bytes()
+    if failure in {"backup", "drift"}:
+        assert not any("up" in args for args in calls)
+    saved = list(receipts.glob("*/previous.env"))
+    if failure != "backup":
+        assert len(saved) == 1 and saved[0].read_bytes() == initial
+        receipt = json.loads(saved[0].with_name("receipt.json").read_bytes())
+        assert receipt["database_restore"] is False
+        assert receipt["status"] == (
+            "attention_required_inspect_before_recovery" if failure else "applied_service_verified"
+        )
+    assert not any("restore" in arg or "prune" in arg for args in calls for arg in args)

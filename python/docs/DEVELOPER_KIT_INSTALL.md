@@ -17,7 +17,7 @@ writable development directory.
 ```bash
 uv run --locked --extra cloud python tools/install_developer_kit.py plan --archive /ABS/kit.zip --sha256 APPROVED_ZIP_SHA256 --releases /ABS/releases
 uv run --locked --extra cloud python tools/install_developer_kit.py prepare --archive /ABS/kit.zip --sha256 APPROVED_ZIP_SHA256 --releases /ABS/releases
-uv run --locked --extra cloud python tools/install_developer_kit.py initialize --directory /ABS/releases/APPROVED_ZIP_SHA256
+uv run --locked --extra cloud python tools/install_developer_kit.py initialize --directory /ABS/releases/APPROVED_ZIP_SHA256 --config /ABS/project.json
 ```
 
 `plan` reads only; `prepare` checks bounded archive paths/inventory, clones the exact
@@ -27,7 +27,8 @@ paths remain stable. Neither step changes the game, profile, queues or cloud.
 A prepared directory is never overwritten; `status --directory ...` rechecks its
 original archive, source, tool and staged bytes. Failed temporary preparation is
 removed; initialization can be retried in the same directory while its Workbench
-is stopped. Keep the original archive and all older in-use release directories.
+is stopped. Always pass the same private profile path, including before it exists;
+initialization holds its existing Workbench lock when present. Keep the original archive and all older in-use release directories.
 
 With STS2 fully closed, the same entrypoint can run `deploy --directory ...
 --game-directory /ABS/game`. It checks actual game/dependency bytes against native

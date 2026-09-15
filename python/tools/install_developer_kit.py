@@ -240,7 +240,7 @@ def deploy(directory: Path, game: Path) -> dict[str, Any]:
     }
 
 
-def register(directory: Path, config: Path, *, replace: bool = False) -> dict[str, Any]:
+def register(directory: Path, config: Path) -> dict[str, Any]:
     result = status(directory)
     source = directory / "source"
     # Execute the selected release owner, not the engineering checkout's environment.
@@ -264,9 +264,34 @@ def register(directory: Path, config: Path, *, replace: bool = False) -> dict[st
         "--tool-release-id",
         result["tool_release_id"],
     ]
-    if replace:
-        args.append("--replace-tool")
     return dict(json.loads(run(args, source)))
+
+
+def initialize(directory: Path, config_path: Path) -> dict[str, Any]:
+    from contextlib import nullcontext
+
+    from spireagent.workbench.developer import ProjectConfig
+    from spireagent.workbench.developer_server import instance_lock
+
+    if not config_path.is_absolute() or config_path.is_symlink():
+        reject("absolute_private_profile_path_required")
+    config = (
+        ProjectConfig.load(config_path, require_current_combination=False)
+        if config_path.exists()
+        else None
+    )
+    # Reuse the running Workbench's OS lock, not a second process tracker.
+    with (
+        instance_lock(directory / "initialize.lock"),
+        instance_lock(config.state_dir / "instance.lock") if config else nullcontext(),
+    ):
+        status(directory)
+        source = directory / "source"
+        run(["npm", "ci"], source)
+        run(["uv", "sync", "--project", "python", "--locked", "--extra", "cloud"], source)
+        result = status(directory)
+        result["environment"] = "initialized"
+        return result
 
 
 def main() -> int:
@@ -316,11 +341,9 @@ def main() -> int:
                     reject("absolute_existing_profile_required")
                 result = register(args.directory, args.config)
             if args.command == "initialize":
-                source = args.directory / "source"
-                run(["npm", "ci"], source)
-                run(["uv", "sync", "--project", "python", "--locked", "--extra", "cloud"], source)
-                result = status(args.directory)
-                result["environment"] = "initialized"
+                if args.config is None:
+                    reject("profile_path_required_for_stopped_workbench_check")
+                result = initialize(args.directory, args.config)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
     except (
