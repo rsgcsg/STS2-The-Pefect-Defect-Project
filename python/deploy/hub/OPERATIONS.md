@@ -14,7 +14,7 @@ console password. Keep compute budget zero unless a separate campaign authorizes
 
 Keep the exact VPS address, Unix user, SSH port, key path and verified server host-key
 fingerprint in the operator's private inventory, outside Git. Use the actual deployment
-configuration for state directories; `/srv/spireagent/hub` in examples is not a discovery rule.
+configuration for state directories; `/srv/stpd/hub` in examples is not a discovery rule.
 Record the current and previous compatible worker/Caddy digests, database schema, backup
 receipt, source revision and external configuration recovery location there as well.
 

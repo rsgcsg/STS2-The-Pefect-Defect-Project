@@ -46,14 +46,14 @@ An administrator creates private disk directories (example locations match the e
 
 ```bash
 sudo install -d -m 0700 /etc/stpd
-sudo install -d -m 0700 -o 10001 -g 10001 /srv/spireagent/hub
-sudo install -d -m 0700 -o 10001 -g 10001 /srv/spireagent/hub/work /srv/spireagent/hub/backups
+sudo install -d -m 0700 -o 10001 -g 10001 /srv/stpd/hub
+sudo install -d -m 0700 -o 10001 -g 10001 /srv/stpd/hub/work /srv/stpd/hub/backups
 sudo install -d -m 0700 /srv/stpd/caddy /srv/stpd/caddy/data /srv/stpd/caddy/config
 sudo install -d -m 0700 /var/lib/stpd-maintenance
 sudo install -d -m 0755 /var/lib/stpd-maintenance/safe-status
 sudo install -m 0600 deploy/hub/deployment.env.example /etc/stpd/deployment.env
-sudo install -m 0600 deploy/hub/runtime.env.example /etc/spireagent/hub-runtime.env
-sudo install -m 0600 deploy/hub/backup.env.example /etc/spireagent/hub-backup.env
+sudo install -m 0600 deploy/hub/runtime.env.example /etc/stpd/hub-runtime.env
+sudo install -m 0600 deploy/hub/backup.env.example /etc/stpd/hub-backup.env
 ```
 
 Edit those external files with the intended non-secret settings and credentials through the
@@ -300,7 +300,7 @@ Ambiguous/mismatched account identity must be investigated, not remapped or sile
 
    ```bash
    dc pull hub
-   sudo --preserve-env=STPD_BOOTSTRAP_ADMIN_EMAIL docker compose --env-file /etc/stpd/deployment.env -f "$STPD_HUB_COMPOSE_FILE" run --rm --no-deps -e STPD_BOOTSTRAP_ADMIN_EMAIL hub members-bootstrap --state /var/lib/stpd --legacy-allowlist /var/lib/spireagent/console-access.json
+   sudo --preserve-env=STPD_BOOTSTRAP_ADMIN_EMAIL docker compose --env-file /etc/stpd/deployment.env -f "$STPD_HUB_COMPOSE_FILE" run --rm --no-deps -e STPD_BOOTSTRAP_ADMIN_EMAIL hub members-bootstrap --state /var/lib/stpd --legacy-allowlist /var/lib/stpd/console-access.json
    unset STPD_BOOTSTRAP_ADMIN_EMAIL
    ```
 
@@ -388,7 +388,7 @@ then uploads SHA256-addressed chunks and a commit receipt to a third private ope
 Every chunk and receipt is read back before success. No ArtifactStore/Registry/research index
 is used. Never copy a live `operations.sqlite` alone while its WAL is active.
 
-Configure `/etc/spireagent/hub-backup.env` with a separate operator credential restricted to the
+Configure `/etc/stpd/hub-backup.env` with a separate operator credential restricted to the
 backup bucket. Do not give that bucket's credentials to the always-running Hub, collectors or
 GPU workers. Disable public URLs and bucket domains. Backups include credential hashes, leases
 and private identifiers: account recovery must work without this server. Provider encryption
@@ -404,10 +404,10 @@ backupctl() {
   sudo docker run --rm --platform linux/amd64 --user 10001:10001 --read-only \
     --cap-drop ALL --security-opt no-new-privileges --memory 512m --cpus 1 --pids-limit 64 \
     --tmpfs /tmp:rw,noexec,nosuid,size=32m,mode=1777 \
-    --env-file /etc/spireagent/hub-backup.env --env STPD_WORKER_IMAGE="$STPD_WORKER_IMAGE" \
+    --env-file /etc/stpd/hub-backup.env --env STPD_WORKER_IMAGE="$STPD_WORKER_IMAGE" \
     --env GIT_CONFIG_COUNT=1 --env GIT_CONFIG_KEY_0=safe.directory \
     --env GIT_CONFIG_VALUE_0=/opt/stpd --env GIT_OPTIONAL_LOCKS=0 \
-    --mount type=bind,src=/srv/spireagent/hub,dst=/var/lib/stpd \
+    --mount type=bind,src=/srv/stpd/hub,dst=/var/lib/stpd \
     "$STPD_WORKER_IMAGE" /opt/stpd/python/.venv/bin/python /opt/stpd/python/deploy/hub/backup.py "$@"
 }
 backupctl backup
@@ -509,7 +509,7 @@ The same Hub schedules at most one active job/GPU; its target timeout must be no
 each queued job's `max_seconds`, and reservations must fit the explicitly configured budget.
 
 Pause existing dispatch and save a private backup first. Place the reviewed JSON in the mounted
-state directory and set **all three** optional keys in `/etc/spireagent/hub-runtime.env` using the
+state directory and set **all three** optional keys in `/etc/stpd/hub-runtime.env` using the
 secure operator editor: `STPD_MODAL_TARGET=/var/lib/stpd/modal-target.json`, `MODAL_TOKEN_ID`,
 `MODAL_TOKEN_SECRET`, and set `MODAL_ENVIRONMENT=spireagent-b` to match the deployed
 worker and Secret environment. Never put credential values in command arguments or logs. The worker's
@@ -518,7 +518,7 @@ storage secret belongs to its provider deployment; it is separate from the Hub's
 ```bash
 hubctl pause
 backupctl backup
-sudo install -m 0600 -o 10001 -g 10001 /PRIVATE_OPERATOR/reviewed-modal-target.json /srv/spireagent/hub/modal-target.json
+sudo install -m 0600 -o 10001 -g 10001 /PRIVATE_OPERATOR/reviewed-modal-target.json /srv/stpd/hub/modal-target.json
 sudo python3 deploy/hub/preflight.py --config /etc/stpd/deployment.env --host
 ```
 
@@ -546,7 +546,7 @@ and provider before disabling the optional variables or rolling back.
 First stop API and proxy so there are no writers. Confirm all remote jobs are stopped or
 explicitly retained as uncertain; stopping Hub does not stop a cloud GPU. Restore initially
 in upload-only mode: through the secure operator editor, remove all three optional Modal
-keys from `/etc/spireagent/hub-runtime.env` and set `STPD_HUB_BUDGET_UNITS=0` in
+keys from `/etc/stpd/hub-runtime.env` and set `STPD_HUB_BUDGET_UNITS=0` in
 `/etc/stpd/deployment.env` before restarting. The SQLite backup does not contain
 `modal-target.json`; do not boot with a dangling target path or copy a target whose
 source/lock/image differs from the selected recovery image.
@@ -568,11 +568,11 @@ Then stop the Hub and retrieve the selected recovery point:
 ```bash
 dc stop caddy hub
 backupctl restore-check --receipt EXACT_BACKUP_RECEIPT_SHA256 --destination /var/lib/stpd/backups/recovery-verified.sqlite
-sudo python3 deploy/hub/preflight.py --backup /srv/spireagent/hub/backups/recovery-verified.sqlite
-STPD_RETIRED_STATE="/srv/spireagent/hub.before-restore-$(date -u +%Y%m%dT%H%M%SZ)"
-sudo mv /srv/spireagent/hub "$STPD_RETIRED_STATE"
-sudo install -d -m 0700 -o 10001 -g 10001 /srv/spireagent/hub /srv/spireagent/hub/work /srv/spireagent/hub/backups
-sudo install -m 0600 -o 10001 -g 10001 "$STPD_RETIRED_STATE/backups/recovery-verified.sqlite" /srv/spireagent/hub/operations.sqlite
+sudo python3 deploy/hub/preflight.py --backup /srv/stpd/hub/backups/recovery-verified.sqlite
+STPD_RETIRED_STATE="/srv/stpd/hub.before-restore-$(date -u +%Y%m%dT%H%M%SZ)"
+sudo mv /srv/stpd/hub "$STPD_RETIRED_STATE"
+sudo install -d -m 0700 -o 10001 -g 10001 /srv/stpd/hub /srv/stpd/hub/work /srv/stpd/hub/backups
+sudo install -m 0600 -o 10001 -g 10001 "$STPD_RETIRED_STATE/backups/recovery-verified.sqlite" /srv/stpd/hub/operations.sqlite
 ```
 
 For a schema-4 recovery image, membership, roles, bindings and the initialized marker come from
