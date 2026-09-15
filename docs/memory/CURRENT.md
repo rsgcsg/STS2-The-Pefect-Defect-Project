@@ -37,6 +37,9 @@ the locked cloud profile; research and CI use all extras. A first approved uploa
 a Dataset nor a training permit. Freeze the full v1 research protocol after measured real
 admission/profile and a separately budgeted worker canary, before selection training.
 
-Decision-dataset candidate: [ADR-0007](../adr/0007-fixed-decision-datasets.md).
+The default permissive decision-dataset workflow is implemented: [ADR-0007](../adr/0007-fixed-decision-datasets.md).
 The B pipeline supplies no new model adapter, cloud game, inference service or RL.
 Source/test, service, Human, data, training and scientific qualification stay separate.
+
+Bounded dataset/service/member verification: [2026-09-15 closeout](../evidence/DECISION_DATASETS_CLOSEOUT_2026-09-15.md).
+Resolve the published release and its attached exact-source report for current deployment identity.
