@@ -1012,3 +1012,48 @@ test("missing preparation facts remain unknown and cannot offer setup or activat
     item.dataset?.action?.startsWith("activate-") || item.dataset?.action?.startsWith("bind-")), false);
   assert.equal(post(env.calls).length, 0);
 });
+
+test("decision dataset defaults preview selected uploads without complete-run restriction", async () => {
+  const h = setup({view: "datasets", handler: async (url) => {
+    if (url.includes("collections?")) return {items: [{upload_id: uploadId, status: "verified"}], total: 1};
+    return {items: []};
+  }});
+  const page = await h.render();
+  const source = field(page, `source-${uploadId}`);
+  source.checked = true; source.onchange();
+  await action(page, "preview-dataset").onclick();
+  const call = h.calls.find(c => c.options?.method === "POST");
+  assert.ok(call);
+  const body = JSON.parse(call.options.body);
+  assert.equal(body.preview_id, null);
+  assert.equal(body.rules.complete_only, false);
+  assert.equal(body.rules.wins_only, false);
+  assert.equal(body.rules.no_failures_only, false);
+  assert.deepEqual(body.uploads, [uploadId]);
+});
+
+test("game page reads derived summaries without submitting work", async () => {
+  const h = setup({view: "games", handler: async () => ({items: [], profile_limit: 100, pending_profiles: 1, failed_profiles: 0})});
+  const page = await h.render();
+  assert.match(text(page), /上传次数不等于独立局数/);
+  assert.equal(h.calls.length, 1);
+  assert.notEqual(h.calls[0].options?.method, "POST");
+});
+
+
+test("dataset editing uses the shared refresh guard and retains unblurred draft input", async () => {
+  const h = setup({view: "datasets", handler: async (url) => {
+    if (url.includes("collections?")) return {items: [{upload_id: uploadId, status: "verified"}], total: 1};
+    return {items: []};
+  }});
+  const page = await h.render();
+  assert.ok(walk(page).some(item => item.dataset?.projectEditor === "decision-dataset"));
+  const name = field(page, "dataset-name");
+  name.value = "Unblurred draft"; name.oninput();
+  const source = field(page, `source-${uploadId}`);
+  source.checked = true; source.onchange();
+  const refreshed = await h.render();
+  assert.equal(field(refreshed, "dataset-name").value, "Unblurred draft");
+  assert.equal(field(refreshed, `source-${uploadId}`).checked, true);
+  assert.equal(post(h.calls).length, 0);
+});

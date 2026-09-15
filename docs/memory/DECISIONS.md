@@ -111,3 +111,10 @@ owns everyday download, setup, collection, viewing, upgrade and incident order; 
 Hub runbook owns exact host commands. Preserve [ADR-0004](../adr/0004-developer-cloud-hub.md)
 and [ADR-0005](../adr/0005-local-cloud-console.md) authority boundaries. New source, terminal,
 service, research and model claims still require their own scoped evidence.
+
+## 2026-09-15 — decision-level dataset contract
+
+Accepted [ADR-0007](../adr/0007-fixed-decision-datasets.md): default partial-run canonical
+selection, optional category/version filters, fixed preview/build artifacts, no weakening of
+strict Full-Run archives. Background CPU work and live sharing checks remain Hub responsibilities.
+Implementation/service evidence is tracked separately from design acceptance.

@@ -7,6 +7,7 @@ import io
 import json
 import sqlite3
 import time
+from types import SimpleNamespace
 
 import pytest
 from test_hub_console import service
@@ -404,8 +405,11 @@ def test_verified_identity_does_not_itself_grant_project_access(hub):
         app.identity.principal(value)
 
 
-def test_public_flow_bounds_ignore_forged_forwarded_ip_and_reject_callback(hub):
+def test_public_flow_bounds_ignore_forged_forwarded_ip_and_reject_callback(hub, monkeypatch):
     app, _, _ = hub
+    # The quota is per minute; test wall time must not silently reset its bucket.
+    now = [60.0]
+    monkeypatch.setattr("stpd.hub.identity.time", SimpleNamespace(time=lambda: now[0]))
     for index in range(20):
         result = request(
             app,
@@ -430,6 +434,17 @@ def test_public_flow_bounds_ignore_forged_forwarded_ip_and_reject_callback(hub):
             headers={"HTTP_X_FORWARDED_FOR": "another"},
         )[0]
         == 429
+    )
+    now[0] = 120.0
+    assert (
+        request(
+            app,
+            "/v1/identity/flows",
+            method="POST",
+            body={"client_secret": SECRET, "device_name": "Mac"},
+            headers={"HTTP_X_FORWARDED_FOR": "another"},
+        )[0]
+        == 201
     )
     for body in (
         {"client_secret": "short", "device_name": "Mac"},

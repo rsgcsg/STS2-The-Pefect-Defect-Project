@@ -35,7 +35,7 @@ class MemberClient:
         path, _, query = route.partition("?")
         allowed = (
             r"collection-settings|campaigns(?:/[a-f0-9]{64}/enroll|/enrollments(?:/[a-f0-9]{32})?)?"
-            r"|exports(?:/[a-f0-9]{64})?"
+            r"|exports(?:/[a-f0-9]{64})?|datasets(?:/[a-f0-9]{32}(?:/retry)?)?|games"
         )
         if re.fullmatch(allowed, path) is None:
             raise BoundaryError("member", "invalid_member_route")
@@ -46,7 +46,9 @@ class MemberClient:
             or (body is not None and query)
         ):
             raise BoundaryError("member", "invalid_member_query")
-        writable = re.fullmatch(r"exports|campaigns/[a-f0-9]{64}/enroll", path)
+        writable = re.fullmatch(
+            r"exports|datasets(?:/[a-f0-9]{32}/retry)?|campaigns/[a-f0-9]{64}/enroll", path
+        )
         if body is not None and writable is None:
             raise BoundaryError("member", "member_route_read_only")
         return self.account.request("/v1/identity/member/" + route, body=body, token=self.token())

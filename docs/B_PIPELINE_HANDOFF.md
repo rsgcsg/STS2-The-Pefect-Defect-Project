@@ -481,7 +481,8 @@ A correction produces a new artifact/report; it never makes an old failed receip
 The current implementation preserves and projects partial verified sources, but
 `fullrun.data.admit` still requires complete runs and rejects unresolved/failed-closed sources.
 It does **not** yet automatically admit the good subset of such a source for training.
-The accepted next data-workstream design is a separate, versioned decision/segment dataset:
+The separate decision-dataset candidate is specified by [ADR-0007](adr/0007-fixed-decision-datasets.md).
+It adds preview/build and a reproducing loader without changing that strict training entry point:
 
 - Admit a decision only from its own proved state, complete execution catalog, exact choice
   and necessary Commit/successor evidence; exclude the failed decision and dependent evidence.
@@ -495,7 +496,8 @@ The accepted next data-workstream design is a separate, versioned decision/segme
   the derived manifest. Keep all parts of a run and duplicate-related components in one split.
   Report coverage and selection bias; rare failures must not disappear from benchmark reports.
 
-This separate path needs codec/admission/load tamper tests and research review before use.
+This candidate has separate codec/selection/reprojection tests; production promotion and
+research training use require their own exact evidence.
 Do not relax the existing Full-Run contract to implement it. Collection can continue meanwhile;
 verified storage, useful projection, training eligibility and complete-run certification are
 four different facts. The [bounded acceptance](evidence/B_WORKFLOW_BOUNDED_ACCEPTANCE_2026-09-15.md)

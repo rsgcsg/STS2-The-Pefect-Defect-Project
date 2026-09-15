@@ -18,3 +18,5 @@ Current records:
 [ADR-0005: one local/cloud project console](0005-local-cloud-console.md)
 
 [ADR-0006: Hub membership, project sharing and local models](0006-project-members-and-local-models.md)
+
+[ADR-0007: fixed decision datasets and compatible versions](0007-fixed-decision-datasets.md)

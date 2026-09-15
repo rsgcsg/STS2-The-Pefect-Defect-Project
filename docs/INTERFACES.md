@@ -203,3 +203,18 @@ no real lost decisions and source-bound records remain required.
 verifier independently, publishes a source projection with a `received` parent, and returns
 the source manifest/projection for `admit` and `publish_dataset`. The transport parent retains
 receipt lineage; it does not become research admission authority.
+
+## Fixed decision datasets (candidate)
+
+`fullrun.decision_dataset.SelectionRules` is `stpd/decision-selection-v1`.
+`fullrun.decision_store` publishes/loads `stpd/decision-dataset-v1` from independently verified
+received bundle artifacts. The strict `fullrun.data` contract remains separate. See
+[ADR-0007](adr/0007-fixed-decision-datasets.md) for defaults, bounds and version policy.
+
+Authenticated member BFF routes: `GET games`, `GET datasets`, `GET datasets/{job_id}`,
+`POST datasets` (name, explicit uploads, typed rules, nullable preview_id), and
+`POST datasets/{job_id}/retry` (empty body; failed tasks only, new attempt identity). Browser requests
+retain Origin/CSRF enforcement; personal tokens and device credentials are not interchangeable.
+POST queues CPU work. A completed preview's logical ID must match a reproduced publication.
+Game/profile reads use persisted summaries, not archive extraction. Artifact downloads reuse
+existing export inventories and source sharing checks; these routes never submit GPU work.

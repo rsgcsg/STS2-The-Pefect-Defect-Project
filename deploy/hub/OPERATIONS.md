@@ -66,58 +66,49 @@ Prove a fresh connection after the reload before closing the original. A later-n
 does not necessarily override an earlier value. Follow [Ubuntu's SSH procedure](https://ubuntu.com/server/docs/how-to/security/openssh-server/)
 and [`sshd` validation options](https://man.openbsd.org/sshd).
 
-## Change network without losing SSH
+## Default: network-independent, public-key-only SSH
 
-An allow rule for one public source IP follows that network exit address, not the laptop or
-SSH key. A home-network change, mobile hotspot or local proxy can change it. HTTP egress IP
-can differ from SSH egress; the successful server-side `SSH_CONNECTION` is the final check.
-Public 80/443 are separate from operator-only TCP/22; 8765 stays loopback-only.
+The project owner approved removing source-IP allowlists on 2026-09-15. TCP/22 is reachable
+from normal networks; access is authenticated by the existing Unix account and SSH key.
+Do not require home/UQ/hotspot source-address registration. Hub member authorization remains
+separate. Keep UFW enabled, HTTPS public, and the Hub API on loopback; do not expose Docker
+or 8765. A network that independently blocks outbound SSH still needs its own permitted route;
+public port reachability is not a promise to bypass institutional network rules.
 
-1. Keep the old working SSH session and its network route open. Arrange a second terminal
-   on the intended new route, or another already-authorized host operator. Confirm the
-   provider console is accessible and its independent Unix login is usable before changing
-   access. Do not assume an existing SSH key can log into a password-only KVM prompt.
-2. In the old session, inspect `sudo ufw status numbered` and the provider network firewall.
-   Record the current exact source rule privately. Obtain the new SSH route's public address
-   from trusted network configuration; add only that single IPv4 `/32` or IPv6 `/128`, never
-   `0.0.0.0/0`, `::/0`, a guessed broad subnet or public `allow 22`.
-3. Add the new rule without deleting the old one. The example uses a single literal address
-   and the existing port 22; check the actual configured port first. Coordinate any required
-   provider firewall change separately. These commands run on the Hub, not the laptop:
+For the one-time migration, use an already-authorized shell or provider console. A browser
+Hub admin cannot modify the host firewall. Preserve the current recovery session throughout.
+First inspect the actual SSH configuration, including any applicable Match blocks:
 
-   ```bash
-   STPD_NEW_SSH_SOURCE='REPLACE_WITH_NEW_PUBLIC_IP'
-   python3 -c 'import ipaddress,sys; print(ipaddress.ip_address(sys.argv[1]))' "$STPD_NEW_SSH_SOURCE" &&
-   sudo ufw --dry-run allow proto tcp from "$STPD_NEW_SSH_SOURCE" to any port 22 comment 'stpd operator'
-   ```
+```bash
+sudo /usr/sbin/sshd -t
+sudo /usr/sbin/sshd -T
+sudo ufw status numbered
+```
 
-   After address validation and dry-run review succeed:
+Require `pubkeyauthentication yes`, `passwordauthentication no`, and
+`kbdinteractiveauthentication no` before making SSH public. Confirm the port is 22 (use the
+actual reviewed port if different). Stop for an owning authentication repair if these checks
+fail; never enable password SSH to restore access. Then add the network-independent rule:
 
-   ```bash
-   sudo ufw allow proto tcp from "$STPD_NEW_SSH_SOURCE" to any port 22 comment 'stpd operator'
-   sudo ufw status numbered
-   ```
+```bash
+sudo ufw --dry-run allow 22/tcp comment 'STPD public-key SSH'
+sudo ufw allow 22/tcp comment 'STPD public-key SSH'
+sudo ufw status numbered
+```
 
-   Stop if address validation or rule review fails. Do not change UFW defaults, reset UFW,
-   disable it or flush rules. Existing sessions do not prove a new rule works.
-4. From the new network, run `ssh -S none stpd-hub`. Connection sharing is disabled so this
-   must authenticate a new connection. On that new session, inspect `printf '%s\n' "$SSH_CONNECTION"`,
-   `id -un` and `sudo -n true`. The observed client address must match the new authorized
-   address and the expected account/key must work. If sudo requires a local policy-approved
-   password, test it interactively there; do not change sudo policy to make this check pass.
-   Keep the old session/rule if any check fails.
-5. Only after the new connection passes, remove the old exact rule through the new session.
-   Re-read the current rule list first; if old and new addresses are identical, remove
-   nothing. For the simple rule shape above, use
-   `sudo ufw delete allow proto tcp from OLD_EXACT_PUBLIC_IP to any port 22` after replacing
-   the placeholder. Match any original interface/destination restriction rather than deleting
-   an unrelated rule number. Preserve other operators' separately authorized rules.
-6. Verify another fresh connection from the new route after removal, then close the old
-   session. Update the private inventory with the new source, timestamp and observed result.
-   If validation fails, use the still-open authorized session to restore the old exact rule.
+If the provider firewall also filters SSH by source, align that rule to the same public SSH
+policy. Do not reset either firewall or change unrelated services. From the intended network,
+use a fresh OpenSSH connection with `BatchMode=yes`, `StrictHostKeyChecking=yes`, and
+`ControlMaster=no`; verify expected user and `sudo -n true`. Only after this succeeds remove
+redundant historical source-specific SSH rules, preserving unrelated rules. Check another fresh
+connection. Retain key/fingerprint, auth-policy evidence and a usable console recovery method
+in the private inventory; do not store changing network IPs as access prerequisites.
 
-The [Ubuntu UFW manual](https://manpages.ubuntu.com/manpages/noble/man8/ufw.8.html) defines rule
-syntax and deletion. No application login automatically changes either firewall.
+If a network blocks outbound TCP/22, an operator-only Cloudflare Tunnel/Access SSH route is a
+possible separately qualified fallback using the same SSH key. It is not installed merely by
+this document, and ordinary project members must not gain host access through their Hub role.
+See [Cloudflare's SSH route](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/use-cases/ssh/ssh-cloudflared-authentication/)
+and [Ubuntu UFW](https://manpages.ubuntu.com/manpages/noble/man8/ufw.8.html).
 
 ## If the host becomes unreachable
 
@@ -134,11 +125,36 @@ the current working route/session when one exists.
 | KVM shows Ubuntu `login:` | use the independently held Unix console credential; cloud account OTP and SSH private-key bytes are not that password |
 | `No space left on device` | measure blocks and inodes on the failing filesystem; the service printing the error is not necessarily the disk consumer |
 
-Use a retained allowed network or an authorized second operator first. Provider KVM is a
+If legacy restrictions still block the first migration, use an authorized second operator or
+the provider console. Do not make returning to the old network the normal workflow. Provider KVM is a
 separate recovery route that must be tested and documented privately. If no console credential
 exists, report that missing recovery capability explicitly. Provider password reset, rescue
 boot or reboot are deliberate separately authorized recovery actions, not automatic responses
 to an SSH timeout. A restart can discard the only usable session without repairing its cause.
+
+## Recovery when no Unix console password exists
+
+A key-only installation may have no usable console password. Do not paste an SSH private key,
+Cloudflare OTP or provider account password into the Ubuntu `login:` prompt. Use the provider's
+rescue mode only after agreeing the service interruption. Preserve the original host-key inventory;
+the temporary rescue SSH identity uses a separate known-hosts file and must be checked through the
+provider recovery channel. Enter the temporary password interactively, never in a command, chat or log.
+An operator may install their existing public key in the temporary rescue system for the repair.
+
+Discover disks with `lsblk` and mount the identified original filesystem read-only first. Inspect
+blocks, inodes, the original UFW rules and effective SSH configuration. Before a necessary repair,
+remount that filesystem writable and back up only the affected configuration. Offline UFW changes
+must preserve its rule metadata and unrelated rules; validate IPv4/IPv6 with the original system's
+`iptables-restore --test` / `ip6tables-restore --test`, and SSH with `sshd -t` and `sshd -T`.
+Do not apply the original firewall to the rescue network. Sync and unmount before the provider's
+normal-disk reboot. Never guess a disk name or reinstall to fix an access rule.
+
+After normal boot, use the original strict host-key check and a fresh key-only non-root login.
+Check sudo, actual UFW rules, password authentication remaining disabled, loopback Hub binding,
+public HTTPS identity, containers, capacity and the backup timer. Remove obsolete source-IP rules
+only after that new login succeeds, then prove another new login. Rescue access alone is not a
+successful production recovery. Keep the redacted incident and private rollback files; temporary
+rescue credentials do not become everyday credentials.
 
 ## Daily check and before any deployment or build
 

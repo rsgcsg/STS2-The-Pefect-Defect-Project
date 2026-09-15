@@ -19,7 +19,9 @@ and capacity inspection. It is this runbook's operator companion, not a second d
 Prepare Docker Engine and Compose >=2.30 using the host vendor's supported installation path.
 Use Linux x86_64 with 4 GiB memory initially. Confirm disk capacity for the exact worker image
 and scratch, and free ports 80/443/8765. Point the owned DNS hostname at this host. Permit
-inbound 80/443 for Caddy's public HTTPS flow and restrict SSH to operator access.
+inbound 80/443 for Caddy's public HTTPS flow and TCP/22 from all source networks with
+public-key-only SSH authentication. Do not use source-IP allowlists as the default; follow
+[the one-time migration checks](OPERATIONS.md#default-network-independent-public-key-only-ssh).
 
 An administrator creates private disk directories (example locations match the env template):
 
