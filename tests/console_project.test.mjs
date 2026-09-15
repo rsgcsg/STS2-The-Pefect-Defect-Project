@@ -1039,3 +1039,21 @@ test("game page reads derived summaries without submitting work", async () => {
   assert.equal(h.calls.length, 1);
   assert.notEqual(h.calls[0].options?.method, "POST");
 });
+
+
+test("dataset editing uses the shared refresh guard and retains unblurred draft input", async () => {
+  const h = setup({view: "datasets", handler: async (url) => {
+    if (url.includes("collections?")) return {items: [{upload_id: uploadId, status: "verified"}], total: 1};
+    return {items: []};
+  }});
+  const page = await h.render();
+  assert.ok(walk(page).some(item => item.dataset?.projectEditor === "decision-dataset"));
+  const name = field(page, "dataset-name");
+  name.value = "Unblurred draft"; name.oninput();
+  const source = field(page, `source-${uploadId}`);
+  source.checked = true; source.onchange();
+  const refreshed = await h.render();
+  assert.equal(field(refreshed, "dataset-name").value, "Unblurred draft");
+  assert.equal(field(refreshed, `source-${uploadId}`).checked, true);
+  assert.equal(post(h.calls).length, 0);
+});

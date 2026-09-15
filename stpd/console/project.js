@@ -1028,6 +1028,7 @@ window.SpireProject = (() => {
   }
   async function decisionDatasets(ctx) {
     const box = panel("建立固定版本数据集", "默认保留可靠决策，允许不完整局和不同环境身份。整包损坏不能跳过校验；失败决策仍保留在报告中。");
+    box.dataset.projectEditor = "decision-dataset";
     const draft = drafts.get("decision-dataset") || {name: "人类决策数据集", uploads: [], complete: false, wins: false, filters: {}};
     const name = input(box, "数据集名称", "dataset-name", draft.name);
     const complete = input(box, "仅完整局（默认关闭）", "complete-only", draft.complete, "checkbox");
@@ -1035,6 +1036,7 @@ window.SpireProject = (() => {
     const wins = input(box, "仅已确认胜利（未知结果不算胜利）", "wins-only", draft.wins, "checkbox");
     const advanced = el("details");
     advanced.append(el("summary", "可选筛选"));
+    advanced.dataset.preserve = "decision-dataset-filters";
     const fields = {};
     for (const [key, title] of [["game_version", "游戏版本"], ["connector_version", "连接器版本"], ["annotator_version", "采集器版本"], ["character", "角色"], ["difficulty", "难度"], ["family", "动作类别"], ["surface", "界面"], ["decision_kind", "决策类型"], ["environment_identity", "精确环境身份"]]) {
       fields[key] = input(advanced, `${title}（留空不限，多个值用逗号分隔）`, key, (draft.filters[key] || []).join(","));
@@ -1053,6 +1055,7 @@ window.SpireProject = (() => {
       drafts.set("decision-dataset", draft);
     }
     for (const field of [name, complete, wins, noFailures, ...Object.values(fields)]) field.onchange = save;
+    for (const field of [name, ...Object.values(fields)]) field.oninput = save;
     const listing = await request(ctx, project(`collections?limit=25&offset=${offsets.get("dataset-sources") || 0}`));
     const selection = new Set(draft.uploads);
     for (const item of listing.items || []) {
