@@ -23,13 +23,27 @@ public sealed class PlatformPolicyCommandSupersededException : OperationCanceled
 
 /// <summary>
 /// Orders typed Runtime mutations, not gameplay. A recovery intent immediately
-/// invalidates earlier preparation and follow-up Tick work; its mutation follows
-/// any request already submitted. No failed or unknown request is retried here.
+/// invalidates earlier preparation and follow-up Tick work. Recovery bypasses
+/// the local wait so Runtime's owner can fence queued/in-flight model intent.
+/// No failed or unknown request is retried here.
 /// </summary>
 public sealed class PlatformPolicyCommands
 {
     private readonly SemaphoreSlim _mutations = new(1, 1);
     private long _generation;
+    private readonly object _unknownGate = new();
+    private readonly Dictionary<string, long> _unknownRuns = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, long> _recoveredRuns = new(StringComparer.Ordinal);
+
+    public bool HasUnknownCommand(string? runId)
+    {
+        lock (_unknownGate) return runId != null && _unknownRuns.ContainsKey(runId);
+    }
+
+    private void EnsureAllowed(string runId, bool recovery)
+    {
+        if (!recovery && HasUnknownCommand(runId)) throw new PlatformPolicyRecoveryRequiredException();
+    }
 
     /// <summary>
     /// The latest deliberate command wins. Prepare closes Human recording through
@@ -38,6 +52,7 @@ public sealed class PlatformPolicyCommands
     /// Ignore PlatformPolicyCommandSupersededException in UI result presentation.
     /// </summary>
     public async Task<T> RunAsync<T>(
+        string expectedRunId,
         PlatformPolicyCommand command,
         Func<Task> prepareModel,
         Func<string, Task<T>> setMode,
@@ -51,7 +66,10 @@ public sealed class PlatformPolicyCommands
         ArgumentNullException.ThrowIfNull(setMode);
         ArgumentNullException.ThrowIfNull(tick);
         ArgumentNullException.ThrowIfNull(stop);
+        ArgumentException.ThrowIfNullOrWhiteSpace(expectedRunId);
         cancellationToken.ThrowIfCancellationRequested();
+        bool recovery = command is PlatformPolicyCommand.Human or PlatformPolicyCommand.Stop;
+        EnsureAllowed(expectedRunId, recovery);
         long intent = Interlocked.Increment(ref _generation);
 
         if (command is PlatformPolicyCommand.Shadow or PlatformPolicyCommand.OneStep or PlatformPolicyCommand.Auto or PlatformPolicyCommand.Tick)
@@ -61,9 +79,9 @@ public sealed class PlatformPolicyCommands
             EnsureCurrent(intent, cancellationToken);
         }
         if (command == PlatformPolicyCommand.Tick)
-            return await SendAsync(intent, tick, cancellationToken).ConfigureAwait(false);
+            return await SendAsync(intent, expectedRunId, recovery, tick, cancellationToken).ConfigureAwait(false);
         if (command == PlatformPolicyCommand.Stop)
-            return await SendAsync(intent, stop, cancellationToken).ConfigureAwait(false);
+            return await SendAsync(intent, expectedRunId, recovery, stop, cancellationToken).ConfigureAwait(false);
 
         string mode = command switch {
             PlatformPolicyCommand.Human => "human",
@@ -72,9 +90,9 @@ public sealed class PlatformPolicyCommands
             PlatformPolicyCommand.Auto => "auto",
             _ => throw new ArgumentOutOfRangeException(nameof(command))
         };
-        T result = await SendAsync(intent, () => setMode(mode), cancellationToken).ConfigureAwait(false);
+        T result = await SendAsync(intent, expectedRunId, recovery, () => setMode(mode), cancellationToken).ConfigureAwait(false);
         return command == PlatformPolicyCommand.OneStep
-            ? await SendAsync(intent, tick, cancellationToken).ConfigureAwait(false)
+            ? await SendAsync(intent, expectedRunId, recovery, tick, cancellationToken).ConfigureAwait(false)
             : result;
     }
 
@@ -84,19 +102,42 @@ public sealed class PlatformPolicyCommands
     /// </summary>
     public void InvalidatePending() => Interlocked.Increment(ref _generation);
 
-    private async Task<T> SendAsync<T>(long intent, Func<Task<T>> mutation, CancellationToken cancellationToken)
+    private async Task<T> SendAsync<T>(long intent, string runId, bool recovery, Func<Task<T>> mutation, CancellationToken cancellationToken)
     {
-        await _mutations.WaitAsync(cancellationToken).ConfigureAwait(false);
+        // Runtime serializes effects and advances recovery_epoch on Human/Stop
+        // entry. Waiting behind a model HTTP response here would delay that fence.
+        if (!recovery) await _mutations.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             EnsureCurrent(intent, cancellationToken);
-            T result = await mutation().ConfigureAwait(false);
+            EnsureAllowed(runId, recovery);
+            T result;
+            try { result = await mutation().ConfigureAwait(false); }
+            catch (PlatformPolicyCommandUnknownException)
+            {
+                lock (_unknownGate)
+                {
+                    // A late failure of old intent cannot undo confirmed recovery.
+                    if (!_recoveredRuns.TryGetValue(runId, out long recovered) || intent > recovered)
+                        _unknownRuns[runId] = Math.Max(intent, _unknownRuns.GetValueOrDefault(runId));
+                }
+                throw;
+            }
+            if (recovery)
+            {
+                lock (_unknownGate)
+                {
+                    _recoveredRuns[runId] = Math.Max(intent, _recoveredRuns.GetValueOrDefault(runId));
+                    if (_unknownRuns.TryGetValue(runId, out long unknown) && unknown <= intent)
+                        _unknownRuns.Remove(runId);
+                }
+            }
             EnsureCurrent(intent, cancellationToken);
             return result;
         }
         finally
         {
-            _mutations.Release();
+            if (!recovery) _mutations.Release();
         }
     }
 
