@@ -24,7 +24,10 @@ def service(tmp_path, monkeypatch):
     result = LocalModelService(config)
     # Synthetic native acceptance isolates the Runtime transport tests. The actual
     # bridge and fail-closed handoff have their own wire-level regression suite.
-    monkeypatch.setattr(result.native_tasks, "prepare_model", lambda observed: {})
+    monkeypatch.setattr(
+        result.native_tasks, "prepare_model",
+        lambda observed, endpoint: {"runtime_instance_id": "game-1"},
+    )
     return result
 
 
@@ -62,7 +65,8 @@ def status():
         "lifecycle": "running",
         "controller": "released",
         "tainted": False,
-        "environment": {"host_kind": "test", "loaded_mod_ids": ["STS2_PLATFORM"]},
+        "environment": {"host_kind": "test", "loaded_mod_ids": ["STS2_PLATFORM"],
+                        "runtime_instance_id": "game-1"},
     }
 
 
@@ -213,8 +217,9 @@ def test_closing_old_workbench_cannot_stop_replacement_runtime(service, runtime_
 
 
 @pytest.mark.parametrize("lost_stop", [False, True])
+@pytest.mark.parametrize("connector_endpoint", [None, "http://127.0.0.1:19191", "invalid"])
 def test_recovered_runtime_shutdown_requires_confirmation(
-    service, runtime_http, monkeypatch, lost_stop
+    service, runtime_http, monkeypatch, lost_stop, connector_endpoint
 ):
     from urllib.error import URLError
 
@@ -226,6 +231,8 @@ def test_recovered_runtime_shutdown_requires_confirmation(
         "policy_manifest_sha256": hashlib.sha256(canonical_json(manifest).encode()).hexdigest(),
     }
     service.state["previous_session"] = {"startup": exact, "selection_id": "fixture"}
+    if connector_endpoint is not None:
+        service.state["previous_session"]["connector_endpoint"] = connector_endpoint
     with monkeypatch.context() as recovery:
         recovery.setattr(service, "selection", lambda _: {"id": "fixture", "manifest": "fixture"})
         recovery.setattr(local_models, "_object_file", lambda _: manifest)
@@ -240,6 +247,19 @@ def test_recovered_runtime_shutdown_requires_confirmation(
         recovery.setattr(local_models, "RuntimeClient", lambda *_: client)
         service._recover("human", service.intent_generation)
     assert service.client is client and service.process is None
+    if connector_endpoint == "http://127.0.0.1:19191":
+        assert service.state["connector_endpoint"] == connector_endpoint
+        assert service.state["error_code"] is None
+    else:
+        assert service.state["connector_endpoint"] is None
+        assert service.state["error_code"] == "runtime_connector_binding_required"
+        monkeypatch.setattr(
+            service.native_tasks, "prepare_model",
+            local_models.NativeTasks.prepare_model.__get__(service.native_tasks),
+        )
+        service.command("auto")
+        assert finished(service)["error_code"] == "runtime_connector_binding_required"
+        assert runtime["mode"] == "human"  # safety recovery is retained, model entry is blocked
     if lost_stop:
         # A real recovered HTTP client loses its Stop response; no local Popen
         # exists to supply alternative proof that the process terminated.
@@ -434,6 +454,11 @@ def test_start_uses_fixed_command_human_and_rejects_foreign_attestation(service,
     assert "STPD_HUB_TOKEN" not in options["env"]
     assert options["env"]["HF_HUB_OFFLINE"] == "1"
     assert options["env"]["TRANSFORMERS_OFFLINE"] == "1"
+    connector = command[command.index("--connector-endpoint") + 1]
+    assert service.state["connector_endpoint"] == connector
+    assert json.loads((service.directory / "session.json").read_text())["connector_endpoint"] == (
+        connector
+    )
     assert service.process.stopped
 
 
@@ -555,7 +580,7 @@ def test_native_close_failure_never_requests_model_mode(service, runtime_http, m
     service.client = client
     service.state.update(status="loaded", loaded=True)
 
-    def failed(observed):
+    def failed(observed, connector_endpoint):
         raise BoundaryError("local_model", error)
 
     monkeypatch.setattr(service.native_tasks, "prepare_model", failed)
@@ -568,6 +593,27 @@ def test_native_close_failure_never_requests_model_mode(service, runtime_http, m
     service.command("human")  # manual recovery is independent of recording bridge
     assert finished(service)["operation"]["status"] == "completed"
     assert [body for _, body in requests if body] == [{"mode": "human"}]
+
+
+def test_runtime_environment_observed_during_native_close_must_match(
+    service, runtime_http, monkeypatch,
+):
+    client, runtime, requests = runtime_http
+    service.client = client
+    service.state.update(status="loaded", loaded=True)
+    runtime["environment"] = None
+
+    def closed(observed, endpoint):
+        assert observed["environment"] is None
+        # Another Runtime caller populated its environment while this handoff
+        # was closing the Recorder. Do not authorize a different cached game.
+        runtime["environment"] = {"runtime_instance_id": "other-game"}
+        return {"runtime_instance_id": "game-1"}
+
+    monkeypatch.setattr(service.native_tasks, "prepare_model", closed)
+    service.command("auto")
+    assert finished(service)["error_code"] == "native_task_game_identity_mismatch"
+    assert all(body is None for _, body in requests)
 
 
 def test_finalization_is_background_and_verifies_exact_bytes_not_page_read(service, monkeypatch):
@@ -632,10 +678,10 @@ def test_human_cancels_old_intent_while_native_close_is_pending(service, monkeyp
             calls.append((route, body))
             return {"status": status()}
 
-    def native_close(_):
+    def native_close(_, connector_endpoint):
         entered.set()
         assert release.wait(timeout=3)
-        return {"ready_for_model": True}
+        return {"ready_for_model": True, "runtime_instance_id": "game-1"}
 
     monkeypatch.setattr(service.native_tasks, "prepare_model", native_close)
     service.client = Runtime()

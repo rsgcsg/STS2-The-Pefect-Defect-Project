@@ -23,6 +23,26 @@ def bridge():
         "ready_for_model": False,
     }
     calls, behavior = [], {"close": "success"}
+    capabilities = {
+        "protocol_version": "1.0.0",
+        **{name + "_schema": f"sts2.player-environment/{name}-1"
+           for name in ("snapshot", "action", "receipt", "control")},
+        "host": {"runtime_instance_id": "game-1"},
+    }
+    behavior["capabilities"] = capabilities
+
+    class ConnectorHandler(BaseHTTPRequestHandler):
+        def log_message(self, *_):
+            pass
+
+        def do_GET(self):
+            calls.append((self.path, None))
+            assert self.path == "/api/player-environment/capabilities"
+            raw = json.dumps(capabilities).encode()
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_):
@@ -30,6 +50,7 @@ def bridge():
 
         def do_GET(self):
             calls.append((self.path, None))
+            assert self.path == "/v1/tasks/status"
             self.respond()
 
         def do_POST(self):
@@ -44,6 +65,8 @@ def bridge():
                 observed.update(recording_lifecycle="closed", ready_for_model=True)
             else:
                 observed.update(recording_lifecycle="closing")
+            if behavior.get("replace_connector"):
+                capabilities["host"]["runtime_instance_id"] = "replacement-game"
             self.respond()
 
         def respond(self):
@@ -56,6 +79,10 @@ def bridge():
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
+    connector = ThreadingHTTPServer(("127.0.0.1", 0), ConnectorHandler)
+    connector_thread = threading.Thread(target=connector.serve_forever, daemon=True)
+    connector_thread.start()
+    behavior["connector_endpoint"] = f"http://127.0.0.1:{connector.server_port}"
     client = NativeTasks()
     client.address = f"http://127.0.0.1:{server.server_port}"
     try:
@@ -64,17 +91,25 @@ def bridge():
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+        connector.shutdown()
+        connector.server_close()
+        connector_thread.join(timeout=2)
 
 
 def test_fresh_instance_and_recording_binding_one_close_only(bridge):
-    client, _, calls, _ = bridge
-    assert client.prepare_model({"environment": {"runtime_instance_id": "game-1"}})[
+    client, _, calls, behavior = bridge
+    assert client.prepare_model(
+        {"environment": {"runtime_instance_id": "game-1"}}, behavior["connector_endpoint"]
+    )[
         "ready_for_model"
     ]
-    assert len(calls) == 2
-    assert len(calls[1][1]["command_id"]) == 36
-    client.prepare_model({"environment": {"runtime_instance_id": "game-1"}})
-    assert len(calls) == 3 and calls[-1][1] is None
+    assert len(calls) == 4
+    assert len(calls[2][1]["command_id"]) == 36
+    client.prepare_model(
+        {"environment": {"runtime_instance_id": "game-1"}}, behavior["connector_endpoint"]
+    )
+    assert len(calls) == 7 and calls[-1][1] is None
+    assert sum(body is not None for _, body in calls) == 1
 
 
 @pytest.mark.parametrize(
@@ -85,18 +120,101 @@ def test_close_pending_or_lost_response_is_not_model_permission(bridge, outcome,
     client, _, calls, behavior = bridge
     behavior["close"] = outcome
     with pytest.raises(BoundaryError, match=error):
-        client.prepare_model({"environment": {"runtime_instance_id": "game-1"}})
-    assert len(calls) == 2  # no automatic POST retry
+        client.prepare_model(
+            {"environment": {"runtime_instance_id": "game-1"}}, behavior["connector_endpoint"]
+        )
+    assert sum(body is not None for _, body in calls) == 1  # no automatic POST retry
 
 
 def test_wrong_game_missing_identity_and_inconsistent_ready_never_send_close(bridge):
-    client, observed, calls, _ = bridge
+    client, observed, calls, behavior = bridge
     with pytest.raises(BoundaryError, match="runtime_game_identity_required"):
-        client.prepare_model({"environment": {}})
+        client.prepare_model({"environment": {}}, behavior["connector_endpoint"])
     assert calls == []
     with pytest.raises(BoundaryError, match="native_task_game_identity_mismatch"):
-        client.prepare_model({"environment": {"runtime_instance_id": "different-game"}})
+        client.prepare_model(
+            {"environment": {"runtime_instance_id": "different-game"}},
+            behavior["connector_endpoint"],
+        )
     observed["ready_for_model"] = True
     with pytest.raises(BoundaryError, match="native_task_unavailable"):
-        client.prepare_model({"environment": {"runtime_instance_id": "game-1"}})
+        client.prepare_model(
+            {"environment": {"runtime_instance_id": "game-1"}}, behavior["connector_endpoint"]
+        )
     assert all(body is None for _, body in calls)
+
+
+def test_first_human_environment_null_uses_bound_connector_then_exact_bridge(bridge):
+    client, _, calls, behavior = bridge
+    result = client.prepare_model({"environment": None}, behavior["connector_endpoint"])
+    assert result["runtime_instance_id"] == "game-1" and result["ready_for_model"]
+    assert [route for route, _ in calls] == [
+        "/api/player-environment/capabilities", "/v1/tasks/status",
+        "/v1/tasks/prepare-model", "/api/player-environment/capabilities",
+    ]
+
+
+@pytest.mark.parametrize("endpoint", [None, "", "http://example.org:15526",
+                                     "http://127.0.0.1:15526/path"])
+def test_unbound_or_invalid_connector_never_guesses_default(bridge, endpoint):
+    client, _, calls, _ = bridge
+    with pytest.raises(BoundaryError, match="runtime_connector_binding_required"):
+        client.prepare_model({"environment": None}, endpoint)
+    assert calls == []
+
+
+@pytest.mark.parametrize("drift", ["instance", "protocol", "missing-host"])
+def test_connector_identity_must_agree_before_close(bridge, drift):
+    client, _, calls, behavior = bridge
+    capabilities = behavior["capabilities"]
+    if drift == "instance":
+        capabilities["host"]["runtime_instance_id"] = "different-game"
+    elif drift == "protocol":
+        capabilities["protocol_version"] = "2.0.0"
+    else:
+        del capabilities["host"]
+    error = "game_identity_mismatch" if drift == "instance" else "connector_identity_unavailable"
+    with pytest.raises(BoundaryError, match=error):
+        client.prepare_model({"environment": None}, behavior["connector_endpoint"])
+    assert all(body is None for _, body in calls)
+
+
+def test_connector_replacement_while_closing_cannot_authorize_model_control(bridge):
+    client, _, calls, behavior = bridge
+    behavior["replace_connector"] = True
+    with pytest.raises(BoundaryError, match="game_identity_mismatch"):
+        client.prepare_model({"environment": None}, behavior["connector_endpoint"])
+    assert sum(body is not None for _, body in calls) == 1
+
+
+@pytest.mark.parametrize("action", ["auto", "one_step", "shadow"])
+def test_workbench_first_model_command_uses_persisted_endpoint_not_current_config(
+    bridge, tmp_path, action,
+):
+    from spireagent.workbench.developer import ProjectConfig, combination
+    from spireagent.workbench.local_models import LocalModelService
+
+    native, _, native_calls, behavior = bridge
+    config = ProjectConfig(tmp_path, "", "", None, combination())
+    service = LocalModelService(config)
+    service.native_tasks = native
+    calls = []
+
+    class Runtime:
+        def request(self, route, body=None):
+            calls.append((route, body))
+            if body is not None:
+                assert native_calls[-1] == ("/api/player-environment/capabilities", None)
+            return {"status": {"environment": None, "mode": (body or {}).get("mode", "human")}}
+
+    service.client = Runtime()
+    service.state.update(status="loaded", loaded=True,
+                         connector_endpoint=behavior["connector_endpoint"])
+    service.command(action)
+    service.thread.join(timeout=3)
+    assert not service.thread.is_alive()
+    assert service.state["operation"]["status"] == "completed"
+    assert [route for route, body in calls if body is not None] == (
+        ["/mode", "/tick"] if action == "one_step" else ["/mode"]
+    )
+    assert sum(body is not None for _, body in native_calls) == 1

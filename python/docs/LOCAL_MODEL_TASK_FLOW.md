@@ -28,18 +28,32 @@ must first be stopped/recovered before preparing a different one.
 Before `shadow`, `one_step` or `auto`, Workbench reads exact Runtime status and
 uses the game Mod's fixed loopback task bridge at `127.0.0.1:15528`:
 
-1. GET `/v1/tasks/status`; match its `runtime_instance_id` to Runtime's environment.
+1. GET `/api/player-environment/capabilities` from the exact Connector endpoint
+   saved when launching this Runtime, then GET `/v1/tasks/status`. Their
+   `runtime_instance_id` values must agree. An already observed Runtime
+   environment must also match. A newly loaded Human Runtime has a null
+   environment: these two read-only identities establish the initial binding
+   without a gameplay tick or temporary Auto mode.
 2. If recording is not ready for a model, POST `/v1/tasks/prepare-model` once,
    carrying observed `runtime_instance_id`, `recording_session_id` and a new
    UUID `command_id`. The native Recorder owner closes the actual recording.
 3. Continue only with `ready_for_model=true` and consistent `ready`/`closed`
-   lifecycle. Recheck Runtime identity before changing its mode.
+   lifecycle. Read Connector capabilities again to reject a replaced game, then
+   recheck Runtime identity before changing its mode.
 
 Bridge schema is `sts2.platform/task-status-1`. Pending/failed Close does not
 acquire control. A lost POST response is unknown and is never automatically
 retried. Human/Stop recovery does not depend on this bridge. The client bypasses
 ambient HTTP proxies and refuses redirects; native server policy owns bridge
 request validation.
+
+The Connector endpoint is persisted in Workbench's session alongside the exact
+Runtime startup identity; it is not guessed from the current project config after
+recovery. Older sessions without this field can still be returned to Human or
+stopped. They report `runtime_connector_binding_required` and must be stopped and
+loaded afresh before model control is available. A missing/malformed endpoint,
+unsupported identity contract, mismatched game instance or unavailable Connector
+blocks model control without retrying Close or changing mode.
 
 Human/Stop immediately invalidate earlier control intents. Runtime mutations are
 serialized; recovery waits behind an already submitted mutation and is then the

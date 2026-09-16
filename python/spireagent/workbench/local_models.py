@@ -407,6 +407,8 @@ class LocalModelService:
                             safe_precondition = code in {
                                 "native_task_unavailable", "native_task_game_identity_mismatch",
                                 "runtime_game_identity_required",
+                                "runtime_connector_binding_required",
+                                "connector_identity_unavailable",
                                 "recording_close_pending_or_failed",
                             }
                             self.state.update(
@@ -575,7 +577,7 @@ class LocalModelService:
                     stderr=log,
                 )
             self.process = process
-            self.state.update(status="loading", loaded=False)
+            self.state.update(status="loading", loaded=False, connector_endpoint=connector)
             self._save()
         lines: queue.Queue[bytes] = queue.Queue(maxsize=1)
         stdout = process.stdout
@@ -674,6 +676,7 @@ class LocalModelService:
             self.intent_generation += 1
             intent = self.intent_generation
             client = self.client
+            connector_endpoint = self.state.get("connector_endpoint")
 
         def execute() -> None:
             assert client is not None
@@ -683,9 +686,10 @@ class LocalModelService:
             observation = client.request("/status")["status"]
             if action in {"shadow", "one_step", "auto"}:
                 self._require_intent(intent)
-                self.native_tasks.prepare_model(observation)
+                native = self.native_tasks.prepare_model(observation, connector_endpoint)
                 # The native Close request cannot authorize a replacement Runtime.
-                client.request("/status")
+                latest = client.request("/status")["status"]
+                NativeTasks.confirm_runtime(latest, native["runtime_instance_id"])
             if action == "stop":
                 runtime = self._send_control(client, "/stop", {}, intent)["status"]
             else:
@@ -742,6 +746,13 @@ class LocalModelService:
                 if action == "stop"
                 else self._send_control(client, "/mode", {"mode": "human"}, intent)["status"]
             )
+        # Older sessions did not persist their Connector endpoint. Their exact
+        # Runtime can still be returned to Human or stopped, but cannot safely be
+        # retargeted from today's project config. Stop then load again to bind it.
+        try:
+            connector_endpoint = NativeTasks.bound_connector(previous.get("connector_endpoint"))
+        except BoundaryError:
+            connector_endpoint = None
         with self.lock:
             self._require_intent(intent)
             self.client = client if observed["lifecycle"] == "running" else None
@@ -752,7 +763,11 @@ class LocalModelService:
                 loaded=self.client is not None,
                 status="loaded" if self.client is not None else "stopped",
                 previous_session=None,
-                error_code=None,
+                connector_endpoint=connector_endpoint,
+                error_code=(
+                    "runtime_connector_binding_required"
+                    if self.client is not None and connector_endpoint is None else None
+                ),
             )
         if self.client is None:
             self._evaluation_handoff()
