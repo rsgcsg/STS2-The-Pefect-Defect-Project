@@ -176,7 +176,9 @@ def status_project(config: ProjectConfig) -> dict[str, Any]:
 
 class Application:
     def __init__(self, config: ProjectConfig, *, config_path: Path | None = None) -> None:
+        from spireagent.workbench.collection_flow import CollectionFlow
         from spireagent.workbench.collection_setup import CollectionSetup
+        from spireagent.workbench.evaluation_sharing import EvaluationSharing
 
         self.config = config
         self.config_path = config_path
@@ -198,6 +200,14 @@ class Application:
             config, self.hub, self.delivery_environment, self.delivery_process, self.identity
         )
         self.models = LocalModelService(config, hub=self.hub)
+        self.evaluation_sharing = EvaluationSharing(self.models, self.members)
+        self.delivery_error: str | None = None
+        self.collection_flow = CollectionFlow(
+            self.collection,
+            delivery_process=self.delivery_process,
+            activate=self.activate_collection,
+            stop_delivery=self.pause_delivery,
+        )
 
     def activate_collection(self, enrollment_id: str) -> dict[str, Any]:
         with self.operation_lock:
@@ -259,7 +269,18 @@ class Application:
             environment["STPD_HUB_TOKEN"] = token
         return environment
 
+    def pause_delivery(self) -> None:
+        with self.operation_lock:
+            self.close_delivery()
+            self.delivery, self.delivery_log = None, None
+
     def start_delivery(self) -> None:
+        from spireagent.workbench.collection_flow import upload_preference_status
+
+        preference = upload_preference_status(self.config)
+        self.delivery_error = preference.get("error")
+        if not preference["enabled"]:
+            return
         if self.config.delivery_config is None or not self.account.device_token():
             return
         self.delivery_log = (self.config.state_dir / "logs" / "delivery.log").open("ab")
@@ -322,7 +343,10 @@ class Application:
 
     def delivery_status(self) -> dict[str, Any]:
         if self.delivery is None:
-            return {"status": "not_configured"}
+            return {
+                "status": "blocked" if self.delivery_error else "not_configured",
+                **({"error": self.delivery_error} if self.delivery_error else {}),
+            }
         code = self.delivery.poll()
         state: dict[str, Any] = {
             "status": "running" if code is None else "stopped",
@@ -363,6 +387,7 @@ class Application:
         }
 
     def close(self) -> None:
+        self.evaluation_sharing.close()
         self.members.close()
         self.models.close()
         self.close_delivery()
@@ -425,6 +450,10 @@ def create_server(app: Application) -> ThreadingHTTPServer:
             return body
 
         def model_action(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
+            if path == "/api/local-models/prepare" and set(body) == {"selection_id"}:
+                return app.models.prepare_and_load(body["selection_id"])
+            if path == "/api/local-models/share" and set(body) == {"evaluation_id", "authorized"}:
+                return app.evaluation_sharing.share(body["evaluation_id"], body["authorized"])
             if path == "/api/local-models/start" and set(body) == {"selection_id"}:
                 return app.models.start(body["selection_id"])
             if path == "/api/local-models/download" and set(body) == {"artifact_id"}:
@@ -476,7 +505,9 @@ def create_server(app: Application) -> ThreadingHTTPServer:
                     if parsed.path.startswith("/api/member/"):
                         route = parsed.path.removeprefix("/api/member/")
                         preparation = re.fullmatch(r"campaigns/([a-f0-9]{32})/preparation", route)
-                        if route == "collection-status" and not parsed.query:
+                        if route == "collection-flow" and not parsed.query:
+                            value = app.collection_flow.status()
+                        elif route == "collection-status" and not parsed.query:
                             value = app.collection.status(app.delivery_process())
                         elif preparation and not parsed.query:
                             value = app.collection.preparation(
@@ -498,6 +529,8 @@ def create_server(app: Application) -> ThreadingHTTPServer:
                         raise ValueError
                     elif parsed.path == "/api/local-models":
                         value = app.models.catalog()
+                    elif parsed.path == "/api/local-models/share-status":
+                        value = app.evaluation_sharing.status()
                     elif parsed.path == "/api/local-models/status":
                         value = app.models.status()
                     else:
@@ -571,7 +604,13 @@ def create_server(app: Application) -> ThreadingHTTPServer:
                         prepare = re.fullmatch(r"campaigns/([a-f0-9]{32})/prepare", route)
                         bind = re.fullmatch(r"campaigns/([a-f0-9]{32})/bind", route)
                         activate = re.fullmatch(r"campaigns/([a-f0-9]{32})/activate", route)
-                        if download and not body:
+                        if route == "collection-flow/consent":
+                            value = app.collection_flow.consent(body)
+                        elif route == "collection-flow/prepare":
+                            value = app.collection_flow.prepare(body)
+                        elif route == "collection-flow/upload":
+                            value = app.collection_flow.set_upload(body)
+                        elif download and not body:
                             value = app.members.download(download[1])
                         elif prepare and not body:
                             value = app.members.prepare_campaign(prepare[1])

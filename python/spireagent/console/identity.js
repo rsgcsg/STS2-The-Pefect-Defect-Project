@@ -6,6 +6,8 @@ window.SpireIdentity = (() => {
   let identity = null, checked = 0, busy = null, scope = local ? "local" : "project";
   let deviceDraft = null;
   let timer = null, refreshPage = () => {}, epoch = 0, loggingOut = false;
+  let approvalGeneration = 0, pollingApproval = false, haltedFlow = null;
+  const profileMeaning = "每条登记对应一个账号的工作台配置；同一台电脑可以有多条登记，修改名称不会合并账号或历史记录。";
   const el = (tag, text, cls) => {
     const node = document.createElement(tag);
     if (text !== undefined) node.textContent = text;
@@ -40,9 +42,11 @@ window.SpireIdentity = (() => {
     const memberLink = document.querySelector('[data-view="members"]');
     if (memberLink) memberLink.hidden = principal?.role !== "admin";
     if (principal && (!local || identity.status === "signed_in")) {
+      target.append(action("账号与电脑", () => { location.assign("?view=devices"); }));
       target.append(el("span", principal.email, "account-label"));
-      target.append(action("退出账号", async () => {
-        clearTimeout(timer);
+      target.append(action("退出网页账号", async () => {
+        clearTimeout(timer); timer = null;
+        haltedFlow = identity?.flow?.flow_id || null; approvalGeneration++;
         const csrf = identity.csrf_token;
         loggingOut = true; epoch++; busy = null; identity = null; scope = "local";
         topbar(); refreshPage(true);
@@ -89,7 +93,7 @@ window.SpireIdentity = (() => {
       }
       if (version !== epoch) return identity;
       if (identity?.principal?.subject !== next?.principal?.subject) epoch++;
-      identity = next; checked = Date.now(); topbar(); return identity;
+      identity = next; checked = Date.now(); topbar(); scheduleApproval(); return identity;
     })();
     busy = task;
     try { return await task; } finally { if (busy === task) busy = null; }
@@ -103,46 +107,85 @@ window.SpireIdentity = (() => {
     }
     return "/api/console/" + route + query;
   }
-  async function waitForApproval() {
-    clearTimeout(timer);
+  function pendingFlow() {
+    const flow = identity?.flow;
+    return local && !loggingOut && identity?.csrf_token && flow?.flow_id &&
+      Number.isFinite(flow.expires_at) && flow.expires_at * 1000 > Date.now() ? flow : null;
+  }
+  function scheduleApproval() {
+    const flow = pendingFlow();
+    if (!flow || flow.flow_id === haltedFlow) {
+      clearTimeout(timer); timer = null; return;
+    }
+    if (timer !== null || pollingApproval) return;
+    timer = setTimeout(() => { timer = null; return waitForApproval(); },
+      Math.min(3000, flow.expires_at * 1000 - Date.now()));
+  }
+  async function waitForApproval(manual = false) {
+    const flow = pendingFlow();
+    if (!flow || pollingApproval || (!manual && flow.flow_id === haltedFlow)) return;
+    if (manual) haltedFlow = null;
+    clearTimeout(timer); timer = null; pollingApproval = true;
+    const generation = approvalGeneration;
+    const current = () => !loggingOut && generation === approvalGeneration &&
+      identity?.flow?.flow_id === flow.flow_id;
     try {
       const result = await request("/api/identity/poll", {}, identity.csrf_token);
-      if (result.status === "pending") timer = setTimeout(waitForApproval, 3000);
-      else if (result.status === "approved") {
-        scope = "project"; await refresh(true); refreshPage(true);
+      if (!current()) return;
+      if (result.status === "pending") return;
+      haltedFlow = flow.flow_id;
+      // A pre-poll identity read can still be in flight. Observe a fresh status
+      // after it, rather than treating its old signed-out response as completion.
+      if (busy) await busy;
+      if (generation !== approvalGeneration || loggingOut) return;
+      if (result.status === "approved") {
+        scope = "project"; await refresh(true);
+        if (generation !== approvalGeneration || loggingOut) return;
+        refreshPage(true);
         message("登录与设备绑定完成。后台上传与个人登录分别管理。");
-      } else { await refresh(true); refreshPage(); message("本次绑定已结束；需要时可重新发起。"); }
-    } catch (error) { message(`暂时无法确认绑定：${error.message}。点击“检查绑定结果”可继续。`); }
+      } else {
+        await refresh(true);
+        if (generation !== approvalGeneration || loggingOut) return;
+        refreshPage(); message("本次绑定已结束；需要时可重新发起。");
+      }
+    } catch (error) {
+      if (!current()) return;
+      haltedFlow = flow.flow_id;
+      message(`暂时无法确认绑定：${error.message}。点击“检查绑定结果”可继续。`);
+    } finally { pollingApproval = false; scheduleApproval(); }
   }
   function flowCard(flow) {
     const box = el("div", undefined, "onboarding-step");
-    box.append(el("h3", "在浏览器中确认"), el("p", "核对电脑名称及配对码，只批准刚刚由你发起的请求。"));
+    box.append(el("h3", "在浏览器中确认"), el("p", "核对连接名称及配对码，只批准刚刚由你发起的请求。"));
     box.append(el("strong", flow.user_code, "pair-code"));
     const link = el("a", "打开登录与绑定页面 ↗", "button");
     link.href = flow.approval_url; link.target = "_blank"; link.rel = "noreferrer";
-    box.append(link, action("检查绑定结果", waitForApproval));
+    box.append(link, action("检查绑定结果", () => waitForApproval(true)));
     return box;
   }
   function renderDevices() {
     const box = el("section", undefined, "panel onboarding"), who = identity?.principal;
     box.append(el("h2", who ? "账号与项目电脑" : "接入 SpireAgent"));
     box.append(el("p", "使用项目邀请的邮箱接入；首次验证后自动建立项目账号，无需另设密码。"));
-    box.append(el("p", "每条电脑记录对应一份工作台配置；同一台电脑可以有多份。退出登录不会转移设备归属或已有数据。"));
+    box.append(el("p", profileMeaning));
+    box.append(el("p", "退出登录不会转移配置归属或已有数据。"));
     if (local) {
       box.append(el("p", identity?.device_credential_present ?
         "这台电脑已保存上传凭据；是否有效以 Hub 最近验证为准。个人退出不会删除它。" :
-        "先登录并确认电脑名称。绑定成功后，打开“录制与上传”确认日常录制授权并完成本机设置；登录不代表同意上传。"));
+        "先登录并确认连接名称。连接成功后，打开“真人采集”确认日常录制授权并完成本机设置；登录不代表同意上传。"));
+      if (identity?.previous_account_email) box.append(el("p",
+        `这份配置保存的上次登录邮箱：${identity.previous_account_email}。这是本机历史提示，设备归属仍以云端核对为准。`));
       if (!identity?.hub_configured) box.append(el("p", "尚未配置项目 Hub 地址。请使用项目提供的启动配置。"));
       else if (!who || identity.status !== "signed_in") {
-        const label = el("label", "这台电脑的名称"), input = el("input");
+        const label = el("label", "连接名称"), input = el("input");
         input.type = "text"; input.maxLength = 80; input.value = deviceDraft ?? identity?.device_name ?? "我的电脑";
         input.id = "device-name"; input.addEventListener("input", () => { deviceDraft = input.value; });
         label.append(input); box.append(label);
-        box.append(action("登录并绑定这台电脑", async () => {
-          const flow = await request("/api/identity/login", {device_name: input.value.trim()}, identity.csrf_token);
+        box.append(action("登录并连接本机", async () => {
+          haltedFlow = null; approvalGeneration++; clearTimeout(timer); timer = null;
+          await request("/api/identity/login", {device_name: input.value.trim()}, identity.csrf_token);
           await refresh(true); refreshPage();
           message("请打开登录页面，使用项目邮箱完成确认。");
-          if (flow) timer = setTimeout(waitForApproval, 3000);
         }));
       }
       if (identity?.flow) box.append(flowCard(identity.flow));
@@ -152,11 +195,11 @@ window.SpireIdentity = (() => {
         refreshPage();
       }));
       box.append(el("p", identity?.delivery_configured ?
-        "这台电脑已有投递配置；在“录制与上传”查看本机检查，在“这台电脑”的采集记录中查看上传与云端收据。" :
-        "当前尚未配置投递。打开“录制与上传”，确认日常录制授权并查看本机设置的下一步。"));
+        "这台电脑已有投递配置；在“真人采集”查看本机检查，在“数据”的本机记录中查看上传与云端收据。" :
+        "当前尚未配置投递。打开“真人采集”，确认日常录制授权并查看本机设置的下一步。"));
     }
     if (who) {
-      const recording = el("a", "继续录制与上传 →", "button");
+      const recording = el("a", "打开真人采集 →", "button");
       recording.href = "?view=campaigns";
       box.append(recording);
       box.append(el("p", `当前账号：${who.email} · ${who.role}`));
@@ -186,18 +229,48 @@ window.SpireIdentity = (() => {
     const flow = new URLSearchParams(location.search).get("flow");
     if (local || !/^[a-f0-9]{32}$/.test(flow || "")) throw new Error("无效绑定请求");
     const facts = await request("/app/api/identity/flows/" + flow);
-    box.append(el("h2", "确认接入这台电脑"), el("p", `账号：${identity?.principal?.email || "当前登录账号"}`));
+    box.append(el("h2", "确认本机连接"), el("p", `账号：${identity?.principal?.email || "当前登录账号"}`));
+    box.append(el("p", profileMeaning));
     box.append(el("h3", facts.device_name), el("strong", facts.user_code, "pair-code"));
-    box.append(el("p", facts.purpose === "connect_existing_device" ?
-      `重新连接已有电脑：${facts.device_id}` : "注册一台新的采集电脑"));
-    box.append(el("p", "请与本机工作台显示的配对码核对。批准后，此电脑获得独立上传凭据，工作台可查看你获授权的项目数据。不会启动游戏、训练或自动同意上传数据。"));
-    if (facts.status === "pending" && facts.approval_allowed) box.append(action("确认是我的电脑，批准接入", async () => {
+    const reconnect = facts.purpose === "connect_existing_device";
+    box.append(el("p", reconnect ?
+      `重新连接已有工作台配置：${facts.device_id}` : "建立新的本机连接"));
+    box.append(el("p", reconnect ?
+      "请核对本机工作台的配对码。这份配置只能由原绑定账号重新连接；批准后恢复个人登录，沿用已有设备上传凭据，不会重新注册电脑或转移归属。" :
+      "请与本机工作台显示的配对码核对。批准后，此电脑获得独立上传凭据，工作台可查看你获授权的项目数据。"));
+    box.append(el("p", "连接不会启动游戏、训练或自动同意上传数据。"));
+    if (facts.status === "pending" && facts.approval_allowed === true && !facts.approval_block_reason) box.append(action("确认是我的连接，批准接入", async () => {
       await request("/app/api/identity/flows/" + flow + "/approve", {
         csrf_token: identity.csrf_token, user_code: facts.user_code,
       }, identity.csrf_token);
       box.replaceChildren(el("h2", "已批准"), el("p", "回到本机工作台，绑定结果会自动更新。这个页面可以关闭。"));
     }));
-    else box.append(el("p", facts.status === "pending" ? "当前账号没有绑定这台电脑的权限。请使用受邀请且获授权的账号。" : `请求状态：${facts.status}。请回到本机工作台查看结果。`));
+    else {
+      const reasons = {
+        different_account: "当前登录邮箱不是这份工作台配置的原绑定账号。即使是管理员，也不能直接接管另一账号的工作台配置。",
+        device_disabled: "这台电脑或其所属成员的授权已停用。请联系管理员核对，不要删除已有配置或上传队列。",
+        device_unavailable: "云端找不到这台电脑的登记。请联系管理员核对原设备记录。",
+        proof_changed: "这台电脑的上传凭据已变更，当前连接请求使用的是旧凭据。请联系管理员按恢复流程处理。",
+        device_claim_not_allowed: "当前账号没有认领这份旧电脑配置的权限。请联系管理员核对原登记。",
+        enrollment_disabled: "当前账号未获允许注册新电脑。请联系管理员开启注册权限。",
+        device_quota_reached: "当前账号的电脑名额已用完。请联系管理员调整名额，或使用自己的已有配置重新连接。",
+        expired: "这次连接请求已过期。请回到本机工作台重新发起连接。",
+        flow_invalidated: "这次连接请求已失效。请回到本机工作台，待旧请求到期后重新发起连接。",
+        flow_not_pending: "这次连接已处理。请回到本机工作台检查绑定结果。",
+      };
+      const reason = facts.approval_block_reason;
+      box.append(el("p", reasons[reason] || (facts.status === "expired" ? reasons.expired :
+        facts.status !== "pending" ? reasons.flow_not_pending : reconnect ?
+          "当前账号暂不能重新连接这份配置。请先核对是否使用原绑定账号；仍失败时请管理员检查设备状态。" :
+          "当前账号暂不能注册这台电脑。请管理员检查成员状态、注册权限与电脑名额。"), "banner"));
+      if (reason === "different_account" || (reconnect && facts.status === "pending" && !reasons[reason])) {
+        box.append(action("退出并更换登录账号", () => { location.assign("/cdn-cgi/access/logout"); }));
+        box.append(el("p", "换账号后，回到发起连接的本机工作台标签页，点击“打开登录与绑定页面”。请勿删除设备、配置或已有数据。"));
+      }
+      box.append(el("p", "返回本机：切回刚才的工作台标签页 → 账号与电脑 → 检查绑定结果；请求过期后再点“登录并连接本机”。"));
+      const devices = el("a", "查看当前账号的电脑", "button secondary");
+      devices.href = "?view=devices"; box.append(devices);
+    }
     if (facts.status === "pending") box.append(action("不是我的请求，拒绝", async () => {
       await request("/app/api/identity/flows/" + flow + "/deny", {
         csrf_token: identity.csrf_token, user_code: facts.user_code,

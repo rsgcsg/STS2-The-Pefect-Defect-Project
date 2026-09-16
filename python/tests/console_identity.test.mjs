@@ -10,28 +10,104 @@ class Element {
   addEventListener() {}
   get options() { return this.children; }
 }
-function setup() {
+function setup(mode = 'local', flow = '') {
   const nodes = new Map(['account-actions', 'device-scope', 'content', 'notice'].map(k => [k, new Element('div')]));
-  const calls = [];
+  const calls = [], navigations = [], timers = new Map();
+  let now = Date.now(), timerId = 0;
+  class Clock extends Date { static now() { return now; } }
   const context = vm.createContext({
-    document: {body: {dataset: {mode: 'local'}}, getElementById: key => nodes.get(key),
+    document: {body: {dataset: {mode}}, getElementById: key => nodes.get(key),
       createElement: tag => new Element(tag), querySelector: () => null}, window: {},
-    location: {assign() {}}, history: {pushState() {}}, Date, URLSearchParams, AbortSignal,
-    setTimeout, clearTimeout,
+    location: {assign(url) { navigations.push(url); }, search: '?view=connect&flow=' + flow}, history: {pushState() {}}, Date: Clock, URLSearchParams, AbortSignal,
+    setTimeout: (fn, delay) => { const id = ++timerId; timers.set(id, {fn, delay}); return id; },
+    clearTimeout: id => timers.delete(id),
     fetch: (url, options) => new Promise(resolve => calls.push({url, options,
       answer: body => resolve({ok:true, json: async () => body})})),
   });
   vm.runInContext(readFileSync(new URL('../spireagent/console/identity.js', import.meta.url), 'utf8'), context);
-  return {ui: context.window.SpireIdentity, nodes, calls};
+  return {ui: context.window.SpireIdentity, nodes, calls, navigations, timers,
+    now: () => now, advance: ms => {now += ms;},
+    fireTimer() {
+      const [id, {fn, delay}] = timers.entries().next().value;
+      timers.delete(id); now += delay; return fn();
+    },
+  };
 }
 const person = (subject = 'one') => ({status: 'signed_in', csrf_token: 'csrf',
   principal: {subject, email: subject + '@example.test'}, devices: [{device_id: 'pc', name: 'Laptop'}]});
+
+const flatten = element => [element.textContent || '', ...(element.children || []).map(flatten)].join(' ');
+const descendants = element => [element, ...(element.children || []).flatMap(descendants)];
+async function connectionPage(facts) {
+  const env = setup('cloud', 'a'.repeat(32));
+  const initial = env.ui.refresh(true); env.calls.shift().answer(person('current')); await initial;
+  const rendering = env.ui.renderConnect();
+  env.calls.shift().answer({status: 'pending', purpose: 'connect_existing_device', device_id: 'pc',
+    device_name: 'Laptop', user_code: 'ABCDEFGH', approval_allowed: false, ...facts});
+  return {...env, page: await rendering};
+}
+
+test('different account explains existing profile ownership and offers a real sign-out path', async () => {
+  const {page, calls, navigations} = await connectionPage({approval_block_reason: 'different_account'});
+  assert.match(flatten(page), /current@example.test/);
+  assert.match(flatten(page), /原绑定账号重新连接/);
+  assert.match(flatten(page), /沿用已有设备上传凭据/);
+  assert.match(flatten(page), /即使是管理员/);
+  assert.match(flatten(page), /切回刚才的工作台标签页/);
+  assert.equal(descendants(page).some(n => n.textContent === '确认是我的连接，批准接入'), false);
+  assert.match(flatten(page), /另一账号的工作台配置/);
+  assert.doesNotMatch(flatten(page), /另一账号的电脑/);
+  await descendants(page).find(n => n.textContent === '退出并更换登录账号').onclick();
+  assert.deepEqual(navigations, ['/cdn-cgi/access/logout']);
+  assert.equal(calls.length, 0);
+  assert.equal(descendants(page).find(n => n.textContent === '查看当前账号的电脑').href, '?view=devices');
+});
+
+test('specific connection blocks do not invite permission bypass or invent an owner email', async () => {
+  for (const [reason,phrase] of [['device_disabled','授权已停用'], ['proof_changed','旧凭据'],
+    ['device_quota_reached','电脑名额已用完'], ['expired','连接请求已过期'],
+    ['flow_invalidated','连接请求已失效']]) {
+    const {page} = await connectionPage({approval_block_reason: reason});
+    assert.match(flatten(page), new RegExp(phrase));
+    assert.equal(descendants(page).some(n => n.textContent === '确认是我的连接，批准接入'), false);
+    assert.equal(descendants(page).some(n => n.textContent === '退出并更换登录账号'), false);
+  }
+});
+
+test('legacy Hub boolean remains compatible without guessing a specific block', async () => {
+  const {page} = await connectionPage({});
+  assert.match(flatten(page), /请先核对是否使用原绑定账号/);
+  assert.doesNotMatch(flatten(page), /当前登录邮箱不是/);
+  for (const extra of [{}, {approval_block_reason: null}]) {
+    const allowed = await connectionPage({approval_allowed: true, ...extra});
+    assert.ok(descendants(allowed.page).some(n => n.textContent === '确认是我的连接，批准接入'));
+  }
+});
+
+test('local and cloud account pages explain profiles instead of unique physical computers', async () => {
+  const meaning = /每条登记对应一个账号的工作台配置；同一台电脑可以有多条登记，修改名称不会合并账号或历史记录/;
+  for (const mode of ['local', 'cloud']) {
+    const env = setup(mode);
+    const loading = env.ui.refresh(true);
+    env.calls.shift().answer(mode === 'local' ? {status: 'signed_out', hub_configured: true} : person());
+    await loading;
+    const page = env.ui.renderDevices();
+    assert.match(flatten(page), meaning);
+    if (mode === 'local') {
+      assert.ok(descendants(page).some(n => n.textContent === '连接名称'));
+      assert.ok(descendants(page).some(n => n.textContent === '登录并连接本机'));
+    }
+  }
+  const {page} = await connectionPage({approval_allowed: true});
+  assert.match(flatten(page), meaning);
+  assert.match(flatten(page), /重新连接已有工作台配置/);
+});
 
 test('account logout rejects an already in-flight identity response and retains local scope', async () => {
   const {ui, nodes, calls} = setup();
   const initial = ui.refresh(true); calls.shift().answer(person()); await initial;
   const pending = ui.refresh(true), old = calls.shift();
-  const logout = nodes.get('account-actions').children.find(x => x.tag === 'button');
+  const logout = nodes.get('account-actions').children.find(x => x.textContent === '退出网页账号');
   const exiting = logout.onclick();
   assert.equal(nodes.get('account-actions').children.some(x => x.textContent === 'one@example.test'), false);
   old.answer(person()); await pending;
@@ -42,6 +118,116 @@ test('account logout rejects an already in-flight identity response and retains 
   await exiting;
   assert.equal(ui.isLocal(), true);
   assert.match(ui.context(), /anonymous/);
+});
+
+const pendingIdentity = env => ({status: 'signed_out', hub_configured: true, csrf_token: 'csrf',
+  flow: {flow_id: 'a'.repeat(32), expires_at: env.now() / 1000 + 60,
+    user_code: 'ABCDEFGH', approval_url: 'https://example.test/app/?view=connect'}});
+
+test('reopened local flow resumes one approval poll and observes the approved account', async () => {
+  const env = setup();
+  const facts = pendingIdentity(env);
+  const initial = env.ui.refresh(true); env.calls.shift().answer(facts); await initial;
+  env.ui.renderDevices(); env.ui.renderDevices();
+  const refresh = env.ui.refresh(true); env.calls.shift().answer(facts); await refresh;
+  assert.equal(env.timers.size, 1);
+  const polling = env.fireTimer();
+  assert.equal(env.calls[0].url, '/api/identity/poll');
+  assert.equal(env.calls[0].options.headers['X-CSRF-Token'], 'csrf');
+  const manual = descendants(env.ui.renderDevices()).find(n => n.textContent === '检查绑定结果');
+  await manual.onclick();
+  assert.equal(env.calls.length, 1, 'manual checking shares the in-flight poll');
+  env.calls.shift().answer({status: 'approved'}); await settled();
+  assert.equal(env.calls[0].url, '/api/identity');
+  env.calls.shift().answer(person()); await polling;
+  assert.match(flatten(env.nodes.get('account-actions')), /one@example.test/);
+  assert.match(env.nodes.get('notice').textContent, /登录与设备绑定完成/);
+  assert.equal(env.ui.isLocal(), false);
+  assert.equal(env.timers.size, 0);
+});
+
+test('approved polling waits for an older identity read then obtains fresh signed-in state', async () => {
+  const env = setup(), facts = pendingIdentity(env);
+  const initial = env.ui.refresh(true); env.calls.shift().answer(facts); await initial;
+  const polling = env.fireTimer(), pollCall = env.calls.shift();
+  const oldRefresh = env.ui.refresh(true), oldRead = env.calls.shift();
+  pollCall.answer({status: 'approved'}); await settled();
+  assert.equal(env.calls.length, 0);
+  oldRead.answer(facts); await oldRefresh; await settled();
+  assert.equal(env.calls[0].url, '/api/identity');
+  env.calls.shift().answer(person()); await polling;
+  assert.match(flatten(env.nodes.get('account-actions')), /one@example.test/);
+  assert.equal(env.timers.size, 0);
+});
+
+test('pending approval polling ends at expiry and does not restart a terminal or failed flow', async () => {
+  for (const terminal of ['denied', 'expired', 'unavailable']) {
+    const env = setup(), facts = pendingIdentity(env);
+    const initial = env.ui.refresh(true); env.calls.shift().answer(facts); await initial;
+    const polling = env.fireTimer();
+    env.calls.shift().answer(terminal === 'unavailable' ? {error: 'network_down'} : {status: terminal});
+    await settled();
+    if (terminal !== 'unavailable') env.calls.shift().answer(facts);
+    await polling;
+    const refresh = env.ui.refresh(true); env.calls.shift().answer(facts); await refresh;
+    assert.equal(env.timers.size, 0, 'a stale status refresh cannot restart a completed/failed flow');
+    if (terminal === 'unavailable') {
+      const manual = descendants(env.ui.renderDevices()).find(n => n.textContent === '检查绑定结果');
+      const retry = manual.onclick(); env.calls.shift().answer({status: 'pending'}); await retry;
+      assert.equal(env.timers.size, 1, 'explicit check can resume after a network failure');
+    }
+  }
+  const env = setup(), facts = pendingIdentity(env);
+  facts.flow.expires_at = env.now() / 1000 + 4;
+  const initial = env.ui.refresh(true); env.calls.shift().answer(facts); await initial;
+  const poll = env.fireTimer(); env.calls.shift().answer({status: 'pending'}); await poll;
+  assert.equal(env.timers.size, 1);
+  await env.fireTimer();
+  assert.equal(env.calls.length, 0, 'expiry does not send another poll');
+  assert.equal(env.timers.size, 0);
+  const reload = env.ui.refresh(true); env.calls.shift().answer(facts); await reload;
+  assert.equal(env.timers.size, 0);
+});
+
+test('logout cancels pending approval and ignores late approved or failed responses', async () => {
+  for (const result of [{status: 'approved'}, {error: 'network_down'}]) {
+    const env = setup(), facts = {...pendingIdentity(env), ...person()};
+    const initial = env.ui.refresh(true); env.calls.shift().answer(facts); await initial;
+    const polling = env.fireTimer(), pollCall = env.calls.shift();
+    const exiting = descendants(env.nodes.get('account-actions')).find(n => n.textContent === '退出网页账号').onclick();
+    assert.equal(env.calls[0].url, '/api/identity/logout');
+    pollCall.answer(result); await polling;
+    assert.equal(env.calls.length, 1, 'late approval cannot refresh or relogin the account');
+    env.calls.shift().answer({remote_revoked: true}); await settled();
+    env.calls.shift().answer({status: 'signed_out', csrf_token: 'csrf'}); await exiting;
+    assert.equal(env.timers.size, 0);
+    assert.match(env.ui.context(), /anonymous/);
+    assert.doesNotMatch(env.nodes.get('notice').textContent, /登录与设备绑定完成|network_down/);
+  }
+});
+
+test('logout cancels a timer before it sends and cloud pages never poll local identity', async () => {
+  const env = setup();
+  const initial = env.ui.refresh(true);
+  env.calls.shift().answer({...pendingIdentity(env), ...person()}); await initial;
+  assert.equal(env.timers.size, 1);
+  const exiting = descendants(env.nodes.get('account-actions')).find(n => n.textContent === '退出网页账号').onclick();
+  assert.equal(env.timers.size, 0);
+  env.calls.shift().answer({remote_revoked: true}); await settled();
+  env.calls.shift().answer({status: 'signed_out', csrf_token: 'csrf'}); await exiting;
+  assert.equal(env.calls.length, 0);
+  const cloud = setup('cloud');
+  const loading = cloud.ui.refresh(true);
+  cloud.calls.shift().answer({...pendingIdentity(cloud), ...person()}); await loading;
+  assert.equal(cloud.timers.size, 0);
+});
+
+test('a refreshed identity without a pending flow cancels its scheduled poll', async () => {
+  const env = setup();
+  const initial = env.ui.refresh(true); env.calls.shift().answer(pendingIdentity(env)); await initial;
+  assert.equal(env.timers.size, 1);
+  const refresh = env.ui.refresh(true); env.calls.shift().answer({status: 'signed_out', csrf_token: 'csrf'}); await refresh;
+  assert.equal(env.timers.size, 0);
 });
 
 test('device selection changes request scope and invalidates prior response context', async () => {
@@ -181,7 +367,7 @@ test('bound member continues into recording setup without the old configuration 
   const flatten = element => [element.textContent || '', ...(element.children || []).map(flatten)].join(' ');
   assert.match(flatten(page), /确认日常录制授权/);
   assert.doesNotMatch(flatten(page), /领取活动配置/);
-  assert.equal(page.children.find(item => item.textContent === '继续录制与上传 →')?.href,
+  assert.equal(page.children.find(item => item.textContent === '打开真人采集 →')?.href,
     '?view=campaigns');
 });
 

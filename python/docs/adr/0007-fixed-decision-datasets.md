@@ -2,6 +2,9 @@
 
 Status: accepted and implemented. Bounded service, data-transfer and member UI qualification
 passed; see [closeout evidence](../evidence/DECISION_DATASETS_CLOSEOUT_2026-09-15.md).
+The later [ADR-0008](0008-selected-decision-unions.md) extends selected dataset union and
+verification reuse, and supersedes this ADR's latest-100 profile display limit. Historical
+qualification does not transfer to those later changes.
 
 ## Context
 

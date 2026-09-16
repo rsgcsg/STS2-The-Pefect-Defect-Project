@@ -18,6 +18,7 @@ window.SpireProject = (() => {
     "collection-overview",
     "datasets",
     "games",
+    "evaluations",
   ]);
   let current = null;
   let account = null;
@@ -85,6 +86,8 @@ window.SpireProject = (() => {
     verified: "文件校验完成",
     quarantined: "已接收，隔离待审",
     pending: "服务处理中",
+    running: "正在处理",
+    queued: "等待处理",
     completed: "操作已完成",
     unknown: "结果未知",
     ready_to_load: "可请求加载",
@@ -93,6 +96,12 @@ window.SpireProject = (() => {
     shadow: "Shadow 只评分",
     one_step: "执行一个决策",
     auto: "自动决策",
+    backend: "运行硬件与依赖",
+    runtime_package: "模型运行器",
+    public_contract: "模型接口",
+    policy_identity: "模型组合身份",
+    training_ready: "训练产物清单",
+    checkpoint_sidecar: "模型文件说明",
   };
   const show = (value) =>
     labels[value] ||
@@ -212,11 +221,17 @@ window.SpireProject = (() => {
         "命令可能仍在执行。请查看当前状态；不要重复命令，可交还人类或停止。",
       previous_operation_requires_recovery:
         "上一操作结果未确认，请先交还人类或停止。",
+      runtime_connector_binding_required: "这份旧运行记录缺少游戏连接绑定。请结束后重新加载模型。",
+      connector_identity_unavailable: "暂时无法核对游戏连接，请检查游戏和 Mod 状态。",
       model_readiness_blocked: "模型加载条件未满足，请查看逐项兼容性检查。",
+      runtime_upgrade_required_for_model_control: "当前模型运行器需更新后才能开始测试；暂停和结束仍可使用。",
+      runtime_game_mismatch: "模型运行器连接的不是当前游戏，请重新加载模型。",
+      runtime_recovery_epoch_mismatch: "你已暂停或结束测试，这条旧操作已取消。",
       request_unknown: "请求结果尚未确认，请先刷新状态。不会自动重发操作。",
       request_unavailable: "暂时无法读取服务，请刷新重试。",
       absolute_game_directory_required: "请填写这台电脑上的游戏安装目录完整路径。",
       default_collection_fields_required: "请填写名称、录制说明和授权说明。",
+      minimum_two_decision_datasets_required: "请选择至少两个决策数据集后再合并。",
     };
     return (
       known[error?.message] ||
@@ -259,7 +274,8 @@ window.SpireProject = (() => {
     }
     if (response.status === 401 || response.status === 403)
       throw new Error("authentication_required");
-    if (!response.ok || value?.error)
+    const flowDiagnostic = !mutation && path === member("collection-flow") && value?.schema === "stpd/local-collection-flow-v1";
+    if (!response.ok || (value?.error && !flowDiagnostic))
       throw new Error(value?.error || "request_unavailable");
     if (!value || typeof value !== "object" || Array.isArray(value))
       throw new Error("request_unavailable");
@@ -1016,7 +1032,7 @@ window.SpireProject = (() => {
   }
   async function gamesPage(ctx) {
     const data = await request(ctx, member("games"));
-    const box = panel("对局与片段", `最近 ${data.profile_limit} 份获共享授权的录制。待整理 ${data.pending_profiles}，整理失败 ${data.failed_profiles}。上传次数不等于独立局数。`);
+    const box = panel("对局与片段", `已整理 ${data.profiled_recordings ?? "未知"} / ${data.shared_recordings ?? "未知"} 份共享录制。待整理 ${data.pending_profiles ?? "未知"}，整理失败 ${data.failed_profiles ?? "未知"}。上传次数不等于独立局数；跨录制只按已证明身份归并。`);
     box.append(table(["局身份", "完整性", "胜负", "录入 / 接受", "上传来源数"], (data.items || []).map(r => [r.run_id, r.coverage_status || (r.complete ? "完整" : "不完整"), r.outcome === "win" ? "胜利" : r.outcome === "loss" ? "失败" : "未知", `${r.canonical} / ${r.accepted}`, r.uploads.length])));
     for (const failed of data.failures || []) {
       box.append(el("p", `整理失败：${failed.error}`), command(ctx, `retry-profile-${failed.id}`, "重试此整理任务", async () => {
@@ -1028,34 +1044,36 @@ window.SpireProject = (() => {
   }
   async function decisionDatasets(ctx) {
     const box = panel("建立固定版本数据集", "默认保留可靠决策，允许不完整局和不同环境身份。整包损坏不能跳过校验；失败决策仍保留在报告中。");
-    box.dataset.projectEditor = "decision-dataset";
+    const form = el("div", null, "project-form");
+    form.dataset.projectEditor = "decision-dataset";
+    box.append(form);
     const draft = drafts.get("decision-dataset") || {name: "人类决策数据集", uploads: [], complete: false, wins: false, filters: {}};
-    const name = input(box, "数据集名称", "dataset-name", draft.name);
-    const complete = input(box, "仅完整局（默认关闭）", "complete-only", draft.complete, "checkbox");
-    const noFailures = input(box, "仅无真实记录失败的局（默认关闭）", "no-failures", draft.noFailures, "checkbox");
-    const wins = input(box, "仅已确认胜利（未知结果不算胜利）", "wins-only", draft.wins, "checkbox");
+    const name = input(form, "数据集名称", "dataset-name", draft.name);
     const advanced = el("details");
-    advanced.append(el("summary", "可选筛选"));
+    advanced.append(el("summary", "筛选条件（默认保留所有合格决策）"));
     advanced.dataset.preserve = "decision-dataset-filters";
-    const fields = {};
+    const complete = input(advanced, "仅完整局", "complete-only", draft.complete, "checkbox");
+    const noFailures = input(advanced, "仅无真实记录失败的局", "no-failures", draft.noFailures, "checkbox");
+    const wins = input(advanced, "仅已确认胜利", "wins-only", draft.wins, "checkbox");
+    const filterFields = {};
     for (const [key, title] of [["game_version", "游戏版本"], ["connector_version", "连接器版本"], ["annotator_version", "采集器版本"], ["character", "角色"], ["difficulty", "难度"], ["family", "动作类别"], ["surface", "界面"], ["decision_kind", "决策类型"], ["environment_identity", "精确环境身份"]]) {
-      fields[key] = input(advanced, `${title}（留空不限，多个值用逗号分隔）`, key, (draft.filters[key] || []).join(","));
+      filterFields[key] = input(advanced, `${title}（留空不限，多个值用逗号分隔）`, key, (draft.filters[key] || []).join(","));
     }
-    box.append(advanced);
+    form.append(advanced);
     function save() {
       draft.name = name.value;
       draft.complete = complete.checked;
       draft.wins = wins.checked;
       draft.noFailures = noFailures.checked;
       draft.filters = {};
-      for (const [key, field] of Object.entries(fields)) {
+      for (const [key, field] of Object.entries(filterFields)) {
         const values = field.value.split(",").map(v => v.trim()).filter(Boolean);
         if (values.length) draft.filters[key] = key === "difficulty" ? values.map(Number) : values;
       }
       drafts.set("decision-dataset", draft);
     }
-    for (const field of [name, complete, wins, noFailures, ...Object.values(fields)]) field.onchange = save;
-    for (const field of [name, ...Object.values(fields)]) field.oninput = save;
+    for (const field of [name, complete, wins, noFailures, ...Object.values(filterFields)]) field.onchange = save;
+    for (const field of [name, ...Object.values(filterFields)]) field.oninput = save;
     const listing = await request(ctx, project(`collections?limit=25&offset=${offsets.get("dataset-sources") || 0}`));
     const selection = new Set(draft.uploads);
     for (const item of listing.items || []) {
@@ -1077,15 +1095,21 @@ window.SpireProject = (() => {
       await reload(ctx);
     }));
     const jobs = await request(ctx, member("datasets"));
-    const history = panel("预览与生成记录", "后台处理，可离开页面。刷新查看状态。每次生成都是固定产物；新上传不自动加入。");
+    const history = panel("正在处理与最近结果", "后台处理，可离开页面；状态自动刷新。修改筛选时保留输入。生成后数据集固定，不随新上传改变。");
     for (const job of jobs.items || []) {
       const row = panel(job.request.name, `${show(job.state)} · ${job.request.preview_id ? "生成数据集" : "预览"}`);
+      if (job.progress) {
+        const phaseNames = {checking_access: "核对权限", reading_sources: "读取来源", verifying_sources: "校验并整理", loading_selected_datasets: "读取已选数据", union_selected_decisions: "合并与去重", publishing_dataset: "保存固定数据集", completed: "已完成"};
+        row.append(fields([["当前阶段", phaseNames[job.progress.phase] || job.progress.phase],
+          ["完成来源", `${count(job.progress.completed)} / ${count(job.progress.total)}`],
+          ["已用时间", `${Number(job.progress.elapsed_seconds || 0).toFixed(1)} 秒`]]));
+      }
       if (job.error) row.append(el("p", `原因：${job.error}。可核对来源后重新预览。`, "banner"));
       if (job.state === "failed") row.append(command(ctx, `retry-dataset-${job.id}`, "重试此任务", async () => {
         await request(ctx, member(`datasets/${job.id}/retry`), {}); await reload(ctx);
       }));
       if (job.result) {
-        row.append(facts([["保留决策", job.result.selected ?? job.result.records],
+        row.append(fields([["保留决策", job.result.selected ?? job.result.records],
           ["切分状态", job.result.split_status], ["去除精确重复决策", job.result.exact_duplicate_decisions ?? "见产物报告"]]));
         if (job.result.selected_facets) {
           const categories = panel("保留数据的分类", "未知单独保留；下次筛选可使用这里显示的类别值。");
@@ -1099,7 +1123,8 @@ window.SpireProject = (() => {
         }
         if (job.state === "completed" && !job.request.preview_id) {
           row.append(command(ctx, `build-${job.id}`, "按此预览生成固定数据集", async () => {
-            await request(ctx, member("datasets"), {name: job.request.name, uploads: job.request.uploads,
+            await request(ctx, member("datasets"), {name: job.request.name,
+              ...(job.request.datasets ? {datasets: job.request.datasets} : {uploads: job.request.uploads}),
               rules: job.request.rules, preview_id: job.id});
             await reload(ctx);
           }));
@@ -1112,9 +1137,26 @@ window.SpireProject = (() => {
     box.append(history);
     const catalog = await request(ctx, project(`datasets?limit=25&offset=${offsets.get("dataset-catalog") || 0}`));
     const published = panel("项目已发布数据集", "所有获授权成员可查看，包括原有严格 Full-Run 数据集。具体契约和切分状态见产物详情。");
+    const mergeSet = new Set(drafts.get("merge-datasets") || []);
     for (const item of catalog.items || []) {
-      if (hex(item.artifact_id)) published.append(link(item.artifact_id, route("datasets", item.artifact_id)));
+      if (!hex(item.artifact_id)) continue;
+      const row = el("div", null, "project-actions");
+      const choice = input(row, "选择合并", `merge-${item.artifact_id}`, mergeSet.has(item.artifact_id), "checkbox");
+      choice.onchange = () => {
+        if (choice.checked) mergeSet.add(item.artifact_id); else mergeSet.delete(item.artifact_id);
+        drafts.set("merge-datasets", [...mergeSet].sort());
+      };
+      row.append(link(item.parameters?.name || item.artifact_id.slice(0, 12), route("datasets", item.artifact_id)));
+      published.append(row);
     }
+    published.append(command(ctx, "preview-dataset-merge", "合并选中数据集 · 先预览", async () => {
+      if (mergeSet.size < 2) throw new Error("minimum_two_decision_datasets_required");
+      await request(ctx, member("datasets"), {name: "合并决策数据集", datasets: [...mergeSet].sort(),
+        rules: {schema: "stpd/decision-selection-v1", complete_only: false, wins_only: false,
+          no_failures_only: false, filters: {}, seed: 0}, preview_id: null});
+      await reload(ctx);
+    }));
+    published.append(el("p", "只合并各数据集已选中的决策，自动去除精确重复并重新按真实局分组切分；原数据集保留。旧 Full-Run 契约不支持此合并时会明确说明。", "small muted"));
     published.append(pager(ctx, "dataset-catalog", catalog));
     box.append(published);
     return box;
@@ -1443,39 +1485,21 @@ window.SpireProject = (() => {
       (prepared.delivery_selected === true && prepared.delivery_status === "running") }));
     return box;
   }
-  function consentForm(ctx, record, owned) {
+  function consentForm(ctx, record) {
     const form = el("div", null, "project-form");
-    form.dataset.projectEditor = "campaign";
-    const name = `campaign:${record.template_id}`, draft = drafts.get(name) || {};
-    const device = select(form, "登记电脑", "device_id",
-      owned.map((item) => [item.device_id, item.name || item.device_id]),
-      owned.some((item) => item.device_id === draft.device_id) ? draft.device_id : owned[0].device_id);
-    const origin = input(form, "确认本次授权范围内的操作来自真人", "human_origin_attested", draft.human_origin_attested, "checkbox");
-    const upload = input(form, "授权上传本次授权范围内的新录制", "upload_authorized", draft.upload_authorized, "checkbox");
-    const sharing = input(form, "授权项目成员访问这些录制数据", "project_sharing_authorized", draft.project_sharing_authorized, "checkbox");
-    const read = () => ({ device_id: device.value, human_origin_attested: origin.checked,
-      upload_authorized: upload.checked, project_sharing_authorized: sharing.checked });
-    for (const control of [device, origin, upload, sharing])
-      control.oninput = control.onchange = () => drafts.set(name, read());
-    form.append(command(ctx, `enroll-${record.template_id}`, "确认授权并继续", async () => {
-      const value = read();
-      if (!value.human_origin_attested || !value.upload_authorized || !value.project_sharing_authorized)
-        throw new Error("explicit_campaign_consent_required");
-      const result = await request(ctx, member(`campaigns/${record.template_id}/enroll`), {
-        device_id: value.device_id, consent: { human_origin_attested: true,
-          upload_authorized: true, project_sharing_authorized: true },
-      });
-      if (!hex(result.enrollment_id, 32) || result.device_id !== value.device_id ||
-          result.template_id !== record.template_id) throw new Error("enrollment_identity_mismatch");
-      if (!live(ctx)) return;
-      drafts.delete(name);
-      note(ctx, "授权已保存。继续准备本机配置；游戏录制与后台上传仍需分别检查。");
+    form.append(el("p", "采集游戏中可见的局面、你的选择及实际后继，上传到项目 Hub 的存储，供获授权的项目成员查看和研究。只涉及此后新录制；不会上传历史文件。", "project-consent"));
+    form.append(command(ctx, `enroll-${record.template_id}`, "同意并开启采集", async () => {
+      const result = await request(ctx, member("collection-flow/consent"), { template_id: record.template_id, accepted: true });
+      if (result.schema !== "stpd/local-collection-flow-v1" || result.enrollment?.device_id !== ctx.identity.device_id ||
+          result.enrollment?.template_id !== record.template_id) throw new Error("enrollment_identity_mismatch");
+      note(ctx, "授权已保存，正在准备这台电脑。后续无需重复确认。");
+      await request(ctx, member("collection-flow/prepare"), {});
       await reload(ctx);
     }, { primary: true }));
     return form;
   }
   function defaultAdministration(ctx, settings) {
-    const box = panel("日常录制默认设置", "新成员使用此设置确认授权。保存后，已有授权与录制身份保留；新版本需要重新确认。");
+    const box = panel("日常录制默认设置", "新成员使用此设置确认授权。保存后，已有授权与录制身份保留；采集用途或共享范围改变才需要重新确认；普通软件升级不会要求重新授权。");
     if (local) {
       const target = cloudLink("campaigns");
       if (target) box.append(link("打开云端默认设置 ↗", target));
@@ -1499,262 +1523,92 @@ window.SpireProject = (() => {
       drafts.delete("collection-settings"); note(ctx, "日常默认设置已保存。成员仍须亲自确认授权。");
       await reload(ctx);
     }, { primary: true }));
-    box.append(form, el("p", "专题活动可在下方高级选项中发布，或将已发布模板设为日常默认。", "small muted"));
+    box.append(form, el("p", "此设置只定义统一采集的用途和共享范围。角色、胜负与游戏版本在数据集内筛选。", "small muted"));
     return box;
   }
-  async function collectionFlow(ctx, compact = false, observedStatus = null) {
-    const box = panel(compact ? "录制与上传" : "日常录制", local ?
-      "这台电脑的设置单独保存。完成一次设置后，日常录制只需保持工作台运行并在游戏中按 Recorder Close。" :
-      "在采集电脑的本机工作台完成录制设置。云端查看已收到的上传与已保存授权。");
-    const status = local ? observedStatus || await request(ctx, member("collection-status")) : null;
-    if (local && (status.schema !== "stpd/local-collection-status-v1" || (status.device_id || null) !== (ctx.identity.device_id || null)))
-      throw new Error("collection_status_identity_mismatch");
-    const settings = local ? status.settings : await request(ctx, member("collection-settings"));
-    if (settings?.schema !== "stpd/collection-settings-v1") throw new Error("unsupported_collection_settings_schema");
-    const previous = local ? null : await request(ctx, member("campaigns/enrollments?limit=25&offset=0"));
-    const items = status?.items || previous?.items || [];
-    const active = local && items.find(item => item.device_id === ctx.identity.device_id &&
-      hex(item.enrollment_id, 32) && item.preparation?.delivery_selected === true);
-    const record = active ? {template_id: active.template_id, template: active.template} : settings.default;
-    const owned = (ctx.identity.devices || []).filter(device => device.ownership === "owned_by_you" && device.active === true &&
-      (!local || device.device_id === ctx.identity.device_id));
-    const enrolled = active || (record && items.find(item => hex(item.enrollment_id, 32) &&
-      item.template_id === record.template_id && item.device_id === ctx.identity.device_id));
-    if (!record) box.append(empty("日常录制尚未开放", "管理员设置日常录制说明后，即可确认授权；无需先创建专题活动。"));
-    else {
-      box.append(el("h3", record.template?.name || "日常录制"), el("p", record.template?.description, "muted"));
-      if (active && active.template_id !== settings.default?.template_id)
-        box.append(el("p", "当前使用已绑定的录制配置。新的日常默认设置不会改写这份授权或已有记录。", "small muted"));
-      if (local) {
-        const stages = el("ol", null, "collection-stages");
-        for (const [title, detail] of [
-          ["账号与电脑", owned.length ? "已登录并绑定当前电脑" : "需要绑定当前电脑"],
-          ["录制授权", enrolled ? "授权已保存" : "等待本人确认"],
-          ["本机配置", enrolled?.preparation?.configuration_saved === true ? "已保存" : !enrolled || enrolled.preparation?.configuration_saved === false ? "尚未准备" : "状态未取得"],
-          ["游戏连接", nativeLabels[enrolled?.preparation?.native_binding?.status] || "尚未检查"],
-          ["后台上传", enrolled?.preparation?.delivery_status === "running" && enrolled?.preparation?.delivery_selected === true ? "正在运行" : "尚未确认运行"],
-        ]) { const step = el("li"); step.append(el("strong", title), el("span", detail)); stages.append(step); }
-        box.append(stages);
+  const collectionSteps = {
+    consent: "确认采集说明", prepare_collection: "准备这台电脑", prepare: "准备这台电脑",
+    bind_recording_root: "绑定游戏目录", close_game: "请先退出游戏", restart_game: "请重新打开游戏",
+    launch_game: "请打开游戏", stop_workbench: "请停止工作台以完成上传暂停", review_runtime: "请查看游戏连接异常",
+    cold_launch: "请重新打开游戏", verify_loaded: "请重新打开游戏并启用 Mod",
+    activate_collection: "准备上传", activate_delivery: "准备上传", resume_upload: "自动上传已暂停",
+    review_upload_preference: "上传已停止，请检查本机设置",
+    ready: "可以开始采集", none: "可以开始采集", reconnect: "请登录并连接这台电脑",
+    contact_admin: "等待管理员设置采集说明",
+  };
+  async function collectionFlow(ctx, compact = false) {
+    if (!local) {
+      const box = panel("真人采集在游戏电脑进行", "云端可以查看已上传数据；不需要绑定电脑就能使用数据集和研究功能。");
+      box.append(link("查看采集数据", route("collections")));
+      if (ctx.identity.principal?.role === "admin") {
+        const settings = await request(ctx, member("collection-settings"));
+        const details = el("details"); details.dataset.preserve = "default-collection";
+        details.append(el("summary", "采集说明设置"), defaultAdministration(ctx, settings)); box.append(details);
       }
-      if (!compact) {
-        if (!owned.length) box.append(link("登录并绑定采集电脑", route("devices")));
-        else if (!enrolled && local) {
-          box.append(el("p", record.template?.consent_text, "project-consent"), consentForm(ctx, record, owned));
-        }
-        if (!local) {
-          const saved = items.filter(item => item.template_id === record.template_id);
-          if (saved.length) box.append(fields(saved.map(item => ["已授权电脑", item.device_id])));
-          box.append(el("p", "请回到采集电脑的工作台确认授权并完成本机设置；云端不会启动本机录制或上传。", "banner"));
-        }
-        if (enrolled && local) {
-          box.append(preparationResult(enrolled.preparation || {}));
-          box.append(preparationActions(ctx, enrolled, enrolled.preparation || {}));
-        }
-        if (local && items.some(item => item.template_id !== record.template_id))
-          box.append(el("p", "这台电脑还有其他已保存授权，可在下方高级选项中查看；它们不会被新的默认设置覆盖。", "small muted"));
+      return box;
+    }
+    const status = await request(ctx, member("collection-flow"));
+    if (status.schema !== "stpd/local-collection-flow-v1") throw new Error("unsupported_collection_flow_schema");
+    const box = panel("真人采集", "在游戏里开始与结束录制。本机保留原始文件，后台封包并上传。");
+    if (status.device_id !== ctx.identity.device_id || (status.enrollment && status.enrollment.device_id !== ctx.identity.device_id)) throw new Error("collection_status_identity_mismatch");
+    const enrollment = status.enrollment, preparation = enrollment?.preparation || {}, native = preparation.native_binding || {};
+    const ready = native.bound === true && status.upload?.enabled === true && status.upload?.process === "running";
+    box.append(badge(ready ? "已准备好" : collectionSteps[status.next_action] || "需要完成本机准备", ready ? "good" : "wait"));
+    if (enrollment) {
+      box.append(el("p", "授权已保存 · " + (enrollment.template?.name || "真人采集"), "small muted"));
+      if (status.default && enrollment.template_id !== status.default.template_id)
+        box.append(el("p", "继续使用当前已绑定设置；新的默认说明不会改写这份授权和已有记录。", "small muted"));
+    }
+    if (ready) box.append(el("p", "打开游戏 → 真人采集 → 开始录制。完成后点“结束录制”，这里自动处理上传。"));
+    if (status.error) box.append(el("p", failure({message: status.error}), "banner error"));
+    if (status.consent_required && status.default) {
+      box.append(el("p", status.default.template?.consent_text, "project-consent"));
+      if (!compact) box.append(consentForm(ctx, status.default));
+    } else if (enrollment && !compact) {
+      if (!ready && status.next_action !== "resume_upload" && status.stage !== "unavailable" && preparation.status !== "unavailable") {
+        const form = el("div", null, "project-form"); form.dataset.projectEditor = "collection-prepare";
+        const needsDirectory = !native.game_directory && native.bound !== true;
+        const directory = needsDirectory ? input(form, "游戏安装目录（未自动找到时填写）", "game_directory", drafts.get("game_directory") || "") : null;
+        if (directory) directory.oninput = () => drafts.set("game_directory", directory.value);
+        form.append(command(ctx, "prepare-collection", "准备 / 继续检查", async () => {
+          const path = directory?.value.trim();
+          if (path && !/^(?:\/|[A-Za-z]:[\\/])/.test(path)) throw new Error("absolute_game_directory_required");
+          await request(ctx, member("collection-flow/prepare"), directory?.value.trim() ? {game_directory: directory.value.trim()} : {});
+          await reload(ctx);
+        }, {primary: true})); box.append(form);
       }
+      const details = el("details"); details.dataset.preserve = "collection-details";
+      details.append(el("summary", "授权、版本与准备详情"), el("p", enrollment.template?.consent_text || "授权说明保存在该电脑的登记记录中。"), preparationResult(preparation), technical(status)); box.append(details);
+    } else if (!status.consent_required) box.append(link("登录并连接电脑", route("devices")));
+    if (!compact && (enrollment || status.upload?.enabled === true || status.upload?.process === "running")) {
+      const enabled = status.upload?.enabled === true || status.upload?.process === "running";
+      box.append(command(ctx, "toggle-collection-upload", enabled ? "暂停自动上传" : "恢复自动上传", async () => {
+        await request(ctx, member("collection-flow/upload"), {enabled: !enabled});
+        note(ctx, enabled ? "已请求暂停。正在上传的文件以最终回执为准；本地文件保留。" : "正在检查并恢复上传。");
+        await reload(ctx);
+      }));
+      box.append(el("p", enabled ? "自动上传已开启。关闭网页或退出个人登录不会暂停后台；暂停请使用上面的按钮。" : "自动上传已暂停，重新打开工作台也保持暂停。已有云端数据不会被删除。", "small muted"));
     }
-    if (compact) box.append(link(local ? "继续本机设置 →" : "查看录制设置 →", route("campaigns")));
-    else {
-      box.append(el("p", "授权声明与本机设置不是已验证的真人来源或完整局证据。云端验收以每份上传的收据为准。", "small muted"),
-        link("查看采集记录与上传收据 →", route("collections")));
-      if (ctx.identity.principal.role === "admin") box.append(defaultAdministration(ctx, settings));
-    }
-    box.append(el("p", `设置观测时间：${when(status?.observed_at || settings.observed_at)}`, "small muted"));
+    if (!signedIn(ctx)) box.append(el("p", "个人登录已退出或云端暂不可用。本机暂停上传仍可操作；登录后可恢复和查看项目数据。", "small muted"));
+    if (compact) box.append(link("打开真人采集", route("campaigns")));
+    else box.append(link("查看录制和上传进度", route("collections")));
     return box;
   }
   async function campaigns(ctx) {
     const box = el("div", null, "project-page");
-    let observedStatus = null;
-    try {
-      if (local) observedStatus = await request(ctx, member("collection-status"));
-      box.append(await collectionFlow(ctx, false, observedStatus));
-    } catch (error) {
-      observedStatus = null;
-      box.append(empty("录制设置暂不可用", failure(error)), link("账号与电脑", route("devices")));
-    }
-    const advanced = el("details", null, "collection-advanced");
-    advanced.dataset.preserve = "collection-advanced";
-    advanced.append(el("summary", "高级选项：专题活动与已有授权"));
-    try { advanced.append(await activityBrowser(ctx, observedStatus)); }
-    catch (error) { advanced.append(empty("专题活动暂不可用", failure(error))); }
-    box.append(advanced);
-    return box;
-  }
-  async function activityBrowser(ctx, observedStatus) {
-    const box = el("div", null, "project-page");
-    box.append(
-      el(
-        "p",
-        "专题活动按需使用。日常录制可直接使用上方默认设置；每项授权和本机配置单独保存。",
-        "banner good",
-      ),
-    );
-    const data = await request(
-      ctx,
-      member(`campaigns?limit=25&offset=${offsets.get("campaigns") || 0}`),
-    );
-    let prior = [];
-    try {
-      const previous = await request(
-        ctx,
-        member(
-          `campaigns/enrollments?limit=25&offset=${offsets.get("enrollments") || 0}`,
-        ),
-      );
-      prior = previous.items || [];
-      const history = panel(
-        "已保存的录制授权",
-        "这些声明保存在 Hub。重新打开工作台后，可以继续准备当前电脑。",
-      );
-      if (!(previous.items || []).length)
-        history.append(el("p", "尚无有效电脑的活动登记。", "muted"));
-      for (const enrollment of previous.items || []) {
-        if (!hex(enrollment.enrollment_id, 32) || !hex(enrollment.template_id))
-          continue;
-        if (local && enrollment.device_id !== ctx.identity.device_id) continue;
-        const result = panel(
-          enrollment.template?.name || "已登记活动",
-          enrollment.campaign_id,
-        );
-        result.append(
-          fields([
-            ["登记电脑", enrollment.device_id],
-            ["声明时间", when(enrollment.declared_at)],
-          ]),
-        );
-        if (local) {
-          try {
-            const saved = observedStatus?.items?.find(item => item.enrollment_id === enrollment.enrollment_id &&
-              item.device_id === enrollment.device_id && item.template_id === enrollment.template_id);
-            const prepared = saved?.preparation || await request(ctx, member(`campaigns/${enrollment.enrollment_id}/preparation`));
-            result.append(preparationResult(prepared), preparationActions(ctx, enrollment, prepared));
-          } catch (error) { result.append(empty("本机设置暂不可用", failure(error))); }
-        } else
-          result.append(
-            el(
-              "p",
-              "在这台采集电脑的工作台打开“录制与上传”，继续本机设置。",
-              "muted",
-            ),
-          );
-        history.append(result);
-      }
-      history.append(pager(ctx, "enrollments", previous));
-      box.append(history);
-    } catch (error) {
-      box.append(empty("历史活动登记暂不可用", failure(error)));
-    }
-    const allOwned = (ctx.identity.devices || []).filter(
-      (device) => device.ownership === "owned_by_you" && device.active === true,
-    );
-    const owned = local
-      ? allOwned.filter((device) => device.device_id === ctx.identity.device_id)
-      : allOwned;
-    if (!owned.length) {
-      const notice = panel(
-        "先绑定采集电脑",
-        local
-          ? "这台电脑尚未绑定到当前账号，或上传授权已停用。"
-          : "当前账号没有有效的自有电脑。请在采集电脑的工作台发起绑定。",
-      );
-      notice.append(link("账号与电脑", route("devices")));
-      box.append(notice);
-    }
-    if (!(data.templates || []).length)
-      box.append(
-        empty(
-          "暂无发布的采集活动",
-          "需要专题采集时，管理员可发布活动模板；日常录制无需单独建立活动。",
-        ),
-      );
-    for (const record of data.templates || []) {
-      const template = record.template;
-      if (!template || !hex(record.template_id)) continue;
-      const row = panel(template.name, template.description);
-      row.append(
-        badge(`版本 ${count(template.version)}`),
-        fields([
-          ["软件要求", template.schema === "stpd/collection-activity-v2" ? "在采集电脑检查当前游戏与工具" : template.game?.version],
-          ["共享范围", "项目成员"],
-          ["活动 ID", template.activity_id],
-        ]),
-        el("p", template.consent_text, "project-consent"),
-      );
-      row.append(
-        technical(
-          {
-            template_id: record.template_id,
-            platform_source_revision: template.platform_source_revision,
-            evidence_source_revision: template.evidence_source_revision,
-            tool_release_id: template.tool_release_id,
-            game: template.game,
-            mod: template.mod,
-          },
-          "核对活动要求的精确软件身份",
-        ),
-      );
-      const available = owned.filter(device => !prior.some(item =>
-        item.template_id === record.template_id && item.device_id === device.device_id));
-      if (available.length) row.append(consentForm(ctx, record, available));
-      if (!local && ctx.identity.principal.role === "admin")
-        row.append(command(ctx, `default-${record.template_id}`, "设为日常默认", async () => {
-          await request(ctx, "/app/api/admin/collection-settings", { template_id: record.template_id });
-          note(ctx, "默认模板已更新。已有授权与录制身份保留。");
-          await reload(ctx);
-        }));
-      box.append(row);
-    }
-    box.append(pager(ctx, "campaigns", data));
-    if (ctx.identity.principal.role === "admin") {
-      const help = panel(
-        "管理员发布活动",
-        "活动模板不可变，修改必须发布递增版本。软件身份与授权文本需要经过项目审核。",
-      );
-      if (local) {
-        const target = cloudLink("campaigns");
-        if (target) help.append(link("打开云端活动管理 ↗", target));
-      } else {
-        const form = el("div", null, "project-form");
-        form.dataset.projectEditor = "campaign-template";
-        const label = el("label", "经审核的活动模板 JSON", "form-field"),
-          text = el("textarea");
-        text.name = "campaign-template";
-        text.rows = 10;
-        text.value = drafts.get("campaign-template") || "";
-        text.oninput = () => drafts.set("campaign-template", text.value);
-        label.append(text);
-        form.append(label);
-        form.append(
-          command(ctx, "publish-campaign", "核对后发布模板", async () => {
-            let value;
-            try {
-              value = JSON.parse(text.value);
-            } catch {
-              throw new Error("invalid_template_json");
-            }
-            if (value?.schema !== "stpd/collection-activity-v1")
-              throw new Error("invalid_template_schema");
-            if (
-              !window.confirm(
-                `发布活动“${value.name || "未命名"}”版本 ${value.version}？发布后不能改写该版本。`,
-              )
-            )
-              return;
-            await request(ctx, "/app/api/admin/campaigns", value);
-            if (!live(ctx)) return;
-            drafts.delete("campaign-template");
-            note(ctx, "活动模板已发布。");
-            await reload(ctx);
-          }),
-        );
-        help.append(form);
-      }
-      box.append(help);
-    }
+    box.append(await collectionFlow(ctx));
+    // Existing records and enrollment IDs remain readable; daily users do not
+    // publish/select activities or create another collection configuration.
     return box;
   }
   function readinessPanel(value) {
+    const reasons = {
+      s1_requires_cuda_bf16_backend: "此模型需要支持 BF16 的 NVIDIA 显卡；当前电脑暂不支持。",
+      install_locked_ml_and_l2_dependencies: "尚未安装模型运行依赖，请按该模型的安装说明准备。",
+      backend_probe_unavailable: "暂时无法检查运行硬件，请查看诊断。",
+      runtime_package_missing_or_drifted: "需要准备固定模型运行器；“准备并加载”会处理。",
+      cuda_bf16_available: "显卡满足此模型要求。",
+    };
     const box = panel(
       "加载前检查",
       "文件、代码和软件包检查与游戏实时兼容性是不同关卡。",
@@ -1771,7 +1625,7 @@ window.SpireProject = (() => {
         Object.entries(value.checks || {}).map(([key, item]) => [
           show(key),
           item.status === "pass" ? "通过" : show(item.status),
-          item.code || "—",
+          reasons[item.code] || item.code || "—",
         ]),
       ),
     );
@@ -1837,7 +1691,8 @@ window.SpireProject = (() => {
         ),
       );
     const actions = el("div", null, "project-actions");
-    const recoverable = data.loaded === true || Boolean(data.previous_session);
+    const recoverable = data.loaded === true || Boolean(data.previous_session) ||
+      (operation?.status === "pending" && ["start", "prepare-and-load"].includes(operation.action));
     const changing = operation?.status === "pending";
     const safe =
       data.loaded === true &&
@@ -1851,27 +1706,21 @@ window.SpireProject = (() => {
         "runtime_exited",
         "stopped",
       ].includes(data.status);
+    const advanced = el("details"); advanced.dataset.preserve = "model-advanced"; advanced.append(el("summary", "高级测试方式"));
     for (const [action, label] of [
-      ["shadow", "Shadow · 只评分"],
+      ["shadow", "只评分（不操作）"],
       ["one_step", "执行一个决策"],
-      ["auto", "开始自动决策"],
-      ["human", "交还人类控制"],
-      ["stop", "停止并封装评估"],
+      ["auto", "开始测试"],
+      ["human", "暂停并接管"],
+      ["stop", "结束测试"],
     ]) {
       const recovery = ["human", "stop"].includes(action);
-      actions.append(
+      (["shadow", "one_step"].includes(action) ? advanced : actions).append(
         command(
           ctx,
           `model-command-${action}`,
           label,
           async () => {
-            if (
-              ["one_step", "auto"].includes(action) &&
-              !window.confirm(
-                "此操作会在本机真实游戏中执行模型决策。请确认已退出真人采集，并准备好随时交还人类控制。",
-              )
-            )
-              return;
             await request(ctx, "/api/local-models/command", { action });
             note(
               ctx,
@@ -1886,7 +1735,7 @@ window.SpireProject = (() => {
         ),
       );
     }
-    box.append(actions);
+    box.append(el("p", "开始测试会先结束真人录制，再由模型操作游戏。随时点“暂停并接管”；结束后生成独立实战记录。", "small muted"), actions, advanced);
     if (runtime)
       box.append(
         technical(
@@ -1954,27 +1803,8 @@ window.SpireProject = (() => {
         ),
       );
     const preparations = panel(
-      "准备审核过的运行组合",
-      "安装固定版本 Runtime 不会启动游戏；每次加载默认保持人类控制。",
-    );
-    preparations.append(
-      command(
-        ctx,
-        "install-runtime",
-        "安装 / 校验固定 Runtime",
-        async () => {
-          await request(ctx, "/api/local-models/install-runtime", {});
-          note(ctx, "Runtime 安装请求已接收。请查看实际操作状态。");
-          await reload(ctx);
-        },
-        {
-          disabled:
-            !state ||
-            state.loaded === true ||
-            state.operation?.status === "pending" ||
-            ["command_unknown", "recovery_required"].includes(state.status),
-        },
-      ),
+      "选择本机模型",
+      "准备并加载会检查兼容性和固定运行环境。加载完成后由你开始测试，也可在游戏内操作。",
     );
     if (!catalog)
       preparations.append(
@@ -1991,7 +1821,7 @@ window.SpireProject = (() => {
       if (!selectionId(item.selection_id)) continue;
       const row = panel(
         item.label || item.selection_id,
-        "模型、适配器、输入表示与环境契约作为一个审核过的选择。",
+      "模型、适配器、输入表示与环境契约作为一个审核过的选择。",
       );
       row.append(
         technical({
@@ -2024,9 +1854,9 @@ window.SpireProject = (() => {
         command(
           ctx,
           `model-start-${item.selection_id}`,
-          "加载 · 保持人类控制",
+          "准备并加载",
           async () => {
-            await request(ctx, "/api/local-models/start", {
+            await request(ctx, "/api/local-models/prepare", {
               selection_id: item.selection_id,
             });
             note(
@@ -2041,13 +1871,13 @@ window.SpireProject = (() => {
               !state ||
               state.loaded === true ||
               state.operation?.status === "pending" ||
-              ["command_unknown", "recovery_required"].includes(state.status) ||
-              report?.status !== "ready_to_load",
+              ["command_unknown", "recovery_required"].includes(state.status),
           },
         ),
       );
-      row.append(actions);
-      if (report) row.append(readinessPanel(report));
+      const checks = el("details"); checks.dataset.preserve = `model-checks-${item.selection_id}`; checks.append(el("summary", "查看加载条件"), actions.firstChild);
+      row.append(actions, checks);
+      if (report) checks.append(readinessPanel(report));
       preparations.append(row);
     }
     box.append(preparations);
@@ -2130,7 +1960,42 @@ window.SpireProject = (() => {
       );
       for (const value of catalog.evaluations)
         evaluations.append(evaluationPanel(value));
+      evaluations.append(link("查看与分享实战记录", route("evaluations")));
       box.append(evaluations);
+    }
+    return box;
+  }
+  async function evaluationWithSharing(ctx, value) {
+    const box = evaluationPanel(value);
+    if (!signedIn(ctx) || !hex(value.evaluation_id)) return box;
+    box.append(el("p", "分享会把这次模型测试的状态、动作和模型身份上传到项目，供已授权成员查看；不会作为真人采集数据。", "small muted"));
+    box.append(command(ctx, `share-evaluation-${value.evaluation_id}`, "分享本次实战记录", async () => {
+      await request(ctx, "/api/local-models/share", {evaluation_id: value.evaluation_id, authorized: true});
+      note(ctx, "分享请求已接收。以项目回执为准；未知结果不会自动重发。");
+      await reload(ctx);
+    }, {disabled: value.evidence_verification !== "pass"}));
+    return box;
+  }
+  async function evaluations(ctx) {
+    const box = el("div", null, "project-page");
+    if (local) {
+      if (signedIn(ctx)) {
+        const sharing = await request(ctx, "/api/local-models/share-status");
+        if (sharing.status !== "idle") box.append(panel("实战记录分享", `${show(sharing.status)}${sharing.error ? " · " + failure({message: sharing.error}) : ""}`), technical(sharing));
+      }
+      const catalog = await request(ctx, "/api/local-models");
+      const history = panel("本机实战记录", "结束测试后生成记录。是否完整、胜负和技术失败分别显示。");
+      for (const value of catalog.evaluations || []) history.append(await evaluationWithSharing(ctx, value));
+      if (!catalog.evaluations?.length) history.append(empty("还没有实战记录", "在模型实战中选择已支持模型，开始并结束一次测试。"));
+      history.append(link("打开模型实战", route("local-models"))); box.append(history);
+    }
+    if (signedIn(ctx)) {
+      const data = await request(ctx, project("models?limit=100&offset=0"));
+      const records = (data.items || []).filter(item => ["live_evaluation", "offline_evaluation"].includes(item.kind));
+      const shared = panel("项目评估结果", "离线拟合与真实游戏能力分开查看。这里只统计当前目录页，不把未测量结果计为成功。");
+      for (const item of records) shared.append(link(`${item.kind === "live_evaluation" ? "游戏实战" : "离线评估"} · ${item.artifact_id.slice(0, 12)}`, route("models", item.artifact_id)));
+      if (!records.length) shared.append(empty("当前页没有已发布评估", "未完成或未发布的评估不会显示为通过。"));
+      box.append(shared);
     }
     return box;
   }
@@ -2155,7 +2020,7 @@ window.SpireProject = (() => {
         scope: scope(),
       };
       current = ctx;
-      if (view !== "local-models" && !signedIn(ctx)) return authNotice(ctx);
+      if (!(["local-models", "evaluations"].includes(view) || (local && ["campaigns", "collection-overview"].includes(view))) && !signedIn(ctx)) return authNotice(ctx);
       try {
         return await {
           members: admin,
@@ -2164,6 +2029,7 @@ window.SpireProject = (() => {
           games: gamesPage,
           downloads: exportsPage,
           research,
+          evaluations,
           "local-models": localModels,
           campaigns,
           "collection-overview": (ctx) => collectionFlow(ctx, true),

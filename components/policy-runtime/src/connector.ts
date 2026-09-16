@@ -33,12 +33,15 @@ export class ConnectorPolicyClient implements PolicyConnector {
     this.options = {
       productId: options.productId ?? "sts2-policy-runtime",
       productName: options.productName ?? "STS2 Policy Runtime",
-      productVersion: options.productVersion ?? "0.1.0-rc.3",
+      productVersion: options.productVersion ?? "0.1.0-rc.4",
       clientInstanceId: options.clientInstanceId
     };
   }
 
-  async capabilities() {
+  async capabilities(options?: { fresh?: boolean }) {
+    // A control precondition must observe the actual endpoint. Never overwrite
+    // an admitted/cached identity merely because that endpoint was replaced.
+    if (options?.fresh) return (await this.client.capabilities()).data;
     if (!this.capabilitiesValue) this.capabilitiesValue = (await this.client.capabilities()).data;
     return this.capabilitiesValue;
   }

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sts2.policy-runtime/environment-1",
+  "title": "Read-only current Connector identity and Runtime recovery fence",
+  "description": "GET /v2/environment uses the Runtime's actual Connector endpoint without ticking or acquiring control. Clients bind run_id, runtime_instance_id and recovery_epoch before preparation and retain them through mode/tick. Human/Stop advance the epoch immediately, invalidating older commands from every interface.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "runtime_instance_id", "recovery_epoch"],
+  "properties": {
+    "schema": { "const": "sts2.policy-runtime/environment-1" },
+    "run_id": { "type": "string", "minLength": 1 },
+    "runtime_instance_id": { "type": "string", "minLength": 1 },
+    "recovery_epoch": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }
+  }
+}
