@@ -1027,3 +1027,49 @@ test("preview removal and restore are explicit and never delete artifacts", asyn
   await action(await h.render(),`visibility-${uploadId}`).onclick();
   assert.deepEqual(body(post(h.calls)[1]),{ids:[uploadId],archived:false});
 });
+
+
+test("returning from a dataset detail opens the library after preview browsing", async () => {
+  const h = setup({view:"datasets"});
+  const navigations = [];
+  h.ui.navigate = (...args) => navigations.push(args);
+  await action(await h.render(), "dataset-tab-previews").onclick();
+  assert.equal(action(await h.render(), "dataset-tab-previews").attributes["aria-current"], "page");
+  h.ui.openDatasetLibrary();
+  assert.deepEqual(navigations, [["datasets"]]);
+  assert.equal(action(await h.render(), "dataset-tab-library").attributes["aria-current"], "page");
+});
+
+for (const change of ["account", "page"]) test(`delayed dataset download ignores changed ${change}`, async () => {
+  let resolve;
+  const waiting = new Promise(done => { resolve = done; });
+  const item = {artifact_id:id("a"),metadata:{},payloads:[{role:"records"}]};
+  const h = setup({view:"datasets",handler:(url, options) => options.method === "POST" ? waiting : {items:[item]}});
+  const navigations = [];
+  h.ui.navigate = (...args) => navigations.push(args);
+  const pending = action(await h.render(), `download-dataset-${id("a")}`).onclick();
+  if (change === "account") h.account(owner("member", "another"));
+  else h.navigate("statistics");
+  await h.render();
+  resolve({export_id:id("b")});
+  await pending;
+  assert.deepEqual(navigations, []);
+});
+
+test("dataset download rejects an invalid export identity before navigating", async () => {
+  const item = {artifact_id:id("a"),metadata:{},payloads:[{role:"records"}]};
+  const h = setup({view:"datasets",handler:(url, options) => options.method === "POST" ? {export_id:"invalid"} : {items:[item]}});
+  const navigations = [];
+  h.ui.navigate = (...args) => navigations.push(args);
+  await action(await h.render(), `download-dataset-${id("a")}`).onclick();
+  assert.deepEqual(navigations, []);
+  assert.match(text(h.notice), /invalid_export_identity/);
+});
+
+
+test("dataset without file inventory does not silently export only a manifest", async () => {
+  const h = setup({view:"datasets",handler:() => ({items:[{artifact_id:id("a"),metadata:{}}]})});
+  await action(await h.render(), `download-dataset-${id("a")}`).onclick();
+  assert.equal(post(h.calls).length, 0);
+  assert.match(text(h.notice), /尚未提供文件清单/);
+});

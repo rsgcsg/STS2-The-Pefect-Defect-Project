@@ -232,6 +232,7 @@ window.SpireProject = (() => {
       request_unavailable: "暂时无法读取服务，请刷新重试。",
       absolute_game_directory_required: "请填写这台电脑上的游戏安装目录完整路径。",
       default_collection_fields_required: "请填写名称、录制说明和授权说明。",
+      dataset_payload_inventory_missing: "此数据集尚未提供文件清单，请打开详情核对后下载。",
       minimum_two_decision_datasets_required: "请选择至少两个决策数据集后再合并。",
     };
     return (
@@ -1096,7 +1097,10 @@ window.SpireProject = (() => {
       const title = el("div"); title.append(link(datasetName(item), route("datasets", item.artifact_id)), el("span", item.artifact_id.slice(0,12), "subtext mono"));
       const actions = el("div", null, "project-actions");
       actions.append(command(ctx, `download-dataset-${item.artifact_id}`, "下载", async () => {
-        const result = await request(ctx, member("exports"), {schema:"stpd/project-export-request-v1", collections:[], artifacts:[{artifact_id:item.artifact_id, roles:(item.payloads || []).map(p => p.role)}]});
+        if (!item.payloads?.length) throw new Error("dataset_payload_inventory_missing");
+        const result = await request(ctx, member("exports"), {schema:"stpd/project-export-request-v1", collections:[], artifacts:[{artifact_id:item.artifact_id, roles:item.payloads.map(p => p.role)}]});
+        if (!live(ctx)) return;
+        if (!hex(result.export_id)) throw new Error("invalid_export_identity");
         exportId = result.export_id;
         if (window.SpireProject.navigate) window.SpireProject.navigate("downloads", exportId);
       }));
@@ -2084,6 +2088,10 @@ window.SpireProject = (() => {
   }
   return {
     reload: async () => {},
+    openDatasetLibrary() {
+      drafts.set("dataset-tab", "library");
+      if (window.SpireProject.navigate) window.SpireProject.navigate("datasets");
+    },
     async render(view, identity) {
       if (!supported.has(view)) throw new Error("unsupported_project_view");
       const nextAccount = `${identity?.principal?.subject || "anonymous"}:${identity?.principal?.role || ""}:${identity?.status || ""}`;
