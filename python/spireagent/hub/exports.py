@@ -135,7 +135,11 @@ class ExportService:
                 identity,
                 {"files": len(files), "bytes": size},
             )
-        return self.read(principal, identity)
+        # This request already authorized every selected source above. Re-reading
+        # their entire immutable lineage here doubles remote work and can time out
+        # after the inventory was durably created. Every later read/payload request
+        # still performs fresh access checks, including explicit source withdrawal.
+        return self._inventory(principal, identity)
 
     def _inventory(self, principal: ConsolePrincipal, export_id: str) -> dict[str, Any]:
         self.collections.require_member(principal)

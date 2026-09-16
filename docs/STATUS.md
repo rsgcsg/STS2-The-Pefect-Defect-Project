@@ -2,8 +2,11 @@
 
 ## Dataset library — application update deployed
 
-Workbench source is `fedbed097e30fb78bf0e86efff560fd8b1263c99`; Hub source is
-`3a4b8997d06011952a2248902c67f64f531dbcff`. Dataset selection has recording-date
+Workbench source is `fedbed097e30fb78bf0e86efff560fd8b1263c99`. The accepted
+20-source dataset baseline used Hub source
+`3a4b8997d06011952a2248902c67f64f531dbcff`; the subsequent
+[export follow-up](evidence/DATASET_EXPORT_2026-09-17.md) records the download correction.
+The release integration receipt pins the active deployed source and image. Dataset selection has recording-date
 filters, whole-result selection, responsive navigation and direct accepted-project-data
 access. Runtime process provenance is merged without weakening game/artifact identity;
 batch workers have a separate bounded budget, one-pass coverage and incremental hash/file processing. See [selection evidence](evidence/DATASET_SELECTION_2026-09-16.md).
