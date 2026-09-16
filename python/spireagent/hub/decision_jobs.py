@@ -393,7 +393,7 @@ class DecisionJobs:
                 )
                 result = {"artifact_id": manifest.artifact_id, **manifest.parameters.value()}
             if request["expected"] is None and not merging:
-                coverage = {}
+                coverage: dict[str, Any] = {}
                 for source in sources:
                     payload = source.payload("archive")
                     raw = b"".join(self.service.store.read_payload(payload))

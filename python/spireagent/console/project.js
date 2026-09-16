@@ -1053,7 +1053,7 @@ window.SpireProject = (() => {
   }
   const datasetTab = () => drafts.get("dataset-tab") || "library";
   const splitLabel = value => value === "assigned" ? "已按局分组切分" :
-    value === "insufficient_independent_groups" ? "独立局数不足，尚未切分" : "查看切分条件";
+    value === "insufficient_independent_run_components" ? "独立局数不足，尚未切分" : "查看切分条件";
   const datasetName = item => item.display_name || item.parameters?.name || `数据集 ${item.artifact_id.slice(0, 12)}`;
   function datasetTabs(ctx) {
     const nav = el("nav", null, "dataset-tabs");
