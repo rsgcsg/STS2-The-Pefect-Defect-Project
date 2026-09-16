@@ -19,9 +19,13 @@ from stpd.policy import installation
 
 
 @pytest.fixture
-def service(tmp_path):
+def service(tmp_path, monkeypatch):
     config = ProjectConfig(tmp_path, "", "", None, combination())
-    return LocalModelService(config)
+    result = LocalModelService(config)
+    # Synthetic native acceptance isolates the Runtime transport tests. The actual
+    # bridge and fail-closed handoff have their own wire-level regression suite.
+    monkeypatch.setattr(result.native_tasks, "prepare_model", lambda observed: {})
+    return result
 
 
 def finished(service):
@@ -234,7 +238,7 @@ def test_recovered_runtime_shutdown_requires_confirmation(
             },
         )
         recovery.setattr(local_models, "RuntimeClient", lambda *_: client)
-        service._recover("human")
+        service._recover("human", service.intent_generation)
     assert service.client is client and service.process is None
     if lost_stop:
         # A real recovered HTTP client loses its Stop response; no local Popen
@@ -340,14 +344,14 @@ def test_lost_tick_response_is_unknown_and_never_retried(service):
 
 def test_human_handoff_can_be_requested_while_tick_pending(service):
     started, release = threading.Event(), threading.Event()
+    calls = []
 
     class BlockingRuntime:
         def request(self, route, body=None):
+            calls.append((route, body))
             if route == "/tick":
                 started.set()
                 assert release.wait(timeout=3)
-            elif route == "/mode" and body == {"mode": "human"}:
-                release.set()
             return {"status": status()}
 
     service.client = BlockingRuntime()
@@ -355,10 +359,14 @@ def test_human_handoff_can_be_requested_while_tick_pending(service):
     service.command("one_step")
     assert started.wait(timeout=2)
     service.command("human")
+    # Recovery invalidates old intent immediately, but its effect follows the
+    # already-submitted tick rather than racing it over a second HTTP request.
+    assert ("/mode", {"mode": "human"}) not in calls
+    release.set()
     finished(service)
     for thread in service.threads:
         thread.join(timeout=2)
-    assert release.is_set()
+    assert [body for route, body in calls if route == "/mode"][-1] == {"mode": "human"}
 
 
 def test_restarted_service_does_not_guess_pid_or_activate(service):
@@ -424,6 +432,8 @@ def test_start_uses_fixed_command_human_and_rejects_foreign_attestation(service,
     assert command[-2:] == ["--mode", "human"]
     assert "--adapter-arg=tools/policy_adapter.py" in command
     assert "STPD_HUB_TOKEN" not in options["env"]
+    assert options["env"]["HF_HUB_OFFLINE"] == "1"
+    assert options["env"]["TRANSFORMERS_OFFLINE"] == "1"
     assert service.process.stopped
 
 
@@ -488,3 +498,202 @@ def test_identity_replacement_between_ui_poll_and_command_never_gets_post(servic
     service.command("auto")
     finished(service)
     assert all(body is None for _, body in requests)
+
+
+def test_prepare_and_load_does_not_install_when_backend_or_weights_blocked(service, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        service,
+        "readiness",
+        lambda _: {
+            "status": "blocked",
+            "checks": {
+                "runtime_package": {"status": "blocked"},
+                "backend": {"status": "blocked", "code": "no_cuda"},
+            },
+        },
+    )
+    monkeypatch.setattr(local_models, "install_runtime", lambda *args: calls.append(args))
+    service.prepare_and_load("s1-human-combat-v4")
+    assert finished(service)["error_code"] == "model_readiness_blocked"
+    assert calls == [] and service.process is None
+
+
+def test_prepare_and_load_installs_only_pinned_runtime_before_existing_human_start(
+    service, monkeypatch
+):
+    calls = []
+    monkeypatch.setattr(
+        service,
+        "readiness",
+        lambda _: {
+            "status": "blocked",
+            "checks": {
+                "runtime_package": {"status": "blocked"},
+                "public_contract": {"status": "blocked"},
+                "backend": {"status": "pass"},
+            },
+        },
+    )
+    monkeypatch.setattr(
+        local_models, "install_runtime", lambda *args: calls.append(("install", args))
+    )
+    monkeypatch.setattr(
+        service, "_start", lambda identity, intent: calls.append(("start", identity))
+    )
+    service.prepare_and_load("s1-human-combat-v4")
+    assert finished(service)["operation"]["status"] == "completed"
+    assert [kind for kind, _ in calls] == ["install", "start"]
+    assert calls[0][1][1] == service.registry()["runtime_package"]
+
+
+@pytest.mark.parametrize(
+    "error", ["recording_close_pending_or_failed", "native_task_command_unknown"]
+)
+def test_native_close_failure_never_requests_model_mode(service, runtime_http, monkeypatch, error):
+    client, _, requests = runtime_http
+    service.client = client
+    service.state.update(status="loaded", loaded=True)
+
+    def failed(observed):
+        raise BoundaryError("local_model", error)
+
+    monkeypatch.setattr(service.native_tasks, "prepare_model", failed)
+    service.command("auto")
+    result = finished(service)
+    assert result["operation"]["status"] == (
+        "unknown" if error == "native_task_command_unknown" else "failed"
+    )
+    assert all(body is None for _, body in requests)
+    service.command("human")  # manual recovery is independent of recording bridge
+    assert finished(service)["operation"]["status"] == "completed"
+    assert [body for _, body in requests if body] == [{"mode": "human"}]
+
+
+def test_finalization_is_background_and_verifies_exact_bytes_not_page_read(service, monkeypatch):
+    from agent_evaluation_fixture import evidence
+
+    directory, expected = evidence(service.directory / "agent-runs")
+    service.state.update(
+        startup=expected, selection_id="s1-human-combat-v4", loaded=True, status="loaded"
+    )
+    calls = []
+
+    class Finalized:
+        def request(self, route, body=None):
+            calls.append((route, body))
+            return {"status": {**status(), "lifecycle": "stopped"}}
+
+    service.client = Finalized()
+    service.status()
+    assert service.evaluations() == []
+    service.observe_once()
+    (report,) = service.evaluations()
+    assert report["evidence_verification"] == "pass"
+    assert report["run_id"] == directory.name and report["game_outcome"] == "not_measured"
+    assert service.client is None and service.state["status"] == "stopped"
+    service.observe_once()
+    assert len(service.evaluations()) == 1
+    assert all(route == "/status" and body is None for route, body in calls)
+
+
+def test_owned_process_exit_can_finalize_without_http_but_unowned_disconnect_cannot(service):
+    from agent_evaluation_fixture import evidence
+
+    _, expected = evidence(service.directory / "agent-runs")
+    service.state.update(
+        startup=expected, selection_id="s1-human-combat-v4", loaded=True, status="loaded"
+    )
+
+    class Unavailable:
+        def request(self, *args):
+            raise BoundaryError("local_model", "runtime_unavailable")
+
+    class Exited:
+        def poll(self):
+            return 0
+
+    service.client = Unavailable()
+    service.observe_once()
+    assert service.evaluations() == [] and service.client is not None
+    service.process = Exited()
+    service.observe_once()
+    assert service.state["status"] == "stopped"
+    assert service.evaluations()[0]["evidence_verification"] == "pass"
+
+
+@pytest.mark.parametrize("action", ["auto", "one_step", "shadow"])
+def test_human_cancels_old_intent_while_native_close_is_pending(service, monkeypatch, action):
+    entered, release = threading.Event(), threading.Event()
+    calls = []
+
+    class Runtime:
+        def request(self, route, body=None):
+            calls.append((route, body))
+            return {"status": status()}
+
+    def native_close(_):
+        entered.set()
+        assert release.wait(timeout=3)
+        return {"ready_for_model": True}
+
+    monkeypatch.setattr(service.native_tasks, "prepare_model", native_close)
+    service.client = Runtime()
+    service.state.update(status="loaded", loaded=True)
+    service.command(action)
+    assert entered.wait(timeout=2)
+    service.command("human")
+    assert finished(service)["operation"]["status"] == "completed"
+    release.set()
+    for thread in service.threads:
+        thread.join(timeout=2)
+    assert [(route, body) for route, body in calls if body is not None] == [
+        ("/mode", {"mode": "human"})]
+    assert service.state["runtime"]["mode"] == "human"
+
+
+def test_human_during_step_mode_response_prevents_late_tick(service):
+    entered, release = threading.Event(), threading.Event()
+    calls = []
+
+    class Runtime:
+        def request(self, route, body=None):
+            calls.append((route, body))
+            if body == {"mode": "one_step"}:
+                entered.set()
+                assert release.wait(timeout=3)
+            return {"status": status()}
+
+    service.client = Runtime()
+    service.state.update(status="loaded", loaded=True)
+    service.command("one_step")
+    assert entered.wait(timeout=2)
+    service.command("human")
+    release.set()
+    assert finished(service)["operation"]["status"] == "completed"
+    for thread in service.threads:
+        thread.join(timeout=2)
+    assert not any(route == "/tick" for route, _ in calls)
+    assert [body for route, body in calls if route == "/mode"] == [
+        {"mode": "one_step"}, {"mode": "human"}]
+
+
+def test_stop_while_loading_cancels_late_start_without_waiting_for_readiness(service, monkeypatch):
+    entered, release = threading.Event(), threading.Event()
+    calls = []
+
+    def readiness(_):
+        entered.set()
+        assert release.wait(timeout=3)
+        return {"status": "ready_to_load"}
+
+    monkeypatch.setattr(service, "readiness", readiness)
+    monkeypatch.setattr(local_models.subprocess, "Popen", lambda *a, **k: calls.append(a))
+    service.start("s1-human-combat-v4")
+    assert entered.wait(timeout=2)
+    service.command("stop")
+    assert finished(service)["status"] == "stopped"
+    release.set()
+    for thread in service.threads:
+        thread.join(timeout=2)
+    assert calls == [] and service.state["status"] == "stopped"

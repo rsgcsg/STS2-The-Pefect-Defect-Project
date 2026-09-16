@@ -33,6 +33,7 @@ from spireagent.policies import SUPPORTED_ADAPTERS, policy_support
 from spireagent.policy_files import _inside, _object_file
 from spireagent.workbench.developer import ROOT, ProjectConfig, atomic_json, endpoint
 from spireagent.workbench.hub_client import HubClient, NoRedirect
+from spireagent.workbench.native_tasks import NativeTasks
 from spireagent.workbench.runtime_install import install_runtime, validate_runtime_install
 
 SCHEMA = "stpd/local-models-v1"
@@ -124,11 +125,16 @@ class LocalModelService:
         self.root = ROOT
         self.directory = config.state_dir / "models"
         self.lock = threading.RLock()
+        self.control_send_lock = threading.Lock()
+        self.intent_generation = 0
         self.process: subprocess.Popen[bytes] | None = None
         self.client: RuntimeClient | None = None
         self.thread: threading.Thread | None = None
         self.threads: list[threading.Thread] = []
         self.closed = False
+        self.native_tasks = NativeTasks()
+        self.observer_stop = threading.Event()
+        self.observer: threading.Thread | None = None
         self.state: dict[str, Any] = {
             "schema": SCHEMA,
             "status": "idle",
@@ -395,14 +401,25 @@ class LocalModelService:
                             pending_runtime = self.client is not None or bool(
                                 self.state.get("previous_session")
                             )
+                            unknown = code in {
+                                "runtime_command_unknown", "native_task_command_unknown"
+                            }
+                            safe_precondition = code in {
+                                "native_task_unavailable", "native_task_game_identity_mismatch",
+                                "runtime_game_identity_required",
+                                "recording_close_pending_or_failed",
+                            }
                             self.state.update(
                                 status="command_unknown"
-                                if code == "runtime_command_unknown"
-                                else ("recovery_required" if pending_runtime else "failed"),
+                                if unknown
+                                else ("loaded" if safe_precondition and self.client is not None
+                                      else ("recovery_required" if pending_runtime else "failed")),
                                 error_code=code,
                             )
                         current["status"] = (
-                            "unknown" if code == "runtime_command_unknown" else "failed"
+                            "unknown" if code in {
+                                "runtime_command_unknown", "native_task_command_unknown"
+                            } else "failed"
                         )
                 finally:
                     with self.lock:
@@ -434,11 +451,76 @@ class LocalModelService:
         with self.lock:
             if self.process is not None and self.process.poll() is None:
                 raise BoundaryError("local_model", "runtime_already_running")
-        return self._begin("start", lambda: self._start(identity))
+            intent = self.intent_generation
+        return self._begin("start", lambda: self._start(identity, intent))
 
-    def _start(self, identity: str) -> None:
+    def prepare_and_load(self, identity: str) -> dict[str, Any]:
+        """Prepare a reviewed selection, then load in Human mode; never fetch model weights.
+
+        Only the existing bounded, hash-pinned Runtime installer is automatic.
+        Adapter/weights/backend requirements remain explicit owning readiness checks.
+        """
+        self.selection(identity)
+        with self.lock:
+            if self.client is not None or (
+                self.process is not None and self.process.poll() is None
+            ):
+                raise BoundaryError("local_model", "runtime_already_running")
+            intent = self.intent_generation
+
+        def prepare() -> None:
+            report = self.readiness(identity)
+            with self.lock:
+                self.state.update(
+                    selection_id=identity, readiness=report, preparation_stage="checking"
+                )
+            if any(
+                check["status"] != "pass"
+                for name, check in report["checks"].items()
+                if name not in {"runtime_package", "public_contract"}
+            ):
+                raise BoundaryError("local_model", "model_readiness_blocked")
+            if report["checks"].get("runtime_package", {}).get("status") != "pass":
+                with self.lock:
+                    if self.closed:
+                        raise BoundaryError("local_model", "service_closed")
+                    self.state["preparation_stage"] = "installing_runtime"
+                installed = install_runtime(
+                    self.directory, self.registry()["runtime_package"], self._connector_pin()
+                )
+                with self.lock:
+                    self.state["last_runtime_install"] = installed
+            with self.lock:
+                self._require_intent(intent)
+                self.state["preparation_stage"] = "loading"
+            self._start(identity, intent)
+            with self.lock:
+                self.state["preparation_stage"] = "ready"
+
+        return self._begin("prepare-and-load", prepare)
+
+    def _require_intent(self, intent: int) -> None:
+        with self.lock:
+            if self.closed or intent != self.intent_generation:
+                raise BoundaryError("local_model", "command_superseded")
+
+    def _send_control(
+        self, client: RuntimeClient, route: str, body: dict[str, Any], intent: int
+    ) -> dict[str, Any]:
+        # Recovery invalidates old intents immediately, then queues behind any
+        # submitted effect. This guarantees the final command returns control.
+        with self.control_send_lock:
+            self._require_intent(intent)
+            value = client.request(route, body)
+            self._require_intent(intent)
+            return value
+
+    def _start(self, identity: str, intent: int | None = None) -> None:
+        if intent is None:
+            intent = self.intent_generation
         report = self.readiness(identity)
         with self.lock:
+            self._require_intent(intent)
             self.state.update(selection_id=identity, readiness=report)
         if report["status"] != "ready_to_load":
             raise BoundaryError("local_model", "model_readiness_blocked")
@@ -472,6 +554,7 @@ class LocalModelService:
             "human",
         ]
         environment = dict(os.environ)
+        environment.update(HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1")
         for name in tuple(environment):
             if name.startswith(("STPD_HUB_", "AWS_", "MODAL_", "CLOUDFLARE_")) or name in {
                 "PYTHONPATH",
@@ -481,8 +564,7 @@ class LocalModelService:
                 environment.pop(name, None)
         self.directory.mkdir(parents=True, exist_ok=True)
         with self.lock:
-            if self.closed:
-                raise BoundaryError("local_model", "service_closed")
+            self._require_intent(intent)
             with (self.directory / "runtime.log").open("ab") as log:
                 process = subprocess.Popen(
                     command,
@@ -525,12 +607,14 @@ class LocalModelService:
             client = RuntimeClient(startup["address"], startup)
             runtime = client.request("/status")["status"]
             with self.lock:
+                self._require_intent(intent)
                 if self.closed:
                     raise BoundaryError("local_model", "service_closed")
                 self.client = client
                 self.state.update(
                     status="loaded", loaded=True, startup=startup, runtime=runtime, error_code=None
                 )
+            self.start_observer()
         except (queue.Empty, OSError, ValueError, TypeError, BoundaryError):
             process.terminate()
             try:
@@ -567,24 +651,51 @@ class LocalModelService:
         if action not in MODES | {"stop"}:
             raise BoundaryError("local_model", "unsupported_local_command")
         with self.lock:
+            recovery = action in {"human", "stop"}
+            if not recovery and self.thread is not None and self.thread.is_alive():
+                raise BoundaryError("local_model", "operation_in_progress")
             if self.client is None or not self.state["loaded"]:
-                if action in {"human", "stop"} and self.state.get("previous_session"):
-                    return self._begin(action, lambda: self._recover(action), recovery=True)
+                if recovery and self.state.get("previous_session"):
+                    self.intent_generation += 1
+                    intent = self.intent_generation
+                    return self._begin(
+                        action, lambda: self._recover(action, intent), recovery=True
+                    )
+                if recovery and self.thread is not None and self.thread.is_alive() and (
+                    (self.state.get("operation") or {}).get("action")
+                    in {"start", "prepare-and-load"}
+                ):
+                    self.intent_generation += 1
+                    intent = self.intent_generation
+                    return self._begin(
+                        action, lambda: self._cancel_loading(intent), recovery=True
+                    )
                 raise BoundaryError("local_model", "model_not_loaded")
+            self.intent_generation += 1
+            intent = self.intent_generation
+            client = self.client
 
         def execute() -> None:
-            client = self.client
             assert client is not None
+            self._require_intent(intent)
             # Observe exact instance before every mutation; never address a new
             # process that reused the same port after our owned process exited.
-            client.request("/status")
+            observation = client.request("/status")["status"]
+            if action in {"shadow", "one_step", "auto"}:
+                self._require_intent(intent)
+                self.native_tasks.prepare_model(observation)
+                # The native Close request cannot authorize a replacement Runtime.
+                client.request("/status")
             if action == "stop":
-                runtime = client.request("/stop", {})["status"]
+                runtime = self._send_control(client, "/stop", {}, intent)["status"]
             else:
-                runtime = client.request("/mode", {"mode": action})["status"]
+                runtime = self._send_control(client, "/mode", {"mode": action}, intent)["status"]
                 if action == "one_step":
-                    runtime = client.request("/tick", {"max_ticks": 1})["status"]
+                    runtime = self._send_control(
+                        client, "/tick", {"max_ticks": 1}, intent
+                    )["status"]
             with self.lock:
+                self._require_intent(intent)
                 if not self.closed and self.state["status"] != "stopped":
                     self.state.update(runtime=runtime, status="loaded", error_code=None)
             if action == "stop":
@@ -596,7 +707,14 @@ class LocalModelService:
 
         return self._begin(action, execute, recovery=action in {"human", "stop"})
 
-    def _recover(self, action: str) -> None:
+    def _cancel_loading(self, intent: int) -> None:
+        with self.control_send_lock, self.lock:
+            self._require_intent(intent)
+            self._stop_process()
+            self.client = None
+            self.state.update(status="stopped", loaded=False, error_code=None)
+
+    def _recover(self, action: str, intent: int) -> None:
         previous = self.state["previous_session"]
         startup = previous.get("startup")
         entry = self.selection(previous.get("selection_id", ""))
@@ -620,11 +738,12 @@ class LocalModelService:
         observed = client.request("/status")["status"]
         if observed["lifecycle"] == "running":
             observed = (
-                client.request("/stop", {})["status"]
+                self._send_control(client, "/stop", {}, intent)["status"]
                 if action == "stop"
-                else (client.request("/mode", {"mode": "human"})["status"])
+                else self._send_control(client, "/mode", {"mode": "human"}, intent)["status"]
             )
         with self.lock:
+            self._require_intent(intent)
             self.client = client if observed["lifecycle"] == "running" else None
             self.state.update(
                 selection_id=entry["id"],
@@ -637,6 +756,57 @@ class LocalModelService:
             )
         if self.client is None:
             self._evaluation_handoff()
+        else:
+            self.start_observer()
+
+    def start_observer(self) -> None:
+        """Observe owned runtime termination independently of page reads."""
+        with self.lock:
+            if self.closed or (self.observer is not None and self.observer.is_alive()):
+                return
+            self.observer_stop.clear()
+
+            def observe() -> None:
+                while not self.observer_stop.wait(0.5):
+                    self.observe_once()
+
+            self.observer = threading.Thread(target=observe, daemon=True)
+            self.observer.start()
+
+    def observe_once(self) -> None:
+        with self.lock:
+            client = self.client
+            if self.closed or client is None or (
+                self.thread is not None and self.thread.is_alive()
+            ):
+                return
+            owned_exited = self.process is not None and self.process.poll() is not None
+        try:
+            observed = None if owned_exited else client.request("/status")["status"]
+            if observed is not None and observed["lifecycle"] != "stopped":
+                return
+            with self.lock:
+                if self.client is not client or self.closed or (
+                    self.thread is not None and self.thread.is_alive()
+                ):
+                    return
+                self.state["runtime"] = observed
+                self.state["runtime_stop_observed"] = observed is not None
+                # Fence new commands until the already finalized run is projected.
+                # No /stop or gameplay request is issued by this observer.
+                self._stop_process()
+                self._evaluation_handoff()
+                if self.client is client:
+                    self.state.update(status="stopped", loaded=False)
+                    self.client = None
+                    self._save()
+        except (OSError, ValueError, KeyError, BoundaryError) as error:
+            with self.lock:
+                if self.client is client:
+                    self.state["observation_error"] = (
+                        error.code if isinstance(error, BoundaryError)
+                        else "runtime_finalization_unavailable"
+                    )
 
     def _stop_process(self) -> None:
         process = self.process
@@ -700,15 +870,18 @@ class LocalModelService:
             self.state["evaluation"] = report
 
     def close(self) -> None:
+        self.observer_stop.set()
         with self.lock:
             self.closed = True
+            self.intent_generation += 1
             client = self.client
         # Stop only the exact Runtime. A recovered client has no owned process
         # handle, so a lost reply cannot be turned into a confirmed shutdown.
         observed = None
         try:
             if client is not None:
-                observed = client.request("/stop", {})["status"]
+                with self.control_send_lock:
+                    observed = client.request("/stop", {})["status"]
         except BoundaryError:
             pass
         finally:
