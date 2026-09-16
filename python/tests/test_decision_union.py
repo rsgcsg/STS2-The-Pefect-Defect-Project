@@ -82,6 +82,7 @@ def test_union_rejects_duplicate_parent_and_conflicting_fact(tmp_path: Path) -> 
 def test_union_jobs_recheck_ancestor_permission_and_preview(tmp_path: Path) -> None:
     owner, upload, source, jobs = setup(tmp_path)
     a = selected(owner, source, SelectionRules())
+    owner.console_index.artifact_closure(owner.store, (a.artifact_id,))
     body = {"datasets": [a.artifact_id], "rules": SelectionRules().to_dict(),
             "preview_id": None, "name": "selected union"}
     job = jobs.create(MEMBER, body)

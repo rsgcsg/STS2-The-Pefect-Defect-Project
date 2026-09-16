@@ -194,16 +194,21 @@ def test_export_inventory_is_immutable_verified_and_member_only(
 
 
 @pytest.mark.parametrize("status", ["verified", "quarantined"])
-def test_raw_archive_requires_explicit_grant_revocable_after_export(
+def test_accepted_project_archive_needs_no_second_grant_but_withdrawal_applies(
     tmp_path: Path, status: str
 ) -> None:
     owner = service(tmp_path)
     exports = ExportService(owner)
     upload, manifest = received(owner, b"unmodified original archive", status=status)
     before = owner.operations.upload(upload)
-    assert exports.collections.collection_access([upload])[upload]["availability"] == "not_granted"
-    with pytest.raises(BoundaryError, match="collection_not_shared"):
-        exports.create(MEMBER, request(collections=[upload]))
+    available = exports.collections.collection_access([upload])[upload]["availability"]
+    if status == "verified":
+        assert available == "available"
+        assert exports.create(MEMBER, request(collections=[upload]))["files_count"] == 1
+    else:
+        assert available == "not_granted"
+        with pytest.raises(BoundaryError, match="collection_not_shared"):
+            exports.create(MEMBER, request(collections=[upload]))
     exports.collections.set_collection_access(
         upload, approved=True, evidence_ref="a" * 64, actor="owner"
     )
@@ -290,7 +295,7 @@ def test_received_projection_profiles_nested_decisions_without_dataset_admission
     assert owner.console_index.statistics(MEMBER)["dataset_profiles"]["sources"] == 0
 
 
-def test_dataset_sharing_requires_exact_received_ancestor_grant(tmp_path: Path) -> None:
+def test_project_dataset_needs_no_repeat_grant_and_honors_source_withdrawal(tmp_path: Path) -> None:
     owner = service(tmp_path)
     exports = ExportService(owner)
     upload, ancestor = received(owner, b"private archive")
@@ -312,8 +317,7 @@ def test_dataset_sharing_requires_exact_received_ancestor_grant(tmp_path: Path) 
     )
     owner.store.publish(dataset)
     selection = request(artifacts=[{"artifact_id": dataset.artifact_id, "roles": ["records"]}])
-    with pytest.raises(BoundaryError, match="source_sharing_not_established"):
-        exports.create(MEMBER, selection)
+    assert exports.create(MEMBER, selection)["files_count"] == 2
     exports.collections.set_collection_access(
         upload, approved=True, evidence_ref="f" * 64, actor="owner"
     )
@@ -328,10 +332,28 @@ def test_dataset_sharing_requires_exact_received_ancestor_grant(tmp_path: Path) 
     owner.store.publish(historical_source)
     historical = replace(dataset, parents=(Parent("source", historical_source.artifact_id),))
     owner.store.publish(historical)
-    with pytest.raises(BoundaryError, match="source_sharing_not_established"):
-        exports.create(
-            MEMBER, request(artifacts=[{"artifact_id": historical.artifact_id, "roles": []}])
-        )
+    assert exports.create(
+        MEMBER, request(artifacts=[{"artifact_id": historical.artifact_id, "roles": []}])
+    )["files_count"] == 1
+
+
+def test_previous_export_inventory_keeps_its_identity_and_current_access_checks(tmp_path: Path):
+    owner = service(tmp_path)
+    exports = ExportService(owner)
+    upload, _ = received(owner, b"original bytes")
+    current = exports.create(MEMBER, request(collections=[upload]))
+    assert current["policy"] == "stpd/project-sharing-v2"
+    previous = {k: v for k, v in current.items() if k not in {"export_id", "created_at"}}
+    previous["policy"] = "stpd/project-sharing-v1"
+    raw = json_bytes(previous)
+    identity = hashlib.sha256(raw).hexdigest()
+    with owner.operations.transaction() as db:
+        db.execute("INSERT INTO project_exports VALUES(?,?,?)", (identity, raw.decode(), 0))
+    assert exports.read(MEMBER, identity)["export_id"] == identity
+    exports.collections.set_collection_access(upload, approved=False,
+                                               evidence_ref="f" * 64, actor="owner")
+    with pytest.raises(BoundaryError, match="collection_not_shared"):
+        exports.read(MEMBER, identity)
 
 
 def test_collection_identity_and_stream_tamper_stay_fail_closed(tmp_path: Path) -> None:

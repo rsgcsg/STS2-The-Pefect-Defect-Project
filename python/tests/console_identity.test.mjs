@@ -254,19 +254,20 @@ function pageSetup(view, identity, connectContent = async () => 'connection fact
   };
   get('connection').textContent = '正在读取状态…';
   let scope = 'owner';
+  const refreshes = [];
   const context = vm.createContext({
     document: {body: {dataset: {mode: 'cloud'}}, getElementById: get,
       createElement: element, createDocumentFragment: element, querySelectorAll: () => [], addEventListener() {}},
     Node: Element,
     window: {addEventListener() {}, SpireProject: {}, SpireIdentity: {
-      context: () => scope, isLocal: () => false, refresh: async () => identity,
+      context: () => scope, isLocal: () => false, refresh: async force => { refreshes.push(force); return identity; },
       renderDevices: () => 'account facts', renderConnect: connectContent, connect() {},
     }},
     location: {search: '?view=' + view + (flow ? '&flow=' + flow : '')}, history: {}, Date, URLSearchParams,
     setInterval() {},
   });
   vm.runInContext(readFileSync(new URL('../spireagent/console/console.js', import.meta.url), 'utf8'), context);
-  return {get, context, changeScope: () => {scope = 'other';}};
+  return {get, context, refreshes, changeScope: () => {scope = 'other';}};
 }
 const settled = () => new Promise(resolve => setImmediate(resolve));
 
@@ -417,4 +418,14 @@ test('overview still presents recording setup when this computer has no delivery
   await vm.runInContext('readLocation(); load(true)', context);
   assert.deepEqual(rendered, [['collection-overview', 'signed_in']]);
   assert.equal(get('content').children[0].children[0], 'durable setup steps');
+});
+
+
+test('ordinary project reload reuses identity cache but explicit refresh still forces verification', async () => {
+  const {context,refreshes}=pageSetup('devices',{status:'signed_in'});
+  await settled();
+  await context.window.SpireProject.reload();
+  assert.equal(refreshes.at(-1),false);
+  await vm.runInContext('load(true)',context);
+  assert.equal(refreshes.at(-1),true);
 });

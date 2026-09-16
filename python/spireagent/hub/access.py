@@ -1,7 +1,7 @@
 """One public artifact policy; project membership never opens sealed research results.
 
 Research-owner store operations are separate from HTTP sharing. Legacy machine tokens
-retain result-only downloads; immutable evidence archives need an explicit collection grant.
+retain result-only downloads; accepted project collections are available to project members.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ RESULT_KINDS = frozenset(
     }
 )
 PROJECT_KINDS = RESULT_KINDS | {"dataset", "training_input", "experiment", "run"}
-POLICY_VERSION = "stpd/project-sharing-v1"
+POLICY_VERSION = "stpd/project-sharing-v2"
 
 
 def project_member(principal: object) -> bool:
