@@ -6,6 +6,7 @@ window.SpireIdentity = (() => {
   let identity = null, checked = 0, busy = null, scope = local ? "local" : "project";
   let deviceDraft = null;
   let timer = null, refreshPage = () => {}, epoch = 0, loggingOut = false;
+  let approvalGeneration = 0, pollingApproval = false, haltedFlow = null;
   const profileMeaning = "每条登记对应一个账号的工作台配置；同一台电脑可以有多条登记，修改名称不会合并账号或历史记录。";
   const el = (tag, text, cls) => {
     const node = document.createElement(tag);
@@ -44,7 +45,8 @@ window.SpireIdentity = (() => {
       target.append(action("账号与电脑", () => { location.assign("?view=devices"); }));
       target.append(el("span", principal.email, "account-label"));
       target.append(action("退出网页账号", async () => {
-        clearTimeout(timer);
+        clearTimeout(timer); timer = null;
+        haltedFlow = identity?.flow?.flow_id || null; approvalGeneration++;
         const csrf = identity.csrf_token;
         loggingOut = true; epoch++; busy = null; identity = null; scope = "local";
         topbar(); refreshPage(true);
@@ -91,7 +93,7 @@ window.SpireIdentity = (() => {
       }
       if (version !== epoch) return identity;
       if (identity?.principal?.subject !== next?.principal?.subject) epoch++;
-      identity = next; checked = Date.now(); topbar(); return identity;
+      identity = next; checked = Date.now(); topbar(); scheduleApproval(); return identity;
     })();
     busy = task;
     try { return await task; } finally { if (busy === task) busy = null; }
@@ -105,16 +107,52 @@ window.SpireIdentity = (() => {
     }
     return "/api/console/" + route + query;
   }
-  async function waitForApproval() {
-    clearTimeout(timer);
+  function pendingFlow() {
+    const flow = identity?.flow;
+    return local && !loggingOut && identity?.csrf_token && flow?.flow_id &&
+      Number.isFinite(flow.expires_at) && flow.expires_at * 1000 > Date.now() ? flow : null;
+  }
+  function scheduleApproval() {
+    const flow = pendingFlow();
+    if (!flow || flow.flow_id === haltedFlow) {
+      clearTimeout(timer); timer = null; return;
+    }
+    if (timer !== null || pollingApproval) return;
+    timer = setTimeout(() => { timer = null; return waitForApproval(); },
+      Math.min(3000, flow.expires_at * 1000 - Date.now()));
+  }
+  async function waitForApproval(manual = false) {
+    const flow = pendingFlow();
+    if (!flow || pollingApproval || (!manual && flow.flow_id === haltedFlow)) return;
+    if (manual) haltedFlow = null;
+    clearTimeout(timer); timer = null; pollingApproval = true;
+    const generation = approvalGeneration;
+    const current = () => !loggingOut && generation === approvalGeneration &&
+      identity?.flow?.flow_id === flow.flow_id;
     try {
       const result = await request("/api/identity/poll", {}, identity.csrf_token);
-      if (result.status === "pending") timer = setTimeout(waitForApproval, 3000);
-      else if (result.status === "approved") {
-        scope = "project"; await refresh(true); refreshPage(true);
+      if (!current()) return;
+      if (result.status === "pending") return;
+      haltedFlow = flow.flow_id;
+      // A pre-poll identity read can still be in flight. Observe a fresh status
+      // after it, rather than treating its old signed-out response as completion.
+      if (busy) await busy;
+      if (generation !== approvalGeneration || loggingOut) return;
+      if (result.status === "approved") {
+        scope = "project"; await refresh(true);
+        if (generation !== approvalGeneration || loggingOut) return;
+        refreshPage(true);
         message("登录与设备绑定完成。后台上传与个人登录分别管理。");
-      } else { await refresh(true); refreshPage(); message("本次绑定已结束；需要时可重新发起。"); }
-    } catch (error) { message(`暂时无法确认绑定：${error.message}。点击“检查绑定结果”可继续。`); }
+      } else {
+        await refresh(true);
+        if (generation !== approvalGeneration || loggingOut) return;
+        refreshPage(); message("本次绑定已结束；需要时可重新发起。");
+      }
+    } catch (error) {
+      if (!current()) return;
+      haltedFlow = flow.flow_id;
+      message(`暂时无法确认绑定：${error.message}。点击“检查绑定结果”可继续。`);
+    } finally { pollingApproval = false; scheduleApproval(); }
   }
   function flowCard(flow) {
     const box = el("div", undefined, "onboarding-step");
@@ -122,7 +160,7 @@ window.SpireIdentity = (() => {
     box.append(el("strong", flow.user_code, "pair-code"));
     const link = el("a", "打开登录与绑定页面 ↗", "button");
     link.href = flow.approval_url; link.target = "_blank"; link.rel = "noreferrer";
-    box.append(link, action("检查绑定结果", waitForApproval));
+    box.append(link, action("检查绑定结果", () => waitForApproval(true)));
     return box;
   }
   function renderDevices() {
@@ -144,10 +182,10 @@ window.SpireIdentity = (() => {
         input.id = "device-name"; input.addEventListener("input", () => { deviceDraft = input.value; });
         label.append(input); box.append(label);
         box.append(action("登录并连接本机", async () => {
-          const flow = await request("/api/identity/login", {device_name: input.value.trim()}, identity.csrf_token);
+          haltedFlow = null; approvalGeneration++; clearTimeout(timer); timer = null;
+          await request("/api/identity/login", {device_name: input.value.trim()}, identity.csrf_token);
           await refresh(true); refreshPage();
           message("请打开登录页面，使用项目邮箱完成确认。");
-          if (flow) timer = setTimeout(waitForApproval, 3000);
         }));
       }
       if (identity?.flow) box.append(flowCard(identity.flow));

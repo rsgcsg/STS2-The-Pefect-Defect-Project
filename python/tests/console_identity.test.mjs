@@ -12,17 +12,26 @@ class Element {
 }
 function setup(mode = 'local', flow = '') {
   const nodes = new Map(['account-actions', 'device-scope', 'content', 'notice'].map(k => [k, new Element('div')]));
-  const calls = [], navigations = [];
+  const calls = [], navigations = [], timers = new Map();
+  let now = Date.now(), timerId = 0;
+  class Clock extends Date { static now() { return now; } }
   const context = vm.createContext({
     document: {body: {dataset: {mode}}, getElementById: key => nodes.get(key),
       createElement: tag => new Element(tag), querySelector: () => null}, window: {},
-    location: {assign(url) { navigations.push(url); }, search: '?view=connect&flow=' + flow}, history: {pushState() {}}, Date, URLSearchParams, AbortSignal,
-    setTimeout, clearTimeout,
+    location: {assign(url) { navigations.push(url); }, search: '?view=connect&flow=' + flow}, history: {pushState() {}}, Date: Clock, URLSearchParams, AbortSignal,
+    setTimeout: (fn, delay) => { const id = ++timerId; timers.set(id, {fn, delay}); return id; },
+    clearTimeout: id => timers.delete(id),
     fetch: (url, options) => new Promise(resolve => calls.push({url, options,
       answer: body => resolve({ok:true, json: async () => body})})),
   });
   vm.runInContext(readFileSync(new URL('../spireagent/console/identity.js', import.meta.url), 'utf8'), context);
-  return {ui: context.window.SpireIdentity, nodes, calls, navigations};
+  return {ui: context.window.SpireIdentity, nodes, calls, navigations, timers,
+    now: () => now, advance: ms => {now += ms;},
+    fireTimer() {
+      const [id, {fn, delay}] = timers.entries().next().value;
+      timers.delete(id); now += delay; return fn();
+    },
+  };
 }
 const person = (subject = 'one') => ({status: 'signed_in', csrf_token: 'csrf',
   principal: {subject, email: subject + '@example.test'}, devices: [{device_id: 'pc', name: 'Laptop'}]});
@@ -109,6 +118,116 @@ test('account logout rejects an already in-flight identity response and retains 
   await exiting;
   assert.equal(ui.isLocal(), true);
   assert.match(ui.context(), /anonymous/);
+});
+
+const pendingIdentity = env => ({status: 'signed_out', hub_configured: true, csrf_token: 'csrf',
+  flow: {flow_id: 'a'.repeat(32), expires_at: env.now() / 1000 + 60,
+    user_code: 'ABCDEFGH', approval_url: 'https://example.test/app/?view=connect'}});
+
+test('reopened local flow resumes one approval poll and observes the approved account', async () => {
+  const env = setup();
+  const facts = pendingIdentity(env);
+  const initial = env.ui.refresh(true); env.calls.shift().answer(facts); await initial;
+  env.ui.renderDevices(); env.ui.renderDevices();
+  const refresh = env.ui.refresh(true); env.calls.shift().answer(facts); await refresh;
+  assert.equal(env.timers.size, 1);
+  const polling = env.fireTimer();
+  assert.equal(env.calls[0].url, '/api/identity/poll');
+  assert.equal(env.calls[0].options.headers['X-CSRF-Token'], 'csrf');
+  const manual = descendants(env.ui.renderDevices()).find(n => n.textContent === '检查绑定结果');
+  await manual.onclick();
+  assert.equal(env.calls.length, 1, 'manual checking shares the in-flight poll');
+  env.calls.shift().answer({status: 'approved'}); await settled();
+  assert.equal(env.calls[0].url, '/api/identity');
+  env.calls.shift().answer(person()); await polling;
+  assert.match(flatten(env.nodes.get('account-actions')), /one@example.test/);
+  assert.match(env.nodes.get('notice').textContent, /登录与设备绑定完成/);
+  assert.equal(env.ui.isLocal(), false);
+  assert.equal(env.timers.size, 0);
+});
+
+test('approved polling waits for an older identity read then obtains fresh signed-in state', async () => {
+  const env = setup(), facts = pendingIdentity(env);
+  const initial = env.ui.refresh(true); env.calls.shift().answer(facts); await initial;
+  const polling = env.fireTimer(), pollCall = env.calls.shift();
+  const oldRefresh = env.ui.refresh(true), oldRead = env.calls.shift();
+  pollCall.answer({status: 'approved'}); await settled();
+  assert.equal(env.calls.length, 0);
+  oldRead.answer(facts); await oldRefresh; await settled();
+  assert.equal(env.calls[0].url, '/api/identity');
+  env.calls.shift().answer(person()); await polling;
+  assert.match(flatten(env.nodes.get('account-actions')), /one@example.test/);
+  assert.equal(env.timers.size, 0);
+});
+
+test('pending approval polling ends at expiry and does not restart a terminal or failed flow', async () => {
+  for (const terminal of ['denied', 'expired', 'unavailable']) {
+    const env = setup(), facts = pendingIdentity(env);
+    const initial = env.ui.refresh(true); env.calls.shift().answer(facts); await initial;
+    const polling = env.fireTimer();
+    env.calls.shift().answer(terminal === 'unavailable' ? {error: 'network_down'} : {status: terminal});
+    await settled();
+    if (terminal !== 'unavailable') env.calls.shift().answer(facts);
+    await polling;
+    const refresh = env.ui.refresh(true); env.calls.shift().answer(facts); await refresh;
+    assert.equal(env.timers.size, 0, 'a stale status refresh cannot restart a completed/failed flow');
+    if (terminal === 'unavailable') {
+      const manual = descendants(env.ui.renderDevices()).find(n => n.textContent === '检查绑定结果');
+      const retry = manual.onclick(); env.calls.shift().answer({status: 'pending'}); await retry;
+      assert.equal(env.timers.size, 1, 'explicit check can resume after a network failure');
+    }
+  }
+  const env = setup(), facts = pendingIdentity(env);
+  facts.flow.expires_at = env.now() / 1000 + 4;
+  const initial = env.ui.refresh(true); env.calls.shift().answer(facts); await initial;
+  const poll = env.fireTimer(); env.calls.shift().answer({status: 'pending'}); await poll;
+  assert.equal(env.timers.size, 1);
+  await env.fireTimer();
+  assert.equal(env.calls.length, 0, 'expiry does not send another poll');
+  assert.equal(env.timers.size, 0);
+  const reload = env.ui.refresh(true); env.calls.shift().answer(facts); await reload;
+  assert.equal(env.timers.size, 0);
+});
+
+test('logout cancels pending approval and ignores late approved or failed responses', async () => {
+  for (const result of [{status: 'approved'}, {error: 'network_down'}]) {
+    const env = setup(), facts = {...pendingIdentity(env), ...person()};
+    const initial = env.ui.refresh(true); env.calls.shift().answer(facts); await initial;
+    const polling = env.fireTimer(), pollCall = env.calls.shift();
+    const exiting = descendants(env.nodes.get('account-actions')).find(n => n.textContent === '退出网页账号').onclick();
+    assert.equal(env.calls[0].url, '/api/identity/logout');
+    pollCall.answer(result); await polling;
+    assert.equal(env.calls.length, 1, 'late approval cannot refresh or relogin the account');
+    env.calls.shift().answer({remote_revoked: true}); await settled();
+    env.calls.shift().answer({status: 'signed_out', csrf_token: 'csrf'}); await exiting;
+    assert.equal(env.timers.size, 0);
+    assert.match(env.ui.context(), /anonymous/);
+    assert.doesNotMatch(env.nodes.get('notice').textContent, /登录与设备绑定完成|network_down/);
+  }
+});
+
+test('logout cancels a timer before it sends and cloud pages never poll local identity', async () => {
+  const env = setup();
+  const initial = env.ui.refresh(true);
+  env.calls.shift().answer({...pendingIdentity(env), ...person()}); await initial;
+  assert.equal(env.timers.size, 1);
+  const exiting = descendants(env.nodes.get('account-actions')).find(n => n.textContent === '退出网页账号').onclick();
+  assert.equal(env.timers.size, 0);
+  env.calls.shift().answer({remote_revoked: true}); await settled();
+  env.calls.shift().answer({status: 'signed_out', csrf_token: 'csrf'}); await exiting;
+  assert.equal(env.calls.length, 0);
+  const cloud = setup('cloud');
+  const loading = cloud.ui.refresh(true);
+  cloud.calls.shift().answer({...pendingIdentity(cloud), ...person()}); await loading;
+  assert.equal(cloud.timers.size, 0);
+});
+
+test('a refreshed identity without a pending flow cancels its scheduled poll', async () => {
+  const env = setup();
+  const initial = env.ui.refresh(true); env.calls.shift().answer(pendingIdentity(env)); await initial;
+  assert.equal(env.timers.size, 1);
+  const refresh = env.ui.refresh(true); env.calls.shift().answer({status: 'signed_out', csrf_token: 'csrf'}); await refresh;
+  assert.equal(env.timers.size, 0);
 });
 
 test('device selection changes request scope and invalidates prior response context', async () => {
