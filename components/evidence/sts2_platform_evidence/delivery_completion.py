@@ -159,8 +159,15 @@ def _session(config: DeliveryConfig, tool: CollectionTool, row: dict[str, Any]) 
     attempt = read_json(archive.with_name(f"{transfer.manifest_sha256}.upload.json"))
     archive_sha, archive_bytes = _sha256_file(archive), archive.stat().st_size
     upload_id = attempt.get("upload_id")
+    # Before dafe61f, HubTransport persisted only upload ID and archive hash.
+    # Recognize that exact historical shape without modifying its sidecar. The
+    # actual archive is still hashed and checked against every transfer member;
+    # only this newly derived completion receipt records its observed byte size.
+    legacy_attempt = set(attempt) == {"upload_id", "archive_sha256"}
+    declared_bytes = attempt.get("archive_bytes")
     if (not isinstance(upload_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", upload_id)
-            or attempt.get("archive_sha256") != archive_sha or attempt.get("archive_bytes") != archive_bytes):
+            or attempt.get("archive_sha256") != archive_sha
+            or (not legacy_attempt and (type(declared_bytes) is not int or declared_bytes != archive_bytes))):
         raise ValueError("completion_upload_identity_mismatch")
     _archive_matches(archive, transfer)
     receipt_path = config.outbox_root / "receipts" / f"{key}.json"
