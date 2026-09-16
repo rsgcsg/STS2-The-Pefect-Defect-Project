@@ -17,7 +17,10 @@ def test_portable_gate_includes_all_existing_checks_and_package() -> None:
     assert ("python", "-m", "ruff", "check", ".") in commands
     assert ("python", "-m", "mypy", "stpd", "spireagent", "tools") in commands
     assert ("npm", "run", "check:connector-sdk") in commands
-    assert ("python", "-m", "pytest", "-q") in commands
+    pytest_commands = [command for command in commands if command[:3] == ("python", "-m", "pytest")]
+    assert len(pytest_commands) == 1
+    assert "--durations=30" in pytest_commands[0]
+    assert "--junitxml=.local/pytest.xml" in pytest_commands[0]
     assert (
         "python",
         "-m",

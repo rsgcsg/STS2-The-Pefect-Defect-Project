@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import test from "node:test";
-import { classifyChanges, parseDiff, makePlan, aggregatePassed } from "./check-plan.mjs";
+import { classifyChanges, parseDiff, makePlan, aggregatePassed, scopeCommands } from "./check-plan.mjs";
 
 test("only modified editorial surfaces select docs; additions, deletion and rename stay full", () => {
   assert.equal(classifyChanges([{ status: "M", file: "README.md" }]).scope, "docs");
@@ -43,4 +43,22 @@ test("required aggregate rejects missing, failed, cancelled or unexpectedly skip
   for (const key of ["plan", "linux", "windows"]) for (const value of ["skipped", "cancelled", "failure", ""]) assert.equal(aggregatePassed("full", { ...full, [key]: value }), false);
   for (const key of ["plan", "docs"]) for (const value of ["skipped", "cancelled", "failure", ""]) assert.equal(aggregatePassed("docs", { ...docs, [key]: value }), false);
   assert.equal(aggregatePassed("unknown", full), false);
+});
+
+test("Python owner changes retain repository guards and both OS Python consumers", () => {
+  for (const file of ["python/spireagent/hub/exports.py", "python/stpd/models/new.py", "python/tests/new.py"])
+    for (const status of ["M", "A", "D"]) assert.equal(classifyChanges([{file,status}]).scope, "python");
+  for (const file of ["python/pyproject.toml", "python/uv.lock", "python/tools/project.py", "components/evidence/src/a.py", "python/deploy/hub/Dockerfile", "contracts/new.json"])
+    assert.equal(classifyChanges([{file,status:"M"}, {file:"python/stpd/a.py",status:"M"}]).scope, "full");
+  assert.deepEqual(scopeCommands("python"), ["check:python-scope"]);
+  assert.deepEqual(scopeCommands("full"), ["check"]);
+  assert.deepEqual(scopeCommands("reuse"), ["check:repository"]);
+  assert.throws(() => scopeCommands("typo"));
+});
+test("reuse requires fresh repository checks; Python scope still requires Windows", () => {
+  const reused = {plan:"success",docs:"success",linux:"skipped",windows:"skipped"};
+  assert.ok(aggregatePassed("reuse",reused));
+  for (const key of ["plan","docs"]) assert.equal(aggregatePassed("reuse",{...reused,[key]:"failure"}),false);
+  assert.equal(aggregatePassed("python",reused),false);
+  assert.ok(aggregatePassed("python",{...reused,docs:"skipped",linux:"success",windows:"success"}));
 });

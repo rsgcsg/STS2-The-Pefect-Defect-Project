@@ -43,7 +43,7 @@ export function ciWorkflowErrors(rawSource) {
   const plan = jobBlock(source, "plan");
   const docs = jobBlock(source, "docs");
   if (!plan || !/run: node tools\/check-plan\.mjs\s*$/mu.test(plan)) errors.push("CI must use the shared check planner");
-  if (!docs || !docs.includes("run: npm run check:docs")) errors.push("CI must check editorial changes");
+  if (!docs || !docs.includes("run: node tools/check-plan.mjs execute")) errors.push("CI must check editorial changes");
   if (!/^  schedule:/mu.test(source)) errors.push("CI must retain periodic full checks");
   for (const [name, scope] of [["docs", "docs"], ["linux-portability", "full"], ["windows-portability", "full"]]) {
     const block = jobBlock(source, name) || "";
@@ -59,7 +59,7 @@ export function ciWorkflowErrors(rawSource) {
 
   if (linux) {
     requireMatch(errors, "Linux portability must use ubuntu-latest", linux, /runs-on:\s*ubuntu-latest/u);
-    requireMatch(errors, "Linux portability must run the root check", linux, /run:\s*npm run check\s*$/mu);
+    requireMatch(errors, "Linux portability must run the selected root check", linux, /run:\s*node tools\/check-plan\.mjs execute\s*$/mu);
     requireMatch(errors, "Linux portability must run git diff --check", linux, /run:\s*git diff --check\s*$/mu);
     requireMatch(errors, "Linux checkout must fetch full history", linux, /fetch-depth:\s*0/u);
     requireMatch(errors, "Linux checkout must not persist credentials", linux, /persist-credentials:\s*false/u);
@@ -76,7 +76,7 @@ export function ciWorkflowErrors(rawSource) {
 
   if (windows) {
     requireMatch(errors, "Windows portability must use windows-latest", windows, /runs-on:\s*windows-latest/u);
-    requireMatch(errors, "Windows portability must run the root check", windows, /run:\s*npm run check\s*$/mu);
+    requireMatch(errors, "Windows portability must run the selected root check", windows, /run:\s*node tools\/check-plan\.mjs execute\s*$/mu);
     requireMatch(errors, "Windows portability must run git diff --check", windows, /run:\s*git diff --check\s*$/mu);
     requireMatch(errors, "Windows checkout must fetch full history", windows, /fetch-depth:\s*0/u);
     requireMatch(errors, "Windows checkout must not persist credentials", windows, /persist-credentials:\s*false/u);
@@ -91,7 +91,7 @@ export function ciWorkflowErrors(rawSource) {
       /if:\s*\$\{\{\s*always\(\)\s*\}\}/u);
     requireMatch(errors, "portable must use the tested scope aggregate", portable,
       /run:\s*node tools\/check-plan\.mjs aggregate\s*$/mu);
-    for (const name of ["CHECK_SCOPE", "PLAN_RESULT", "DOCS_RESULT", "LINUX_RESULT", "WINDOWS_RESULT"]) {
+    for (const name of ["CHECK_SCOPE", "CHECK_PROOF", "PLAN_RESULT", "DOCS_RESULT", "LINUX_RESULT", "WINDOWS_RESULT"]) {
       if (!portable.includes(`${name}:`)) errors.push(`portable missing ${name}`);
     }
   }
@@ -119,6 +119,13 @@ export function ciWorkflowErrors(rawSource) {
     if (source.includes(command)) {
       errors.push(`Hosted CI must not claim exact-game/runtime qualification via: ${command}`);
     }
+  }
+  if (!source.includes("name: portable-execution-receipt") || !source.includes("if-no-files-found: error")) errors.push("CI must retain executed receipts");
+  if (!source.includes("actions: read")) errors.push("CI must be able to verify prior execution");
+  for (const name of ["linux-portability", "windows-portability"]) {
+    const lane = jobBlock(source, name) || "";
+    if (!lane.includes("outputs.scope == 'python'")) errors.push(`${name} must cover Python scope`);
+    if (!lane.includes("python/.local/pytest.xml")) errors.push(`${name} must report Python durations`);
   }
   return errors;
 }

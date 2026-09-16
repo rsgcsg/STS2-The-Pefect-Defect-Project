@@ -55,7 +55,8 @@ pinned deployments and maintenance. A documentation merge does not update runnin
 [Member/Agent handoff](../NEW_MEMBER_HANDOFF.zh-CN.md) is the entry for new people.
 
 Root `npm run check` covers both systems; `npm run check:plan -- --base origin/develop --run`
-selects the permitted editorial fast path or the full suite. Work from current origin/develop by PR;
+selects editorial, Python-owner or full checks; verified integration receipts avoid
+re-executing identical content while current identity checks still run. Work from current origin/develop by PR;
 main/develop are the only long-lived branches. Resolve live merge refs and CI
 from GitHub. Keep existing credentials, raw data, old tools and outboxes private.
 Compute budget remains zero. No GPU-worker, scientific or model-quality claim.
