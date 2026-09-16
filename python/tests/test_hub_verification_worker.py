@@ -55,3 +55,18 @@ def test_linux_address_space_limit_rejects_oversized_allocation() -> None:
         timeout=10,
     )
     assert result.returncode != 0 and b"MemoryError" in result.stderr
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Unix resource module")
+@pytest.mark.parametrize("dataset,cpu", [(False, 120), (True, 600)])
+def test_batch_dataset_has_its_own_cpu_bound_without_changing_memory_bound(dataset, cpu):
+    import resource
+
+    from spireagent.hub.verification_worker import constrain_worker
+
+    with patch("spireagent.hub.verification_worker.sys.platform", "linux"), patch.object(
+        resource, "setrlimit"
+    ) as limit:
+        constrain_worker(dataset=dataset)
+    assert limit.call_args_list[0].args == (resource.RLIMIT_AS, (1536 * 1024**2,) * 2)
+    assert limit.call_args_list[1].args == (resource.RLIMIT_CPU, (cpu, cpu + 5))
+    assert limit.call_args_list[2].args == (resource.RLIMIT_FSIZE, (3 * 1024**3,) * 2)

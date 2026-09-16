@@ -39,6 +39,11 @@ each Hub request still authenticates. Manual refresh forces a new identity obser
 Connector's environment fingerprint excludes `runtime_instance_id`. Research therefore joins
 otherwise identical environment metadata across process restarts and records sorted
 `runtime_instance_ids`. All other fields, including future identity fields, must agree exactly.
+Batch dataset workers have an explicit 900-second wall and 600-second CPU budget,
+separate from the single-upload 150/120-second limits. The 1.5 GiB address-space,
+256 MiB aggregate source and 100-source bounds remain. Deadline or shutdown still
+reaps the process and cleans scratch; no automatic retry is introduced.
+
 Single-process reports remain byte-identical so existing dataset logical IDs and reprojection
 continue to work. Original source archives and per-decision execution identity are unchanged.
 
