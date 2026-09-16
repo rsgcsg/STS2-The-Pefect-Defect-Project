@@ -63,6 +63,21 @@ In **账号与电脑**, a computer entry means a registered Workbench profile. T
 come from one physical Mac or PC when it deliberately uses two independent configurations.
 Use distinct names and private config/state directories for different accounts. Each owner
 uses their own device quota; signing out does not transfer a device or its existing data.
+Reconnecting an owned profile uses its original account and does not consume another
+device slot, even when new-device registration is disabled or the quota is full. An
+administrator's project access does not let that account take over another member's
+profile. When the browser has the wrong account, the connection page explains this and
+offers sign-out; return to the originating local tab and reopen its connection link with
+the original account. Keep the existing configuration, credentials and pending queue.
+
+The Hub flow view retains `approval_allowed` and adds nullable `approval_block_reason`:
+`different_account`, `device_disabled`, `device_unavailable`, `proof_changed`,
+`device_claim_not_allowed`, `enrollment_disabled`, `device_quota_reached`, `expired`,
+`flow_invalidated`, or `flow_not_pending`. The same owner eligibility decision gates
+approval; reasons disclose no other member's email. Old Hub responses without the field
+still show conservative reconnect guidance, not an invented exact reason. If an existing
+private local account record contains an email, it is shown only as a historical hint;
+missing emails are not inferred from computer names or device IDs.
 The local queue belongs to that profile, while shared project views follow its signed-in
 account. Multiple profiles can stay open in one browser. They do not isolate files from other
 processes running as the same OS user; separate OS accounts provide that boundary.
