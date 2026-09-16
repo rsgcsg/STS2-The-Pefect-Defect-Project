@@ -126,6 +126,35 @@ def test_payload_tamper_cannot_pass_reprojection(tmp_path: Path) -> None:
         load(owner.store, tampered.artifact_id)
 
 
+def test_game_overview_keeps_large_journal_inventory_in_stored_profile(tmp_path: Path) -> None:
+    import json
+
+    owner, upload, _, jobs = setup(tmp_path)
+    identity = jobs.pending()
+    assert identity is not None
+    jobs.run(identity)
+    with owner.operations.transaction() as db:
+        row = db.execute("SELECT result FROM decision_jobs WHERE id=?", (identity,)).fetchone()
+        profile = json.loads(row[0])
+        references = ["journal.jsonl:" + str(i) + ":" + "a" * 64 for i in range(16000)]
+        profile["runs"][0]["journal_refs"] = references
+        stored = json.dumps(profile)
+        assert len(stored.encode()) > 1048576
+        db.execute("UPDATE decision_jobs SET result=? WHERE id=?", (stored, identity))
+    overview = jobs.games(MEMBER)
+    assert len(json.dumps(overview).encode()) < 20000
+    first = overview["items"][0]
+    assert "journal_refs" not in first
+    assert first["journal_ref_count"] == len(references)
+    assert first["uploads"] == [upload]
+    assert first["coverage"] is not None
+    for field in ("run_id", "complete", "outcome", "canonical", "native_starts", "native_ends"):
+        assert first[field] == profile["runs"][0][field]
+    with owner.operations.transaction() as db:
+        saved = db.execute("SELECT result FROM decision_jobs WHERE id=?", (identity,)).fetchone()
+        assert saved[0] == stored
+
+
 def test_concurrent_worker_claim_runs_once(tmp_path: Path) -> None:
     from concurrent.futures import ThreadPoolExecutor
     from unittest.mock import patch

@@ -240,7 +240,13 @@ class DecisionJobs:
             result = json.loads(row["result"])
             coverage = {r["run_id"]: r for r in result.get("run_coverage", [])}
             for run in result["runs"]:
-                displayed = {**run, "coverage": coverage.get(run["run_id"])}
+                # The overview transports summaries, not every decision's evidence
+                # references. Full references remain in the stored profile/artifact.
+                displayed = {
+                    **{key: value for key, value in run.items() if key != "journal_refs"},
+                    "journal_ref_count": len(run.get("journal_refs", [])),
+                    "coverage": coverage.get(run["run_id"]),
+                }
                 previous = games.setdefault(run["run_id"], {**displayed, "uploads": []})
                 previous["uploads"].append(upload)
                 if any(previous[key] != run[key] for key in ("complete", "outcome", "canonical")):
