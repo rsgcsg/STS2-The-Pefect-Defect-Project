@@ -201,11 +201,17 @@ def test_workbench_first_model_command_uses_persisted_endpoint_not_current_confi
     calls = []
 
     class Runtime:
-        def request(self, route, body=None):
+        def request(self, route, body=None, *, binding=None):
             calls.append((route, body))
+            if route == "/environment":
+                assert not native_calls  # capture the owner epoch before any native preparation
+                return {"schema": "sts2.policy-runtime/environment-1", "run_id": "fixture-run",
+                        "runtime_instance_id": "game-1", "recovery_epoch": 19}
             if body is not None:
                 assert native_calls[-1] == ("/api/player-environment/capabilities", None)
-            return {"status": {"environment": None, "mode": (body or {}).get("mode", "human")}}
+                assert binding.runtime_instance_id == "game-1" and binding.recovery_epoch == 19
+            return {"status": {"environment": None, "run_id": "fixture-run",
+                               "mode": (body or {}).get("mode", "human")}}
 
     service.client = Runtime()
     service.state.update(status="loaded", loaded=True,
