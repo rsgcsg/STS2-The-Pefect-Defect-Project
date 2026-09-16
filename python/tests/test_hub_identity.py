@@ -173,6 +173,87 @@ def test_existing_device_requires_proof_and_scope_and_cannot_switch_owner(hub):
     assert actual["principal"]["email"] == "owner@example.org"
 
 
+@pytest.mark.parametrize("change,reason", [
+    ("account", "different_account"), ("device", "device_disabled"),
+    ("proof", "proof_changed"), ("expired", "expired"),
+    ("key", "flow_invalidated"), ("denied", "flow_not_pending"),
+])
+def test_connection_reason_matches_approval_rejection_without_owner_disclosure(hub, change, reason):
+    app, token, _ = hub
+    connected(hub, existing=True)
+    flow = create(app, existing=True)
+    browser = (
+        token(email="collector@example.org", sub="collector-sub")
+        if change == "account" else token()
+    )
+    with app.service.operations.transaction() as db:
+        if change == "device":
+            db.execute("UPDATE devices SET active=0 WHERE id='one'")
+        if change == "proof":
+            db.execute(
+                "UPDATE devices SET token_hash=? WHERE id='one'", (token_hash("changed" * 16),)
+            )
+        if change == "expired":
+            db.execute("UPDATE identity_flows SET expires_at=0 WHERE id=?", (flow["flow_id"],))
+        if change == "key":
+            db.execute("UPDATE identity_flows SET key_id='old-key' WHERE id=?", (flow["flow_id"],))
+        if change == "denied":
+            db.execute("UPDATE identity_flows SET status='denied' WHERE id=?", (flow["flow_id"],))
+    code, facts = request(app, "/app/api/identity/flows/" + flow["flow_id"], jwt=browser)
+    assert code == 200
+    assert facts["approval_allowed"] is False and facts["approval_block_reason"] == reason
+    assert "owner@example.org" not in json.dumps(facts)
+    assert "owner_subject" not in facts
+    assert decision(app, browser, flow)[0] >= 400
+    with app.service.operations.transaction() as db:
+        row = db.execute(
+            "SELECT status FROM identity_flows WHERE id=?", (flow["flow_id"],)
+        ).fetchone()
+        assert row[0] != "approved"
+
+
+def test_owned_reconnection_ignores_new_registration_switch_and_quota(hub):
+    app, token, access = hub
+    connected(hub, existing=True)
+    owner = app.identity.principal(access.authenticate(token()))
+    app.identity.membership.update(owner, owner.member_id, {
+        "enroll_devices": False, "device_quota": 0,
+    })
+    flow = create(app, existing=True)
+    facts = request(app, "/app/api/identity/flows/" + flow["flow_id"], jwt=token())[1]
+    assert facts["approval_allowed"] is True and facts["approval_block_reason"] is None
+    assert decision(app, token(), flow)[0] == 200
+    assert poll(app, flow)[1]["device"]["device_id"] == "one"
+    for enroll, reason in [(False, "enrollment_disabled"), (True, "device_quota_reached")]:
+        app.identity.membership.update(owner, owner.member_id, {"enroll_devices": enroll})
+        new = create(app)
+        facts = request(app, "/app/api/identity/flows/" + new["flow_id"], jwt=token())[1]
+        assert facts["approval_allowed"] is False and facts["approval_block_reason"] == reason
+        assert decision(app, token(), new)[0] == 403
+
+
+def test_admin_cannot_reconnect_a_member_profile_or_learn_its_owner_email(hub):
+    app, token, _ = hub
+    original = create(app, existing=True)
+    collector = token(email="collector@example.org", sub="collector-sub")
+    assert decision(app, collector, original)[0] == 200
+    with app.service.operations.transaction() as db:
+        before = db.execute(
+            "SELECT owner_subject,token_hash FROM devices WHERE id='one'"
+        ).fetchone()[:]
+    flow = create(app, existing=True)
+    facts = request(app, "/app/api/identity/flows/" + flow["flow_id"], jwt=token())[1]
+    assert facts["approval_allowed"] is False
+    assert facts["approval_block_reason"] == "different_account"
+    assert "collector@example.org" not in json.dumps(facts)
+    assert decision(app, token(), flow)[0] == 403
+    with app.service.operations.transaction() as db:
+        after = db.execute(
+            "SELECT owner_subject,token_hash FROM devices WHERE id='one'"
+        ).fetchone()[:]
+        assert after == before
+
+
 def test_legacy_scope_and_new_device_enrollment_are_separate_grants(hub):
     app, token, _ = hub
     collector = token(email="collector@example.org", sub="collector-sub")

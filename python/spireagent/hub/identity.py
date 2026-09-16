@@ -263,6 +263,12 @@ class IdentityService:
             principal = self.membership.authorize(db, principal)
             row = self.flow(db, identity)
             state = "expired" if row["expires_at"] <= time.time() else row["status"]
+            blocked = (
+                "expired" if state == "expired" else
+                "flow_not_pending" if state != "pending" else
+                "flow_invalidated" if row["key_id"] != self.key_id else
+                self.eligibility_block_reason(db, row, principal)
+            )
             return {
                 "flow_id": identity,
                 "device_name": row["device_name"],
@@ -273,33 +279,41 @@ class IdentityService:
                 else "enroll_device",
                 "expires_at": timestamp(row["expires_at"]),
                 "status": state,
-                "approval_allowed": state == "pending"
-                and row["key_id"] == self.key_id
-                and self.eligible(db, row, principal),
+                "approval_allowed": blocked is None,
+                "approval_block_reason": blocked,
                 "recording_consent": "not_granted_by_connection",
             }
 
     @staticmethod
-    def eligible(db: sqlite3.Connection, row: sqlite3.Row, principal: ConsolePrincipal) -> bool:
+    def eligibility_block_reason(
+        db: sqlite3.Connection, row: sqlite3.Row, principal: ConsolePrincipal
+    ) -> str | None:
+        """One eligibility decision for presentation and approval; no owner identity disclosure."""
         active_owned = db.execute(
             "SELECT COUNT(*) FROM devices WHERE owner_subject=? AND active=1", (principal.subject,)
         ).fetchone()[0]
         if row["device_proof_hash"] is None:
-            return principal.enroll_devices and active_owned < principal.device_quota
+            if not principal.enroll_devices:
+                return "enrollment_disabled"
+            return "device_quota_reached" if active_owned >= principal.device_quota else None
         device = db.execute("SELECT * FROM devices WHERE id=?", (row["device_id"],)).fetchone()
-        return bool(
-            device
-            and Operations.device_authorized(db, device["id"])
-            and device["token_hash"] == row["device_proof_hash"]
-            and device["owner_subject"] in {None, principal.subject}
-            and (
-                device["owner_subject"] == principal.subject
-                or (
-                    device["id"] in principal.claim_devices
-                    and active_owned < principal.device_quota
-                )
-            )
-        )
+        if device is None:
+            return "device_unavailable"
+        if device["owner_subject"] not in {None, principal.subject}:
+            return "different_account"
+        if not Operations.device_authorized(db, device["id"]):
+            return "device_disabled"
+        if device["token_hash"] != row["device_proof_hash"]:
+            return "proof_changed"
+        if device["owner_subject"] == principal.subject:
+            return None  # Reconnection neither registers nor consumes another device slot.
+        if device["id"] not in principal.claim_devices:
+            return "device_claim_not_allowed"
+        return "device_quota_reached" if active_owned >= principal.device_quota else None
+
+    @staticmethod
+    def eligible(db: sqlite3.Connection, row: sqlite3.Row, principal: ConsolePrincipal) -> bool:
+        return IdentityService.eligibility_block_reason(db, row, principal) is None
 
     def token(self, purpose: str, row: sqlite3.Row) -> str:
         return "stpd_" + purpose + "_" + self.mac(purpose, row["id"], row["client_hash"])

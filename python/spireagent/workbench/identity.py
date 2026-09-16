@@ -121,15 +121,16 @@ class LocalIdentity:
         value = self.device()
         return str(value.get("token") or os.environ.get("STPD_HUB_TOKEN") or "")
 
-    def session(self) -> dict[str, Any]:
+    def session(self, *, include_expired: bool = False) -> dict[str, Any]:
         value = private_read(self.path)
         if value and value.get("hub_url") != self.config.hub_url:
             raise BoundaryError("identity", "account_hub_mismatch")
-        return value if value.get("expires_at", 0) > time.time() else {}
+        return value if include_expired or value.get("expires_at", 0) > time.time() else {}
 
     def status(self) -> dict[str, Any]:
         with self.lock:
-            session = self.session()
+            saved = self.session(include_expired=True)
+            session = saved if saved.get("expires_at", 0) > time.time() else {}
             result: dict[str, Any] = {
                 "status": "signed_out",
                 "csrf_token": self.csrf,
@@ -140,6 +141,12 @@ class LocalIdentity:
                 "hub_configured": bool(self.config.hub_url),
                 "upload_independent_of_login": True,
             }
+            # Older account records may contain an email. It is only a local
+            # historical hint, never inferred from the device name or an authority.
+            email = saved.get("email")
+            if (isinstance(email, str) and len(email) <= 254
+                    and re.fullmatch(r"[^\s@\x00-\x1f]+@[^\s@\x00-\x1f]+", email)):
+                result["previous_account_email"] = email
             if session:
                 try:
                     result.update(self.request("/v1/identity/me", token=session["session_token"]))

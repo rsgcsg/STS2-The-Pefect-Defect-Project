@@ -10,22 +10,89 @@ class Element {
   addEventListener() {}
   get options() { return this.children; }
 }
-function setup() {
+function setup(mode = 'local', flow = '') {
   const nodes = new Map(['account-actions', 'device-scope', 'content', 'notice'].map(k => [k, new Element('div')]));
-  const calls = [];
+  const calls = [], navigations = [];
   const context = vm.createContext({
-    document: {body: {dataset: {mode: 'local'}}, getElementById: key => nodes.get(key),
+    document: {body: {dataset: {mode}}, getElementById: key => nodes.get(key),
       createElement: tag => new Element(tag), querySelector: () => null}, window: {},
-    location: {assign() {}}, history: {pushState() {}}, Date, URLSearchParams, AbortSignal,
+    location: {assign(url) { navigations.push(url); }, search: '?view=connect&flow=' + flow}, history: {pushState() {}}, Date, URLSearchParams, AbortSignal,
     setTimeout, clearTimeout,
     fetch: (url, options) => new Promise(resolve => calls.push({url, options,
       answer: body => resolve({ok:true, json: async () => body})})),
   });
   vm.runInContext(readFileSync(new URL('../spireagent/console/identity.js', import.meta.url), 'utf8'), context);
-  return {ui: context.window.SpireIdentity, nodes, calls};
+  return {ui: context.window.SpireIdentity, nodes, calls, navigations};
 }
 const person = (subject = 'one') => ({status: 'signed_in', csrf_token: 'csrf',
   principal: {subject, email: subject + '@example.test'}, devices: [{device_id: 'pc', name: 'Laptop'}]});
+
+const flatten = element => [element.textContent || '', ...(element.children || []).map(flatten)].join(' ');
+const descendants = element => [element, ...(element.children || []).flatMap(descendants)];
+async function connectionPage(facts) {
+  const env = setup('cloud', 'a'.repeat(32));
+  const initial = env.ui.refresh(true); env.calls.shift().answer(person('current')); await initial;
+  const rendering = env.ui.renderConnect();
+  env.calls.shift().answer({status: 'pending', purpose: 'connect_existing_device', device_id: 'pc',
+    device_name: 'Laptop', user_code: 'ABCDEFGH', approval_allowed: false, ...facts});
+  return {...env, page: await rendering};
+}
+
+test('different account explains existing profile ownership and offers a real sign-out path', async () => {
+  const {page, calls, navigations} = await connectionPage({approval_block_reason: 'different_account'});
+  assert.match(flatten(page), /current@example.test/);
+  assert.match(flatten(page), /原绑定账号重新连接/);
+  assert.match(flatten(page), /沿用已有设备上传凭据/);
+  assert.match(flatten(page), /即使是管理员/);
+  assert.match(flatten(page), /切回刚才的工作台标签页/);
+  assert.equal(descendants(page).some(n => n.textContent === '确认是我的连接，批准接入'), false);
+  assert.match(flatten(page), /另一账号的工作台配置/);
+  assert.doesNotMatch(flatten(page), /另一账号的电脑/);
+  await descendants(page).find(n => n.textContent === '退出并更换登录账号').onclick();
+  assert.deepEqual(navigations, ['/cdn-cgi/access/logout']);
+  assert.equal(calls.length, 0);
+  assert.equal(descendants(page).find(n => n.textContent === '查看当前账号的电脑').href, '?view=devices');
+});
+
+test('specific connection blocks do not invite permission bypass or invent an owner email', async () => {
+  for (const [reason,phrase] of [['device_disabled','授权已停用'], ['proof_changed','旧凭据'],
+    ['device_quota_reached','电脑名额已用完'], ['expired','连接请求已过期'],
+    ['flow_invalidated','连接请求已失效']]) {
+    const {page} = await connectionPage({approval_block_reason: reason});
+    assert.match(flatten(page), new RegExp(phrase));
+    assert.equal(descendants(page).some(n => n.textContent === '确认是我的连接，批准接入'), false);
+    assert.equal(descendants(page).some(n => n.textContent === '退出并更换登录账号'), false);
+  }
+});
+
+test('legacy Hub boolean remains compatible without guessing a specific block', async () => {
+  const {page} = await connectionPage({});
+  assert.match(flatten(page), /请先核对是否使用原绑定账号/);
+  assert.doesNotMatch(flatten(page), /当前登录邮箱不是/);
+  for (const extra of [{}, {approval_block_reason: null}]) {
+    const allowed = await connectionPage({approval_allowed: true, ...extra});
+    assert.ok(descendants(allowed.page).some(n => n.textContent === '确认是我的连接，批准接入'));
+  }
+});
+
+test('local and cloud account pages explain profiles instead of unique physical computers', async () => {
+  const meaning = /每条登记对应一个账号的工作台配置；同一台电脑可以有多条登记，修改名称不会合并账号或历史记录/;
+  for (const mode of ['local', 'cloud']) {
+    const env = setup(mode);
+    const loading = env.ui.refresh(true);
+    env.calls.shift().answer(mode === 'local' ? {status: 'signed_out', hub_configured: true} : person());
+    await loading;
+    const page = env.ui.renderDevices();
+    assert.match(flatten(page), meaning);
+    if (mode === 'local') {
+      assert.ok(descendants(page).some(n => n.textContent === '连接名称'));
+      assert.ok(descendants(page).some(n => n.textContent === '登录并连接本机'));
+    }
+  }
+  const {page} = await connectionPage({approval_allowed: true});
+  assert.match(flatten(page), meaning);
+  assert.match(flatten(page), /重新连接已有工作台配置/);
+});
 
 test('account logout rejects an already in-flight identity response and retains local scope', async () => {
   const {ui, nodes, calls} = setup();
