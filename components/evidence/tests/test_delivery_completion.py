@@ -118,6 +118,64 @@ class DeliveryCompletionTests(unittest.TestCase):
         os.utime(self.source, None)
         self.assertEqual(self._proof(), before)
 
+    def test_historical_upload_identity_is_verified_without_rewriting_it(self):
+        self._ready()
+        expected = self._proof()
+        attempt = next((self.outbox.root / "archives").glob("*.upload.json"))
+        current = json.loads(attempt.read_bytes())
+        # HubTransport before dafe61f persisted exactly these two fields.
+        _atomic_json(attempt, {key: current[key] for key in ("upload_id", "archive_sha256")})
+        before = attempt.read_bytes()
+        raw_before = _inventory(self.config.recordings_root)
+        outbox_before = _inventory(self.config.outbox_root)
+        self.assertEqual(self._proof(), expected)
+        self.assertEqual(attempt.read_bytes(), before)
+        self.assertEqual(_inventory(self.config.recordings_root), raw_before)
+        self.assertEqual(_inventory(self.config.outbox_root), outbox_before)
+
+    def test_upload_size_is_strict_and_only_exact_historical_shape_may_omit_it(self):
+        self._ready()
+        attempt = next((self.outbox.root / "archives").glob("*.upload.json"))
+        current = json.loads(attempt.read_bytes())
+        legacy = {key: current[key] for key in ("upload_id", "archive_sha256")}
+        invalid = [
+            current | {"archive_bytes": size}
+            for size in (None, True, False, str(current["archive_bytes"]),
+                         float(current["archive_bytes"]), 0, current["archive_bytes"] + 1)
+        ]
+        invalid.extend((
+            legacy | {"status": "verified"},
+            legacy | {"observed_at": "unknown"},
+            legacy | {"unexpected": "field"},
+            legacy | {"archive_sha256": "f" * 64},
+            {"upload_id": current["upload_id"]},
+        ))
+        for value in invalid:
+            with self.subTest(value=value):
+                _atomic_json(attempt, value)
+                before = attempt.read_bytes()
+                with self.assertRaisesRegex(ValueError, "completion_upload_identity_mismatch"):
+                    self._proof()
+                self.assertEqual(attempt.read_bytes(), before)
+
+    def test_historical_attempt_cannot_hide_archive_tampering_or_change_during_completion(self):
+        self._ready()
+        attempt = next((self.outbox.root / "archives").glob("*.upload.json"))
+        current = json.loads(attempt.read_bytes())
+        legacy = {key: current[key] for key in ("upload_id", "archive_sha256")}
+        _atomic_json(attempt, legacy)
+        with self.assertRaisesRegex(ValueError, "generation_changed"):
+            with completed_delivery(self.config):
+                # Both snapshots are valid, but an observation change inside the
+                # stopped generation guard must still invalidate the operation.
+                _atomic_json(attempt, current)
+        _atomic_json(attempt, legacy)
+        archive = next((self.outbox.root / "archives").glob("*.tar.gz"))
+        with archive.open("ab") as stream:
+            stream.write(b"changed")
+        with self.assertRaisesRegex(ValueError, "completion_upload_identity_mismatch"):
+            self._proof()
+
     def test_verified_failed_only_evidence_is_complete_without_reclassification(self):
         self._ready(failed_only=True)
         self.assertEqual(self._proof()["session_count"], 1)
@@ -229,6 +287,10 @@ class DeliveryCompletionTests(unittest.TestCase):
         sidecar = archive.with_name(archive.name.removesuffix(".tar.gz") + ".upload.json")
         _atomic_json(sidecar, json.loads(sidecar.read_text()) | {
             "archive_sha256": _sha256_file(archive), "archive_bytes": archive.stat().st_size})
+        with self.assertRaisesRegex(ValueError, "archive_membership"):
+            self._proof()
+        current = json.loads(sidecar.read_bytes())
+        _atomic_json(sidecar, {key: current[key] for key in ("upload_id", "archive_sha256")})
         with self.assertRaisesRegex(ValueError, "archive_membership"):
             self._proof()
 
