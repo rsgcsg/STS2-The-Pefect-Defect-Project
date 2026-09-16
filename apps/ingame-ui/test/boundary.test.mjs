@@ -219,3 +219,16 @@ test("model commands bind the observed Runtime to this game and recovery epoch",
   assert.match(client, /X-STS2-Game-Instance-ID/u);
   assert.match(client, /X-STS2-Recovery-Epoch/u);
 });
+
+
+test("unknown model commands retain a run fence while Human and Stop remain available", () => {
+  assert.match(client, /PlatformPolicyTransport.SendAsync/u);
+  assert.match(client, /AllowAutoRedirect = false, UseProxy = false/u);
+  assert.match(mod, /HasUnknownCommand\(_displayedPolicyRunId\)/u);
+  assert.match(mod, /_compactHumanButton.Disabled = !\(available \|\| uncertain\)/u);
+  assert.match(mod, /_endTestButton.Disabled = !\(available \|\| uncertain\)/u);
+  assert.match(mod, /_tickButton.Disabled = !available \|\| uncertain/u);
+  assert.match(mod, /status.PolicyRuntime\?\.RunId \?\? _displayedPolicyRunId/u);
+  const preparation = mod.slice(mod.indexOf("binding = await _statusClient.ObserveBindingAsync"), mod.indexOf("var prepared = PlatformCollectionHandoff.Prepare"));
+  assert.match(preparation, /intent != Interlocked.Read\(ref _policyUiIntent\) \|\| _disposed/u);
+});

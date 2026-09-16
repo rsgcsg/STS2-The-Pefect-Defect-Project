@@ -1061,10 +1061,12 @@ internal sealed class PlatformLivePanel : IDisposable
                 ?? throw new InvalidOperationException("请先加载模型并读取其状态。");
             PlatformPolicyBinding? binding = null;
             PolicyRuntimeStatus response = await _policyCommands.RunAsync(
-                command,
+                expected, command,
                 async () => {
                     string game = STS2Connector.PlayerEnvironment.PlayerEnvironmentService.GetPlayerEnvironmentControlSnapshot().RuntimeInstanceId;
                     binding = await _statusClient.ObserveBindingAsync(expected, game);
+                    if (intent != Interlocked.Read(ref _policyUiIntent) || _disposed)
+                        throw new PlatformPolicyCommandSupersededException();
                     var recording = STS2HumanAnnotator.Mod.RecordingApplicationService.Instance.QueryStatus();
                     var prepared = PlatformCollectionHandoff.Prepare(recording.Lifecycle.SessionId,
                         Guid.NewGuid().ToString("D"),
@@ -1090,7 +1092,7 @@ internal sealed class PlatformLivePanel : IDisposable
             if (intent != Interlocked.Read(ref _policyUiIntent) || _disposed) return;
             _command.Text = $"操作未确认：{exception.Message}。请查看状态，不要重复决策。";
             PushToast("policy.error", exception.Message);
-            SetPolicyControlsAvailable(false);
+            SetPolicyControlsAvailable(_displayedPolicyRunId != null);
         }
         finally
         {
@@ -1138,7 +1140,9 @@ internal sealed class PlatformLivePanel : IDisposable
 
     private void ApplyStatus(PlatformLiveStatus status)
     {
-        _displayedPolicyRunId = status.PolicyRuntime?.RunId;
+        // Keep the last exact target for explicit recovery while status is offline.
+        // A replacement Runtime rejects that old run ID at its mutation owner.
+        _displayedPolicyRunId = status.PolicyRuntime?.RunId ?? _displayedPolicyRunId;
         _connection.Text =
             $"Connector: {status.TransportStatus} | Policy Runtime: {status.PolicyRuntimeTransportStatus} | observed {status.ObservedAt:HH:mm:ss} UTC";
         string policyReason = PlatformLiveLayout.PolicyUnavailableReason(status);
@@ -1160,18 +1164,21 @@ internal sealed class PlatformLivePanel : IDisposable
 
     private void SetPolicyControlsAvailable(bool available, string? reason = null)
     {
-        foreach (Button button in _modeButtons.Values)
+        bool uncertain = _policyCommands.HasUnknownCommand(_displayedPolicyRunId);
+        foreach ((PlatformCommandMode mode, Button button) in _modeButtons)
         {
-            button.Disabled = !available;
+            button.Disabled = mode == PlatformCommandMode.Human
+                ? !(available || uncertain) : !available || uncertain;
             button.TooltipText = available
                 ? button.TooltipText
                 : $"Unavailable: {reason ?? "Policy Runtime is unavailable."}";
         }
-        _compactHumanButton.Disabled = !available;
-        _endTestButton.Disabled = !available;
-        _tickButton.Disabled = !available;
-        _tickButton.TooltipText = available
-            ? "Ask Policy Runtime for one bounded tick; action authority remains Connector/Runtime."
+        _compactHumanButton.Disabled = !(available || uncertain);
+        _endTestButton.Disabled = !(available || uncertain);
+        _tickButton.Disabled = !available || uncertain;
+        _tickButton.TooltipText = uncertain
+            ? "上次操作未确认，请先暂停并接管或结束测试。"
+            : available ? "Ask Policy Runtime for one bounded tick; action authority remains Connector/Runtime."
             : $"Unavailable: {reason ?? "Policy Runtime is unavailable."}";
         ApplyModeButtonState();
     }
