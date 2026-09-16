@@ -218,3 +218,12 @@ retain Origin/CSRF enforcement; personal tokens and device credentials are not i
 POST queues CPU work. A completed preview's logical ID must match a reproduced publication.
 Game/profile reads use persisted summaries, not archive extraction. Artifact downloads reuse
 existing export inventories and source sharing checks; these routes never submit GPU work.
+
+The same POST also accepts `datasets` in place of `uploads` for selected-set union. Exactly one
+input kind is allowed; a completed preview must match inputs and rules during publication.
+`stpd/decision-union-v1` parents retain the original selected datasets. Its owner loader rechecks
+parent selection and lineage; it does not expand excluded rows. Job reads expose durable phase,
+work-unit counts, elapsed/observed times and explicit-retry status. These are observations, not
+resumable checkpoints. Game summaries cover all available shared profiles and report missing
+coverage; they do not claim globally deduplicated independent games. See
+[ADR-0008](adr/0008-selected-decision-unions.md) for cache trust, immutable contracts and limits.
