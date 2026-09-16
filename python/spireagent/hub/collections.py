@@ -10,7 +10,7 @@ from contextlib import closing
 from typing import TYPE_CHECKING, Any
 
 from spireagent.artifact_contracts import Manifest
-from spireagent.hub.access import lineage, project_member, require_artifact_access
+from spireagent.hub.access import project_member, require_artifact_access
 from spireagent.hub.console_auth import ConsolePrincipal
 from spireagent.json_boundary import BoundaryError, digest, json_bytes
 from stpd.collection_activity import ENROLLMENT_SCHEMA, validate_enrollment
@@ -226,11 +226,13 @@ class CollectionAccess:
 
     def artifact(self, artifact_id: str) -> Manifest:
         manifest = self.service.store.get_manifest(digest(artifact_id, "export.artifact_id"))
-        require_artifact_access(manifest, project_member=True, store=self.service.store)
+        checked = require_artifact_access(
+            manifest, project_member=True, store=self.service.store,
+        )
         # Catalogued project datasets need no second publication grant. A deliberate
         # withdrawal of a received source still applies to its derived data.
         if manifest.kind == "dataset":
-            for ancestor in lineage(self.service.store, manifest):
+            for ancestor in checked:
                 info = ancestor.parameters.value()
                 if info.get("schema") != "stpd/received-bundle-v1":
                     continue
