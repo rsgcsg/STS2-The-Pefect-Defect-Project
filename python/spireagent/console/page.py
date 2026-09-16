@@ -93,7 +93,7 @@ def render_shell(mode: str, api_base: str, cloud_url: str = "") -> str:
 <div class="topbar-actions"><span id="account-actions"></span>{cloud_link}
 <button id="refresh" class="button secondary"
 type="button">刷新</button></div></header>
-<main id="main" tabindex="-1"><label class="scope-label">查看范围
+<main id="main" tabindex="-1"><label class="scope-label">数据查看范围（不改变本机控制）
 <select id="device-scope" aria-label="电脑范围"></select></label>
 <div class="page-heading"><div><p class="eyebrow">SPIREAGENT</p>
 <h1 id="title">概览</h1><p id="subtitle" class="subtitle">采集、上传与研究进展，一处查看。</p></div>

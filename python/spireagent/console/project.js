@@ -86,6 +86,8 @@ window.SpireProject = (() => {
     verified: "文件校验完成",
     quarantined: "已接收，隔离待审",
     pending: "服务处理中",
+    running: "正在处理",
+    queued: "等待处理",
     completed: "操作已完成",
     unknown: "结果未知",
     ready_to_load: "可请求加载",
@@ -94,6 +96,12 @@ window.SpireProject = (() => {
     shadow: "Shadow 只评分",
     one_step: "执行一个决策",
     auto: "自动决策",
+    backend: "运行硬件与依赖",
+    runtime_package: "模型运行器",
+    public_contract: "模型接口",
+    policy_identity: "模型组合身份",
+    training_ready: "训练产物清单",
+    checkpoint_sidecar: "模型文件说明",
   };
   const show = (value) =>
     labels[value] ||
@@ -216,6 +224,9 @@ window.SpireProject = (() => {
       runtime_connector_binding_required: "这份旧运行记录缺少游戏连接绑定。请结束后重新加载模型。",
       connector_identity_unavailable: "暂时无法核对游戏连接，请检查游戏和 Mod 状态。",
       model_readiness_blocked: "模型加载条件未满足，请查看逐项兼容性检查。",
+      runtime_upgrade_required_for_model_control: "当前模型运行器需更新后才能开始测试；暂停和结束仍可使用。",
+      runtime_game_mismatch: "模型运行器连接的不是当前游戏，请重新加载模型。",
+      runtime_recovery_epoch_mismatch: "你已暂停或结束测试，这条旧操作已取消。",
       request_unknown: "请求结果尚未确认，请先刷新状态。不会自动重发操作。",
       request_unavailable: "暂时无法读取服务，请刷新重试。",
       absolute_game_directory_required: "请填写这台电脑上的游戏安装目录完整路径。",
@@ -1591,6 +1602,13 @@ window.SpireProject = (() => {
     return box;
   }
   function readinessPanel(value) {
+    const reasons = {
+      s1_requires_cuda_bf16_backend: "此模型需要支持 BF16 的 NVIDIA 显卡；当前电脑暂不支持。",
+      install_locked_ml_and_l2_dependencies: "尚未安装模型运行依赖，请按该模型的安装说明准备。",
+      backend_probe_unavailable: "暂时无法检查运行硬件，请查看诊断。",
+      runtime_package_missing_or_drifted: "需要准备固定模型运行器；“准备并加载”会处理。",
+      cuda_bf16_available: "显卡满足此模型要求。",
+    };
     const box = panel(
       "加载前检查",
       "文件、代码和软件包检查与游戏实时兼容性是不同关卡。",
@@ -1607,7 +1625,7 @@ window.SpireProject = (() => {
         Object.entries(value.checks || {}).map(([key, item]) => [
           show(key),
           item.status === "pass" ? "通过" : show(item.status),
-          item.code || "—",
+          reasons[item.code] || item.code || "—",
         ]),
       ),
     );
@@ -1803,7 +1821,7 @@ window.SpireProject = (() => {
       if (!selectionId(item.selection_id)) continue;
       const row = panel(
         item.label || item.selection_id,
-        "模型、适配器、输入表示与环境契约作为一个审核过的选择。",
+      "模型、适配器、输入表示与环境契约作为一个审核过的选择。",
       );
       row.append(
         technical({
