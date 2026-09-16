@@ -4,7 +4,24 @@ Use rsgcsg/STS2-The-Perfect-Defect-Project for all new development.
 Platform components, `python/spireagent` applications and `python/stpd` research
 share root governance, one local/cloud console and one Hub membership authority.
 
-The current qualified operating combination uses Workbench source
+The unified task flow is deployed at Workbench/Hub source
+`f4a21a2d67392b557c593cd396b894d1c3439779`; the native/tool bytes retain their
+separate `08d9a37c45362a3421e6f52be851541202a5fc8e` build provenance.
+[Exact acceptance](../evidence/UNIFIED_TASK_FLOW_2026-09-16.md) records 44 accepted,
+43 canonical and one explicit Close-tail unresolved action (still one real failure
+in the owner accounting), two pauses/resumes, durable Close, verified upload and
+byte-identical member download. This is bounded workflow acceptance, not a
+zero-failure Human or complete-run qualification. PR #10 and release receipts own
+formal integration/publication; documentation HEAD is not the running producer.
+
+The [user flow](../../python/docs/UNIFIED_TASK_FLOW.zh-CN.md) covers daily collection,
+local model preparation/control and separate Agent-report sharing. Dataset unions
+preserve only parent-selected decisions. Existing profiles, consent, tools, raw data
+and queues retain their identities. S1 remains CUDA-only; native model outcomes are
+not measured. The compatible Hub fallback is the retained `08d9a37` image in the
+acceptance report; the older `25777cb` image cannot read persisted union requests.
+
+The previously qualified operating combination uses Workbench source
 `6fcd735e4618c29967528e9d3457d898d2e8283d` and Hub source
 `25777cbce106ec9d64ceeef9e55b889abdbc3d3a`, reusing the existing qualified
 Mod/tool bytes. [Operating acceptance](../evidence/OPERATING_FLOW_2026-09-16.md)

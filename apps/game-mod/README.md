@@ -106,3 +106,28 @@ New build provenance publishes only assembly SHA256/MVID for the Mod and game as
 The identity CLI can still return a private operator path, but the distribution builder
 selects only those identity fields. Existing build/installed evidence is not rewritten.
 The owning lifecycle compares exact hashes/MVID and compiled source, not builder paths.
+
+
+## Unified task handoff
+
+The two presentation tabs are **真人采集** and **模型实战**. Preparing a model in
+Workbench keeps Human control. Starting a test closes the observed Human recording
+through the typed Recorder owner and waits for durable Close. Human/Stop always
+remain recovery commands; a pending or unknown Close cannot authorize model control.
+
+`PlatformTaskBridge` serves `sts2.platform/task-status-1` on loopback port 15528.
+GET `/v1/tasks/status` observes the current game instance and recorder lifecycle.
+POST `/v1/tasks/prepare-model` accepts only `runtime_instance_id`, nullable
+`recording_session_id`, and UUID `command_id`. Exact Host, no Origin, bounded JSON,
+loopback peer and current game identity are checked. Recorder compares the expected
+session under its own mutation lock, preventing a stale request from closing a new
+recording. This endpoint never creates actions, grants gameplay authority, retries
+unknown delivery, or converts Agent evidence into Human data. Workbench additionally
+compares the actual configured Connector identity; an arbitrary local process is
+not an authenticated remote browser.
+
+The UI serializes Runtime mutations and cancels superseded intents. A Human/Stop
+request prevents older preparation/mode responses from submitting a late Auto/Tick.
+Already submitted actions remain owned by Runtime/Connector and require their actual
+receipt. Test records can be shared separately from Human collection; native victory
+and full-run qualification are not inferred from Runtime termination.

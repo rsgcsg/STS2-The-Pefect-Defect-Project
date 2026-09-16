@@ -5,6 +5,12 @@ import { AgentRunEvidence } from "./evidence.js";
 import { candidateOrderDigest } from "./digest.js";
 import { POLICY_RUNTIME_VERSION, assertAdapterDecision, validateAdapterDecision, validatePolicyDecision, validatePolicyManifest, type AdapterDecision, type ApplicationResult, type DecisionBundle, type Policy, type PolicyConnector, type PolicyDecision, type PolicyDecisionInput, type PolicyManifest, type RuntimeCommand, type RuntimeMode, type RuntimeStatus, type TickResult } from "./contracts.js";
 import { StaleWholeBundleError } from "./connector.js";
+import { RUNTIME_ENVIRONMENT_SCHEMA, type RuntimeControlPreconditions, type RuntimeEnvironmentBinding } from "./contracts.js";
+
+/** A known-unapplied control request, not an uncertain gameplay delivery. */
+export class RuntimeControlPreconditionError extends Error {
+  constructor(readonly code: string, readonly httpStatus: number) { super(code); }
+}
 
 export interface RuntimeOptions {
   manifest: PolicyManifest;
@@ -73,6 +79,8 @@ export class PolicyRuntime {
   private operation: Promise<unknown> = Promise.resolve();
   private requestedMode: RuntimeMode | null = null;
   private stopRequested = false;
+  private recoveryEpoch = 0;
+  private recoveryEpochExhausted = false;
   private readonly runId: string;
   private readonly now: () => string;
   private readonly staleRefresh: { maxAttempts: number; baseBackoffMs: number };
@@ -101,13 +109,68 @@ export class PolicyRuntime {
     return { schema: "sts2.policy-runtime/status-1", runtime: this.options.runtimeIdentity ?? { version: POLICY_RUNTIME_VERSION, code_sha256: null }, policy: { manifest_id: this.options.manifest.manifest_id, policy_id: this.options.manifest.policy.id, policy_version: this.options.manifest.policy.version, provider: this.options.manifest.policy.provider, architecture: this.options.manifest.policy.architecture, artifact_sha256: this.options.manifest.artifact.sha256 }, run_id: this.runId, lifecycle: this.stopped ? "stopped" : "running", mode: this.mode, controller: this.held ? "held" : "released", tainted: this.tainted, taint_reason: this.taintReason, refreshing: this.refreshing, last_snapshot_id: this.lastSnapshotId, last_snapshot: this.lastSnapshot, last_decision: this.lastDecision, last_receipt: this.lastReceipt, reads: [...this.lastReads], invalidations: [...this.invalidations], errors: [...this.errors] , environment: this.environment };
   }
 
-  async setMode(mode: RuntimeMode): Promise<RuntimeStatus> {
-    this.requestedMode = mode;
+  async readEnvironment(): Promise<RuntimeEnvironmentBinding> {
+    const recoveryEpoch = this.recoveryEpoch;
+    this.checkRecoveryEpoch(recoveryEpoch);
+    const runtimeInstanceId = await this.freshGameInstance();
+    // A recovery during this read must not hand an old intent a fresh epoch.
+    this.checkRecoveryEpoch(recoveryEpoch);
+    return { schema: RUNTIME_ENVIRONMENT_SCHEMA, run_id: this.runId,
+      runtime_instance_id: runtimeInstanceId, recovery_epoch: recoveryEpoch };
+  }
+
+  private advanceRecoveryEpoch(): void {
+    if (this.recoveryEpoch === Number.MAX_SAFE_INTEGER) this.recoveryEpochExhausted = true;
+    else this.recoveryEpoch += 1;
+  }
+
+  private checkRecoveryEpoch(expected: number | undefined): void {
+    if (expected === undefined) return;
+    if (!Number.isSafeInteger(expected) || expected < 0)
+      throw new RuntimeControlPreconditionError("runtime_recovery_precondition_required", 428);
+    if (this.recoveryEpochExhausted || expected !== this.recoveryEpoch)
+      throw new RuntimeControlPreconditionError("runtime_recovery_epoch_mismatch", 409);
+  }
+
+  private async freshGameInstance(): Promise<string> {
+    let identity: string;
+    try {
+      const capabilities = await this.options.connector.capabilities({ fresh: true });
+      identity = capabilities.host.runtime_instance_id;
+      if (typeof identity !== "string" || identity.trim() === "") throw new Error("missing identity");
+    } catch { throw new RuntimeControlPreconditionError("runtime_environment_unavailable", 503); }
+    if (this.environment !== null && this.environment.runtime_instance_id !== identity)
+      throw new RuntimeControlPreconditionError("runtime_game_mismatch", 409);
+    return identity;
+  }
+
+  private async checkControlPreconditions(expected?: RuntimeControlPreconditions): Promise<void> {
+    if (!expected) return;
+    this.checkRecoveryEpoch(expected.recoveryEpoch);
+    if (expected.gameInstanceId !== undefined) {
+      if (typeof expected.gameInstanceId !== "string" || expected.gameInstanceId.trim() === "")
+        throw new RuntimeControlPreconditionError("runtime_game_precondition_required", 428);
+      if (await this.freshGameInstance() !== expected.gameInstanceId)
+        throw new RuntimeControlPreconditionError("runtime_game_mismatch", 409);
+    }
+    this.checkRecoveryEpoch(expected.recoveryEpoch);
+  }
+
+  async setMode(mode: RuntimeMode, expected?: RuntimeControlPreconditions): Promise<RuntimeStatus> {
+    // Human/Stop invalidate preparation in every client as soon as they enter
+    // this owner, even when an existing operation still holds the mutation queue.
+    if (mode === "human") this.advanceRecoveryEpoch();
+    if (mode === "human" || expected === undefined) this.requestedMode = mode;
     return this.serialize(async () => {
       try {
+        if (mode !== "human") {
+          await this.checkControlPreconditions(expected);
+          this.requestedMode = mode;
+        }
         if (this.stopped) throw new Error("runtime is stopped");
         if (this.tainted && mode !== "human") throw new Error(`runtime is tainted: ${this.taintReason}`);
         if (mode !== "auto") await this.releaseController();
+        if (mode !== "human") this.checkRecoveryEpoch(expected?.recoveryEpoch);
         if (mode === "shadow" && this.mode !== "shadow") this.lastPolicySnapshotId = null;
         this.mode = mode;
         if (!(await this.appendEvidence("mode_changed", { mode }))) {
@@ -122,11 +185,15 @@ export class PolicyRuntime {
     });
   }
 
-  async tick(): Promise<TickResult> {
+  async tick(expected?: RuntimeControlPreconditions): Promise<TickResult> {
+    this.checkRecoveryEpoch(expected?.recoveryEpoch);
     if (this.tickActive) return { type: "not_admitted", reason: "tick_in_progress", status: this.status() };
     this.tickActive = true;
     try {
-      return await this.serialize(() => this.tickOnce());
+      return await this.serialize(async () => {
+        await this.checkControlPreconditions(expected);
+        return this.tickOnce();
+      });
     } finally {
       this.tickActive = false;
     }
@@ -279,6 +346,7 @@ export class PolicyRuntime {
   }
 
   async stop(): Promise<RuntimeStatus> {
+    this.advanceRecoveryEpoch();
     this.stopRequested = true;
     return this.serialize(async () => {
       if (this.stopped) return this.status();

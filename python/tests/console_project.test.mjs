@@ -15,6 +15,7 @@ class Element {
     this.checked = false;
     this.disabled = false;
   }
+  get firstChild() { return this.children[0]; }
   append(...items) {
     this.children.push(...items);
   }
@@ -381,108 +382,6 @@ const preparation = (saved = false) => ({
   configuration_saved: saved, delivery_selected: false, delivery_status: "stopped",
   native_binding: { status: "not_checked" }, next_action: saved ? "bind_recording_root" : "prepare",
 });
-function campaignHandler() {
-  let saved = [], prepared = false;
-  return (url, options) => {
-    if (url.endsWith("/collection-status")) return {
-      schema: "stpd/local-collection-status-v1", settings: settings(null), device_id: "this-pc",
-      items: saved.map(item => ({...item, preparation: preparation(prepared)})),
-    };
-    if (url.endsWith("/collection-settings")) return settings(null);
-    if (url.includes("/enrollments?")) return {items: saved, total: saved.length};
-    if (url.endsWith("/enroll")) { saved = [enrollment]; return enrollment; }
-    if (url.endsWith("/prepare")) { prepared = true; return preparation(true); }
-    if (url.endsWith("/preparation")) return preparation(prepared);
-    return { templates: [template], total: 1 };
-  };
-}
-test("campaign enrollment requires three deliberate declarations and uses only the local owned active device", async () => {
-  const env = setup({ view: "campaigns", handler: campaignHandler() });
-  let page = await env.render();
-  const device = field(page, "device_id");
-  assert.deepEqual(
-    device.children.map((x) => x.value),
-    ["this-pc"],
-  );
-  await action(page, "enroll-" + id("b")).onclick();
-  assert.equal(post(env.calls).length, 0);
-  assert.match(text(env.notice), /分别确认/);
-  for (const name of [
-    "human_origin_attested",
-    "upload_authorized",
-    "project_sharing_authorized",
-  ]) {
-    const input = field(page, name);
-    assert.equal(input.checked, false);
-    input.checked = true;
-    input.onchange();
-  }
-  await action(page, "enroll-" + id("b")).onclick();
-  assert.equal(
-    post(env.calls)[0].url,
-    "/api/member/campaigns/" + id("b") + "/enroll",
-  );
-  assert.deepEqual(body(post(env.calls)[0]), {
-    device_id: "this-pc",
-    consent: {
-      human_origin_attested: true,
-      upload_authorized: true,
-      project_sharing_authorized: true,
-    },
-  });
-  page = await env.render();
-  await action(page, "prepare-" + enrollmentId).onclick();
-  assert.equal(
-    post(env.calls)[1].url,
-    "/api/member/campaigns/" + enrollmentId + "/prepare",
-  );
-  assert.deepEqual(body(post(env.calls)[1]), {});
-  page = await env.render();
-  assert.match(text(page), /尚未检查游戏连接/);
-  assert.match(text(page), /已停止/);
-  assert.match(text(page), /本机配置/);
-});
-
-test("persisted activity enrollment can prepare after a fresh page without reattesting consent", async () => {
-  const baseHandler = campaignHandler();
-  const env = setup({
-    view: "campaigns",
-    handler: (url, options) =>
-      url.includes("/enrollments?")
-        ? { items: [enrollment], total: 1 }
-        : baseHandler(url, options),
-  });
-  const page = await env.render();
-  await action(page, "prepare-" + enrollmentId).onclick();
-  assert.equal(post(env.calls).length, 1);
-  assert.ok(post(env.calls)[0].url.endsWith("/prepare"));
-});
-
-test("mismatched enrollment response cannot become a local preparation target", async () => {
-  const baseHandler = campaignHandler();
-  const env = setup({
-    view: "campaigns",
-    handler: (url, options) =>
-      url.endsWith("/enroll")
-        ? { ...enrollment, device_id: "someone-else" }
-        : baseHandler(url, options),
-  });
-  let page = await env.render();
-  for (const name of [
-    "human_origin_attested",
-    "upload_authorized",
-    "project_sharing_authorized",
-  ])
-    field(page, name).checked = true;
-  await action(page, "enroll-" + id("b")).onclick();
-  page = await env.render();
-  assert.match(text(env.notice), /enrollment_identity_mismatch/);
-  assert.equal(
-    walk(page).some((n) => n.dataset?.action === "prepare-" + enrollmentId),
-    false,
-  );
-});
-
 test("raw export selection is exact, csrf scoped, and creating a manifest does not claim completed download", async () => {
   const env = setup({
     view: "downloads",
@@ -621,10 +520,11 @@ function modelHandler(url, options) {
     };
   return emptyList();
 }
-test("runtime uses dynamic trusted selections and readiness query, with load separate from readiness", async () => {
+test("runtime prepares one trusted selection with optional diagnosis and no implicit start", async () => {
   const env = setup({ view: "local-models", handler: modelHandler });
   let page = await env.render();
-  assert.equal(action(page, "model-start-audited-cpu").disabled, true);
+  assert.equal(action(page, "model-start-audited-cpu").disabled, false);
+  assert.equal(post(env.calls).length, 0);
   await action(page, "model-readiness-audited-cpu").onclick();
   assert.ok(
     env.calls.some(
@@ -636,12 +536,14 @@ test("runtime uses dynamic trusted selections and readiness query, with load sep
   assert.equal(action(page, "model-start-audited-cpu").disabled, false);
   assert.match(text(page), /不代表模型已经加载/);
   await action(page, "model-start-audited-cpu").onclick();
+  assert.equal(post(env.calls)[0].url, "/api/local-models/prepare");
   assert.deepEqual(body(post(env.calls)[0]), { selection_id: "audited-cpu" });
   assert.match(text(env.notice), /尚需完成实际加载/);
 });
 
 test("unknown or stale runtime state permits explicit recovery but never another game decision", async () => {
   for (const state of [
+    {status:"loading", loaded:false, operation:{status:"pending", action:"prepare-and-load"}},
     {
       status: "command_unknown",
       loaded: true,
@@ -686,7 +588,7 @@ test("cloud local-models view does not call or control any local service", async
   assert.match(text(page), /云页面不会远程启动或控制游戏/);
 });
 
-test("game-changing requests require confirmation and network ambiguity never auto retries", async () => {
+test("explicit game command needs no repeated confirmation and network ambiguity never auto retries", async () => {
   const env = setup({
       view: "local-models",
       handler: (url, options) => {
@@ -702,7 +604,7 @@ test("game-changing requests require confirmation and network ambiguity never au
     }),
     page = await env.render();
   await action(page, "model-command-one_step").onclick();
-  assert.equal(env.confirms.length, 1);
+  assert.equal(env.confirms.length, 0);
   assert.equal(post(env.calls).length, 1);
   assert.match(text(env.notice), /不会自动重发/);
   assert.equal(env.reloads, 0);
@@ -785,22 +687,12 @@ test("a loaded service flag without a running Runtime observation cannot enable 
   }
 });
 
-test("persisted preparation remains visible after reload when its template is outside the page", async () => {
-  const handler = (url) => {
-    if (url.includes("/enrollments?")) return {items: [enrollment], total: 1};
-    if (url.endsWith("/preparation")) return preparation(true);
-    if (url.endsWith("/collection-status")) return {
-      schema: "stpd/local-collection-status-v1", settings: settings(null), device_id: "this-pc", items: [],
-    };
-    return {templates: [], total: 0};
-  };
-  for (let visit = 0; visit < 2; visit++) {
-    const env = setup({view: "campaigns", handler});
-    const page = await env.render();
-    assert.match(text(page), /尚未检查游戏连接/);
-    assert.equal(walk(page).some(item => item.dataset?.action === "prepare-" + enrollmentId), false);
-    assert.equal(post(env.calls).length, 0);
-  }
+test("persisted older activity is shown as the selected collection without activity authoring", async () => {
+  const env = setup({view: "campaigns", handler: collectionHandler({items: [enrollment]})});
+  const page = await env.render();
+  assert.match(text(page), /授权已保存/);
+  assert.doesNotMatch(text(page), /发布活动|专题活动/);
+  assert.equal(post(env.calls).length, 0);
 });
 
 test("in-page project navigation preserves selected export identities and leaves file downloads untouched", async () => {
@@ -858,90 +750,85 @@ const defaultTemplate = {
   template_id: id("b"), template: {...template.template, schema: "stpd/collection-activity-v2",
     name: "日常录制", game: undefined},
 };
-function collectionHandler({items = [], binding = "not_checked"} = {}) {
-  let entries = items, prepared = items.length > 0;
+function collectionHandler({items = [], binding = "not_checked", paused = false} = {}) {
+  let entries = items;
   return (url, options) => {
-    if (url.endsWith("/collection-status")) return {
-      schema: "stpd/local-collection-status-v1", settings: settings(defaultTemplate), device_id: "this-pc",
-      observed_at: "2026-09-15T00:00:00Z",
-      items: entries.map(item => ({...item, preparation: {...preparation(prepared), native_binding: {status: binding}}})),
+    if (url.endsWith("/collection-flow")) return {
+      schema: "stpd/local-collection-flow-v1", default: defaultTemplate, device_id: "this-pc",
+      stage: entries.length ? "native_binding_required" : "consent_required",
+      next_action: paused ? "resume_upload" : "prepare", consent_required: !entries.length,
+      upload: {enabled: !paused, process: binding === "bound" && !paused ? "running" : "stopped"},
+      enrollment: entries.length ? {...entries[0], preparation: {...preparation(true), native_binding: {status: binding, bound: binding === "bound"}}} : null,
     };
     if (url.endsWith("/collection-settings")) return settings(defaultTemplate);
-    if (url.includes("/enrollments?")) return {items: entries, total: entries.length};
-    if (url.endsWith("/enroll")) { entries = [enrollment]; return enrollment; }
-    if (url.endsWith("/prepare")) { prepared = true; return preparation(true); }
-    if (url.endsWith("/preparation")) return {...preparation(prepared), native_binding: {status: binding}};
-    if (url.endsWith("/bind") || url.endsWith("/activate")) return {status: "completed"};
+    if (url.endsWith("/consent")) { entries = [enrollment]; return {schema: "stpd/local-collection-flow-v1", enrollment}; }
+    if (url.endsWith("/prepare")) return {stage: "native_binding_required"};
+    if (url.endsWith("/upload")) return {upload: {enabled: JSON.parse(options.body).enabled}};
     return emptyList();
   };
 }
 
-test("daily default needs no activity choice and new consent is never prechecked", async () => {
+test("one deliberate collection button saves consent then prepares only this computer", async () => {
   const env = setup({view: "campaigns", handler: collectionHandler()});
   let page = await env.render();
-  assert.equal(page.children[0].children[0].textContent, "日常录制");
-  const advanced = page.children.find(item => item.tag === "details");
-  assert.ok(advanced);
-  assert.notEqual(advanced.open, true);
-  const consentNames = ["human_origin_attested", "upload_authorized", "project_sharing_authorized"];
-  await action(page, "enroll-" + id("b")).onclick();
   assert.equal(post(env.calls).length, 0);
-  for (const name of consentNames) {
-    const control = field(page, name);
-    assert.equal(control.checked, false);
-    control.checked = true;
-  }
+  assert.equal(walk(page).some(x => x.type === "checkbox"), false);
+  assert.doesNotMatch(text(page), /发布活动|专题活动/);
+  assert.match(text(page), /项目成员/);
   await action(page, "enroll-" + id("b")).onclick();
-  assert.deepEqual(body(post(env.calls)[0]), {device_id: "this-pc", consent: {
-    human_origin_attested: true, upload_authorized: true, project_sharing_authorized: true,
-  }});
+  assert.deepEqual(post(env.calls).map(x => x.url), ["/api/member/collection-flow/consent", "/api/member/collection-flow/prepare"]);
+  assert.deepEqual(body(post(env.calls)[0]), {template_id: id("b"), accepted: true});
   page = await env.render();
-  assert.match(text(page.children[0]), /授权已保存/);
-  assert.equal(walk(page.children[0]).some(item => item.name === "human_origin_attested"), false);
-  await action(page.children[0], "prepare-" + enrollmentId).onclick();
-  page = await env.render();
-  assert.match(text(page.children[0]), /尚未检查游戏连接/);
-  assert.equal(action(page.children[0], "activate-" + enrollmentId).disabled, true);
+  assert.match(text(page), /授权已保存/);
+  assert.equal(walk(page).some(x => x.dataset?.action?.startsWith("enroll-")), false);
 });
 
-test("homepage reads durable local stages after a new browser session without implying native readiness", async () => {
+test("consent identity mismatch never starts preparation", async () => {
+  const base = collectionHandler();
+  const env = setup({view: "campaigns", handler: (url, options) => url.endsWith("/consent")
+    ? {schema: "stpd/local-collection-flow-v1", enrollment: {...enrollment, device_id: "other"}} : base(url, options)});
+  await action(await env.render(), "enroll-" + id("b")).onclick();
+  assert.equal(post(env.calls).length, 1);
+  assert.match(text(env.notice), /enrollment_identity_mismatch/);
+});
+
+test("fresh pages reuse saved consent and show native problems without claiming readiness", async () => {
   for (const binding of ["not_checked", "game_not_running", "mismatch", "blocked"]) {
-    const env = setup({view: "collection-overview", handler: collectionHandler({items: [enrollment], binding})});
+    const env = setup({view: "campaigns", handler: collectionHandler({items: [enrollment], binding})});
     const page = await env.render();
     assert.match(text(page), /授权已保存/);
-    assert.match(text(page), /已保存/);
-    assert.doesNotMatch(text(page), /游戏连接与录制目录已核对|正在运行/);
+    assert.doesNotMatch(text(page), /已准备好/);
     assert.equal(post(env.calls).length, 0);
-    assert.ok(env.calls.some(call => call.url === "/api/member/collection-status"));
+    await action(page, "prepare-collection").onclick();
+    assert.equal(post(env.calls).length, 1);
+    assert.equal(post(env.calls)[0].url, "/api/member/collection-flow/prepare");
   }
 });
 
-test("only freshly bound native status allows activation and a later mismatch disables it", async () => {
-  let binding = "bound";
-  const env = setup({view: "campaigns", handler: (url, options) =>
-    collectionHandler({items: [enrollment], binding})(url, options)});
-  let page = await env.render();
-  assert.equal(action(page, "activate-" + enrollmentId).disabled, false);
-  await action(page, "activate-" + enrollmentId).onclick();
-  assert.equal(post(env.calls)[0].url, `/api/member/campaigns/${enrollmentId}/activate`);
-  assert.deepEqual(body(post(env.calls)[0]), {});
-  binding = "mismatch";
-  page = await env.render();
-  assert.equal(action(page, "activate-" + enrollmentId).disabled, true);
+test("ready and paused upload states survive page reload without an implicit resume", async () => {
+  for (const paused of [false, true]) {
+    const env = setup({view: "campaigns", handler: collectionHandler({items: [enrollment], binding: "bound", paused})});
+    const page = await env.render();
+    assert.match(text(page), paused ? /自动上传已暂停/ : /已准备好/);
+    assert.equal(post(env.calls).length, 0);
+    await action(page, "toggle-collection-upload").onclick();
+    assert.deepEqual(body(post(env.calls)[0]), {enabled: paused});
+    assert.equal(post(env.calls)[0].url, "/api/member/collection-flow/upload");
+  }
 });
 
-test("native binding accepts deliberate local absolute game location and never auto retries unknown effects", async () => {
+test("prepare accepts an explicit absolute game location and does not retry a lost response", async () => {
   const base = collectionHandler({items: [enrollment]});
   const env = setup({view: "campaigns", handler: (url, options) => {
-    if (url.endsWith("/bind")) throw new Error("connection dropped after mutation");
+    if (url.endsWith("/prepare")) throw new Error("lost reply");
     return base(url, options);
   }});
   const page = await env.render();
   field(page, "game_directory").value = "relative/path";
-  await action(page, "bind-" + enrollmentId).onclick();
+  await action(page, "prepare-collection").onclick();
   assert.equal(post(env.calls).length, 0);
   field(page, "game_directory").value = "/games/STS2";
-  await action(page, "bind-" + enrollmentId).onclick();
+  await action(page, "prepare-collection").onclick();
   assert.deepEqual(body(post(env.calls)[0]), {game_directory: "/games/STS2"});
   assert.equal(post(env.calls).length, 1);
   assert.match(text(env.notice), /不会自动重发/);
@@ -971,45 +858,28 @@ test("cloud administrator publishes typed daily defaults while member and local 
   }
 });
 
-test("default readback from a different local device cannot become a preparation or native target", async () => {
+test("foreign device readback cannot offer collection preparation", async () => {
   const base = collectionHandler({items: [enrollment]});
-  const env = setup({view: "collection-overview", handler: (url, options) => {
-    const value = base(url, options);
-    return url.endsWith("/collection-status") ? {...value, device_id: "someone-else"} : value;
+  const env = setup({view: "campaigns", handler: (url, options) => {
+    const value = base(url, options); return url.endsWith("/collection-flow") ? {...value, device_id: "other"} : value;
   }});
   const page = await env.render();
   assert.match(text(page), /collection_status_identity_mismatch/);
-  assert.doesNotMatch(text(page), /授权已保存/);
   assert.equal(post(env.calls).length, 0);
+  assert.equal(walk(page).some(x => x.dataset?.action === "prepare-collection"), false);
 });
 
-test("changing the recommendation cannot overwrite the explicitly selected older local recording", async () => {
-  const base = collectionHandler({items: [enrollment]});
-  const env = setup({view: "collection-overview", handler: (url, options) => {
-    const value = base(url, options);
-    if (!url.endsWith("/collection-status")) return value;
-    return {...value, settings: settings({...defaultTemplate, template_id: id("c")}),
-      items: [{...enrollment, preparation: {...preparation(true), delivery_selected: true,
-        delivery_status: "running", native_binding: {status: "game_not_running"}}}]};
-  }});
-  const page = await env.render();
-  assert.match(text(page), /Bounded capture/);
-  assert.match(text(page), /不会改写这份授权/);
-  assert.match(text(page), /正在运行/);
-  assert.match(text(page), /请启动游戏后刷新/);
-  assert.doesNotMatch(text(page), /游戏连接与录制目录已核对/);
-});
-
-test("missing preparation facts remain unknown and cannot offer setup or activation mutations", async () => {
+test("changed recommendation keeps the saved local enrollment and unknown state remains unknown", async () => {
   const base = collectionHandler({items: [enrollment]});
   const env = setup({view: "campaigns", handler: (url, options) => {
     const value = base(url, options);
-    return url.endsWith("/collection-status") ? {...value, items: [{...enrollment, preparation: {status: "unavailable"}}]} : value;
+    return url.endsWith("/collection-flow") ? {...value, stage: "unavailable", default: {...defaultTemplate, template_id: id("c")},
+      enrollment: {...enrollment, preparation: {status: "unavailable"}}} : value;
   }});
   const page = await env.render();
-  assert.match(text(page.children[0]), /状态未取得/);
-  assert.equal(walk(page).some(item => item.dataset?.action?.startsWith("prepare-") ||
-    item.dataset?.action?.startsWith("activate-") || item.dataset?.action?.startsWith("bind-")), false);
+  assert.match(text(page), /不会改写这份授权/);
+  assert.doesNotMatch(text(page), /已准备好/);
+  assert.equal(walk(page).some(x => x.dataset?.action === "prepare-collection" || x.dataset?.action?.startsWith("enroll-")), false);
   assert.equal(post(env.calls).length, 0);
 });
 
@@ -1056,4 +926,72 @@ test("dataset editing uses the shared refresh guard and retains unblurred draft 
   assert.equal(field(refreshed, "dataset-name").value, "Unblurred draft");
   assert.equal(field(refreshed, `source-${uploadId}`).checked, true);
   assert.equal(post(h.calls).length, 0);
+});
+
+
+test("signed-out or offline collector can pause its uploader without cloud enrollment", async () => {
+  for (const signedOut of [true, false]) {
+    const env = setup({ view: "campaigns", identity: signedOut ? {status:"signed_out", device_id:"this-pc"} : owner(), handler: (url, options) => {
+      if (options.method === "POST") return {stage:"upload_paused"};
+      assert.equal(url, "/api/member/collection-flow");
+      return {schema:"stpd/local-collection-flow-v1", device_id:"this-pc", enrollment:null,
+        stage:"unavailable", next_action:"reconnect", error:"hub_unavailable", upload:{enabled:true,process:"running"}};
+    }});
+    const page = await env.render();
+    assert.equal(post(env.calls).length, 0);
+    await action(page, "toggle-collection-upload").onclick();
+    assert.deepEqual(body(post(env.calls)[0]), {enabled:false});
+    assert.equal(post(env.calls)[0].url, "/api/member/collection-flow/upload");
+  }
+});
+
+test("evaluation sharing requires its own explicit action and valid verified report", async () => {
+  const env = setup({view:"evaluations", handler: (url, options) => {
+    if (url === "/api/local-models") return {evaluations:[{evaluation_id:id("a"), evidence_verification:"pass", game_outcome:"not_measured"}]};
+    if (url.endsWith("share-status")) return {status:"idle"};
+    return options.method === "POST" ? {status:"preparing"} : emptyList();
+  }});
+  const page = await env.render();
+  assert.equal(post(env.calls).length, 0);
+  assert.match(text(page), /不会作为真人采集数据/);
+  await action(page, `share-evaluation-${id("a")}`).onclick();
+  assert.deepEqual(body(post(env.calls)[0]), {evaluation_id:id("a"), authorized:true});
+});
+
+
+test("dataset union explains an insufficient selection without submitting a job", async () => {
+  const env = setup({view: "datasets", handler: (url) =>
+    url.includes("/datasets?") ? {items: [{artifact_id: id("a")}]} : emptyList()
+  });
+  const page = await env.render();
+  const merge = action(page, "preview-dataset-merge");
+  await merge.onclick();
+  assert.match(text(env.notice), /请选择至少两个决策数据集后再合并/);
+  assert.doesNotMatch(text(env.notice), /服务暂时不可用/);
+  const selected = field(page, `merge-${id("a")}`);
+  selected.checked = true;
+  selected.onchange();
+  await merge.onclick();
+  assert.match(text(env.notice), /请选择至少两个决策数据集后再合并/);
+  assert.equal(post(env.calls).length, 0);
+});
+
+test("dataset progress stays visible and selected parent union is exact", async () => {
+  const rules = {schema:"stpd/decision-selection-v1",complete_only:false,wins_only:false,no_failures_only:false,filters:{},seed:0};
+  const job = {id:"b".repeat(32),state:"completed",request:{name:"union",datasets:[id("a"),id("b")],rules,preview_id:null},progress:{phase:"completed",completed:2,total:2,elapsed_seconds:1.5},result:{selected:7,exact_duplicate_decisions:2,split_status:"grouped"}};
+  const env = setup({view:"datasets",handler:(url, options) => {
+    if (options.method === "POST") return {id:"c".repeat(32),state:"pending"};
+    if (url === "/api/member/datasets") return {items:[job]};
+    if (url.includes("/datasets?")) return {items:[{artifact_id:id("a")},{artifact_id:id("b")}]};
+    return emptyList();
+  }});
+  const page = await env.render();
+  assert.match(text(page), /1.5 秒/);
+  assert.match(text(page), /保留决策/);
+  for (const identity of [id("a"),id("b")]) { const checkbox = field(page,`merge-${identity}`); checkbox.checked=true; checkbox.onchange(); }
+  await action(page,"preview-dataset-merge").onclick();
+  assert.deepEqual(body(post(env.calls)[0]).datasets,[id("a"),id("b")]);
+  assert.equal(body(post(env.calls)[0]).uploads,undefined);
+  await action(page,`build-${job.id}`).onclick();
+  assert.deepEqual(body(post(env.calls)[1]),{name:"union",datasets:[id("a"),id("b")],rules,preview_id:job.id});
 });

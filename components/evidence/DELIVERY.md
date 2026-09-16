@@ -324,6 +324,16 @@ files, extra queue entries and partial artifacts fail closed. A valid empty
 configured outbox with an empty recording root is complete. A verified bundle
 with failed Human decisions is also transfer-complete; its failures are preserved.
 
+Evidence `0.1.0-rc.10` also reads the historical upload sidecar containing exactly
+`upload_id` and `archive_sha256`, written before `dafe61f`. Its missing byte count
+is observed from the actual archive only for the new completion receipt: archive
+hash, transfer membership/content and terminal receipt checks still all run. No
+old sidecar or queue row is rewritten. A present `archive_bytes` must be an exact
+integer (not a boolean) matching that archive; missing size with any other shape,
+null, malformed values or mismatches fail closed. Worker exclusion and exit-time
+revalidation are unchanged. This compatibility does not confer daily enrollment
+or consent on a manually configured historical queue.
+
 `DeliveryCompletion` is frozen and `to_dict()` returns an independent dictionary
 with schema `sts2.evidence/delivery-completion-1`. The receipt includes the full
 normalized config digest; recording/outbox/tool paths; fixed tool, worker and

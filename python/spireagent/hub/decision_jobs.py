@@ -11,8 +11,11 @@ from spireagent.hub.collections import CollectionAccess
 from spireagent.hub.console_auth import ConsolePrincipal
 from spireagent.hub.uploads import UploadService
 from spireagent.json_boundary import BoundaryError, digest, object_fields
+from stpd.canonical import semantic_hash
+from stpd.fullrun.decision_cache import VerifiedSourceCache
 from stpd.fullrun.decision_dataset import SelectionRules
-from stpd.fullrun.decision_store import preview, publish
+from stpd.fullrun.decision_store import preview, preview_union, publish, publish_union
+from stpd.fullrun.decision_union import UNION_SCHEMA
 
 
 class DecisionJobs:
@@ -39,10 +42,25 @@ class DecisionJobs:
             raise BoundaryError("decision_job", "source_not_verified")
         return sources
 
+    def _inputs(self, request: dict[str, Any]) -> tuple[Any, ...]:
+        if "datasets" not in request:
+            return self._sources(request["uploads"])
+        selections = request["datasets"]
+        if (not isinstance(selections, list) or not 1 <= len(selections) <= 100
+                or any(not isinstance(value, str) for value in selections)
+                or len(set(selections)) != len(selections)):
+            raise BoundaryError("decision_job", "invalid_dataset_selection")
+        parents = tuple(self.collections.artifact(identity) for identity in selections)
+        if any(parent.kind != "dataset" or parent.parameters.value().get("schema")
+               not in {"stpd/decision-dataset-v1", UNION_SCHEMA} for parent in parents):
+            raise BoundaryError("decision_job", "unsupported_dataset_schema")
+        return parents
+
     def create(self, principal: ConsolePrincipal, body: object) -> dict[str, Any]:
         self.collections.require_member(principal)
-        obj = object_fields(body, {"uploads", "rules", "preview_id", "name"}, "decision_job")
-        self._sources(obj["uploads"])
+        source_key = "datasets" if isinstance(body, dict) and "datasets" in body else "uploads"
+        obj = object_fields(body, {source_key, "rules", "preview_id", "name"}, "decision_job")
+        self._inputs(obj)
         rules = SelectionRules.decode(obj["rules"])
         if not isinstance(obj["name"], str) or not 1 <= len(obj["name"]) <= 100:
             raise BoundaryError("decision_job", "invalid_name")
@@ -52,7 +70,7 @@ class DecisionJobs:
             if (
                 previous["state"] != "completed"
                 or previous["request"]["preview_id"] is not None
-                or previous["request"]["uploads"] != obj["uploads"]
+                or previous["request"].get(source_key) != obj[source_key]
                 or previous["request"]["rules"] != rules.to_dict()
             ):
                 raise BoundaryError("decision_job", "preview_mismatch")
@@ -82,12 +100,16 @@ class DecisionJobs:
         ):
             raise BoundaryError("decision_job", "not_found")
         request = json.loads(row["request"])
-        self._sources(request["uploads"])
+        self._inputs(request)
+        result = json.loads(row["result"]) if row["result"] else None
         return {
             "id": identity,
             "state": row["state"],
             "request": request,
-            "result": json.loads(row["result"]) if row["result"] else None,
+            "result": result if row["state"] == "completed" else None,
+            "progress": result.get("progress") if result else {"phase": row["state"]},
+            "created_at": row["created"], "updated_at": row["updated"],
+            "recovery": "explicit_retry" if row["state"] == "failed" else "observe_existing_job",
             "error": row["error"],
         }
 
@@ -141,25 +163,38 @@ class DecisionJobs:
                 "SELECT j.request,j.result FROM decision_jobs j JOIN collection_sharing s "
                 "ON s.upload_id=json_extract(j.request,'$.uploads[0]') "
                 "WHERE j.owner='receiver' AND j.state='completed' AND s.approved=1 "
-                "ORDER BY j.created DESC LIMIT 100"
+                "ORDER BY j.created DESC"
             ).fetchall()
             waiting = db.execute(
-                "SELECT count(*) FROM decision_jobs WHERE owner='receiver' "
-                "AND state IN ('pending','running')"
+                "SELECT count(*) FROM decision_jobs j JOIN collection_sharing s "
+                "ON s.upload_id=json_extract(j.request,'$.uploads[0]') "
+                "WHERE j.owner='receiver' AND j.state IN ('pending','running') AND s.approved=1"
             ).fetchone()[0]
             failures = db.execute(
-                "SELECT j.id,j.error FROM decision_jobs j JOIN collection_sharing s "
+                "SELECT j.id,j.error,json_extract(j.request,'$.uploads[0]') AS upload_id "
+                "FROM decision_jobs j JOIN collection_sharing s "
                 "ON s.upload_id=json_extract(j.request,'$.uploads[0]') "
                 "WHERE j.owner='receiver' AND j.state='failed' AND s.approved=1 "
                 "AND NOT EXISTS (SELECT 1 FROM decision_jobs newer WHERE newer.owner='receiver' "
                 "AND newer.state='completed' AND newer.updated>j.updated AND "
                 "json_extract(newer.request,'$.uploads[0]')="
                 "json_extract(j.request,'$.uploads[0]')) "
-                "ORDER BY j.created DESC LIMIT 100"
+                "ORDER BY j.created DESC"
             ).fetchall()
+            shared = db.execute(
+                "SELECT count(*) FROM uploads u JOIN collection_sharing s ON s.upload_id=u.id "
+                "WHERE u.status='verified' AND s.approved=1"
+            ).fetchone()[0]
         games: dict[str, Any] = {}
+        profiled = set()
+        failed: dict[str, Any] = {}
+        for row in failures:
+            failed.setdefault(row["upload_id"], dict(row))
         for row in rows:
             upload = json.loads(row["request"])["uploads"][0]
+            if upload in profiled:
+                continue
+            profiled.add(upload)
             for run in json.loads(row["result"])["runs"]:
                 previous = games.setdefault(run["run_id"], {**run, "uploads": []})
                 previous["uploads"].append(upload)
@@ -167,11 +202,16 @@ class DecisionJobs:
                     previous["coverage_status"] = "overlapping_exports_differ"
         return {
             "items": list(games.values()),
-            "profile_limit": 100,
+            "profile_limit": None,
+            "shared_recordings": shared,
+            "profiled_recordings": len(profiled),
+            "missing_profiles": max(0, shared - len(profiled)),
+            "partial": shared != len(profiled),
             "pending_profiles": waiting,
-            "failed_profiles": len(failures),
-            "failures": [dict(row) for row in failures],
-            "scope": "latest_100_shared_recording_profiles",
+            "failed_profiles": len(failed),
+            "failures": list(failed.values())[:100],
+            "failure_detail_limit": 100,
+            "scope": "all_available_shared_recording_profiles",
             "non_claims": ["global unique game count", "independent training examples"],
         }
 
@@ -230,7 +270,25 @@ class DecisionJobs:
             if changed != 1:
                 return
             row = db.execute("SELECT * FROM decision_jobs WHERE id=?", (identity,)).fetchone()
+        started = time.monotonic()
+        cache = VerifiedSourceCache(
+            self.service.operations.path, semantic_hash(self.service.producer.to_dict())
+        )
+
+        def progress(phase: str, completed: int, total: int) -> None:
+            value = {"progress": {
+                "phase": phase, "completed": completed, "total": total,
+                "observed_at": time.time(), "elapsed_seconds": time.monotonic() - started,
+                **cache.metrics(),
+            }}
+            with self.service.operations.transaction() as db:
+                db.execute(
+                    "UPDATE decision_jobs SET result=?,updated=? WHERE id=? AND state='running'",
+                    (json.dumps(value), time.time(), identity),
+                )
+
         try:
+            progress("checking_access", 0, 1)
             with self.service.operations.transaction() as db:
                 member = db.execute(
                     "SELECT 1 FROM identity_members WHERE subject=? AND status='active'",
@@ -239,10 +297,13 @@ class DecisionJobs:
             if not member and row["owner"] != "receiver":
                 raise BoundaryError("decision_job", "membership_not_authorized")
             request = json.loads(row["request"])
-            sources = self._sources(request["uploads"])
+            sources = self._inputs(request)
             rules = SelectionRules.decode(request["rules"])
+            merging = "datasets" in request
             if request["expected"] is None:
-                dataset = preview(self.service.store, sources, rules)
+                dataset = (preview_union if merging else preview)(
+                    self.service.store, sources, rules, cache=cache, progress=progress
+                )
                 report = dataset.report.value()
                 if row["owner"] == "receiver":
                     from spireagent.hub.statistics import DIMENSIONS, _persist, decision_profile
@@ -275,14 +336,20 @@ class DecisionJobs:
                     "non_claims": report["non_claims"],
                 }
             else:
-                manifest = publish(
-                    self.service.store, sources, rules, self.service.producer, request["expected"]
+                manifest = (publish_union if merging else publish)(
+                    self.service.store, sources, rules, self.service.producer, request["expected"],
+                    cache=cache, progress=progress,
                 )
                 self.service.console_index.artifact_closure(
                     self.service.store, (manifest.artifact_id,)
                 )
                 result = {"artifact_id": manifest.artifact_id, **manifest.parameters.value()}
-            self._sources(request["uploads"])
+            self._inputs(request)
+            result["progress"] = {
+                "phase": "completed", "completed": 1, "total": 1,
+                "observed_at": time.time(), "elapsed_seconds": time.monotonic() - started,
+                **cache.metrics(),
+            }
             with self.service.operations.transaction() as db:
                 if (
                     row["owner"] != "receiver"

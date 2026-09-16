@@ -29,6 +29,31 @@ It never resolves or submits a gameplay action directly. The Runtime loopback
 defaults to `http://127.0.0.1:15527`; modes and model status require a compatible
 Policy Runtime with an exact Policy Manifest and artifact.
 
+## Unconfirmed model commands
+
+Model mode and tick POSTs are sent once. A timeout, lost response, malformed
+success, or unrecognized error leaves that Runtime run in an explicit
+unconfirmed state. Status polling can describe what is currently visible but
+cannot erase the uncertainty or re-enable model actions. **暂停并接管** and
+**结束测试** remain available with the original exact Runtime run ID, even during
+an unavailable status poll. Status reads have a 900 ms timeout; commands have a
+45 s budget matching the Workbench and the Runtime's bounded model wait. Human
+and Stop are submitted promptly without waiting for an earlier model HTTP
+response; Runtime's owner controls effect ordering and recovery fencing. A late
+old response cannot send a follow-up tick, overwrite the newer UI intent, or
+re-lock a run after confirmed recovery. While the owner is still completing an
+in-flight action, the UI honestly remains in recovering state. A confirmed
+Human/Stop response clears that UI fence;
+a failed recovery does not. An independently loaded Runtime has a different run
+identity and does not inherit another run's UI uncertainty. Native unknown
+delivery remains governed by Runtime's own taint and is never made retryable by
+this presentation state.
+
+Only strict, recognized owner precondition errors establish non-dispatch. The
+client does not follow redirects or use ambient proxies for local commands.
+Read-only preparation failure does not masquerade as a submitted operation, and
+a cancelled local preparation cannot subsequently Close a new Human recording.
+
 ## Retention and display cost
 
 The closed workspace performs no status polling. An open Recorder queries only

@@ -24,6 +24,7 @@ from spireagent.hub.console_index import pagination, timestamp
 from spireagent.hub.decision_jobs import DecisionJobs
 from spireagent.hub.exports import ExportService
 from spireagent.hub.identity import IdentityService
+from spireagent.hub.live_evaluations import LiveEvaluations
 from spireagent.hub.statistics import refresh_decision_statistics
 from spireagent.hub.uploads import LocalStaging, S3Staging, UploadService
 from spireagent.json_boundary import BoundaryError, decode_json, digest, object_fields
@@ -38,6 +39,7 @@ class MemberApi:
         self.campaigns = Campaigns(service.operations, identity.membership)
         self.exports = ExportService(service)
         self.decisions = DecisionJobs(service)
+        self.live_evaluations = LiveEvaluations(service, identity.membership)
 
     def _principal(self, principal: ConsolePrincipal) -> ConsolePrincipal:
         with self.service.operations.transaction() as db:
@@ -87,6 +89,8 @@ class MemberApi:
             return self.campaigns.enroll(
                 current, enrollment[1], value["device_id"], value["consent"]
             )
+        if route == "live-evaluations":
+            return self.live_evaluations.publish(current, body)
         if route == "exports":
             return self.exports.create(current, body)
         if route == "datasets":

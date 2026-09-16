@@ -72,7 +72,7 @@ async function main(): Promise<void> {
     await evidence.attestAdapter(adapter);
     const connector = new ConnectorPolicyClient(
       new PlayerEnvironmentRestClient(options.connectorEndpoint, 5_000),
-      { productVersion: "0.1.0-rc.3" }
+      { productVersion: "0.1.0-rc.4" }
     );
     runtime = new PolicyRuntime({
       manifest,

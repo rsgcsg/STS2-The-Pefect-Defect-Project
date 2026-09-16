@@ -490,9 +490,9 @@ def test_public_landing_links_public_source_without_private_scope(tmp_path: Path
     status, html = call(app, "/")
     assert status == "200 OK" and b"/app/" in html
     guide = (
-        "https://github.com/rsgcsg/STS2-The-Perfect-Defect/blob/"
+        "https://github.com/rsgcsg/STS2-The-Perfect-Defect-Project/blob/"
         + owner.producer.source_revision
-        + "/docs/PROJECT_CONSOLE.md"
+        + "/python/docs/PROJECT_CONSOLE.md"
     )
     assert guide.encode() in html
     assert b"admin" * 16 not in html

@@ -63,23 +63,39 @@ In **账号与电脑**, a computer entry means a registered Workbench profile. T
 come from one physical Mac or PC when it deliberately uses two independent configurations.
 Use distinct names and private config/state directories for different accounts. Each owner
 uses their own device quota; signing out does not transfer a device or its existing data.
+Reconnecting an owned profile uses its original account and does not consume another
+device slot, even when new-device registration is disabled or the quota is full. An
+administrator's project access does not let that account take over another member's
+profile. When the browser has the wrong account, the connection page explains this and
+offers sign-out; return to the originating local tab and reopen its connection link with
+the original account. Keep the existing configuration, credentials and pending queue.
+
+The Hub flow view retains `approval_allowed` and adds nullable `approval_block_reason`:
+`different_account`, `device_disabled`, `device_unavailable`, `proof_changed`,
+`device_claim_not_allowed`, `enrollment_disabled`, `device_quota_reached`, `expired`,
+`flow_invalidated`, or `flow_not_pending`. The same owner eligibility decision gates
+approval; reasons disclose no other member's email. Old Hub responses without the field
+still show conservative reconnect guidance, not an invented exact reason. If an existing
+private local account record contains an email, it is shown only as a historical hint;
+missing emails are not inferred from computer names or device IDs.
 The local queue belongs to that profile, while shared project views follow its signed-in
 account. Multiple profiles can stay open in one browser. They do not isolate files from other
 processes running as the same OS user; separate OS accounts provide that boundary.
 
 | Page | Purpose |
 |---|---|
-| 概览 | persisted local setup stages, local/authorized cloud counts, known quality totals and the latest uploads |
-| 采集记录 | paginated sessions, native run boundaries, owner quality, transfer stages, receipt and timeline |
-| 数据集 | authorized immutable Dataset metadata, source references and research usage |
-| 数据统计 | actual received totals, owner summary coverage and available facets; unknown stays unknown |
-| 数据下载 | explicitly permitted immutable selection, inventory and checksummed payload downloads |
-| 训练与分析 | existing Dataset/job/result lineage and analysis; job submission remains with the owning CLI and budget gates |
-| 模型与评估 | model artifact lineage; local catalog, compatibility checks and explicit supported Runtime controls |
-| 账号与电脑 | profile available at first verified login; explicit computer pairing and separate upload authorization |
-| 录制与上传 | daily default, saved device-owner consent, local preparation/binding/upload activation; topic activities in advanced options |
-| 成员管理 | browser-admin invitations, current status, quotas and explicit revocation |
-| 系统 | connection, source/lock, role scope, available backup state and explicit operational non-claims |
+| 真人采集（本地） | one saved daily consent, current readiness and persistent upload pause/resume |
+| 模型实战（本地） | select and prepare a supported model, start test, take control and end test |
+| 数据 | shared recordings, quality/statistics and downloads; local queue stays local |
+| 数据集 | preview/select/freeze decisions or merge exact selected parent datasets; durable job progress |
+| 训练与模型 | existing jobs, model lineage and downloads; compute still requires its owning budget gate |
+| 评估结果 | local Agent reports and explicitly shared project reports, separate from Human collection |
+| 账号与电脑（顶栏） | personal login and explicit computer pairing |
+| 成员管理（管理员） | invitation, quotas and revocation |
+| 设置与诊断 | detailed source/readiness, maintenance and administrator collection explanation settings |
+
+Existing view URLs remain usable. Secondary statistics/download/detail views belong to these
+main tasks. See [the unified member flow](UNIFIED_TASK_FLOW.zh-CN.md) for first-use and daily use.
 
 “已录入” means durable canonical decisions. “真实失败” comes from Platform authoritative
 disposition, not free-text error matching. Normal cancellations, diagnostics and unsupported
@@ -103,18 +119,19 @@ fabricated. The list supports 25/50 rows; the search box explicitly filters only
 
 ## Recording setup and saved state
 
-**录制与上传** starts with the administrator's daily default. Members review the purpose and
-explicitly confirm Human origin, upload and project-member sharing. No checkbox is preselected.
-The cloud administrator edits the default with name, description and consent fields; a new
-purpose/consent version does not replace already saved declarations. Topic activities and
-previous enrollments stay under **高级选项：专题活动与已有授权**.
+**真人采集** uses one daily default. Members read the purpose, upload destination and member
+access explanation, then deliberately click **同意并开启采集** once. The existing owner records
+all required declarations; visiting a page supplies none. The same saved purpose and sharing
+scope do not require repeat checkboxes. Administrators maintain the default in
+**设置与诊断 → 采集说明设置**. Old activity APIs, authorizations and uploaded evidence remain
+readable, but activity publishing/joining is not a member workflow.
 
-Local setup distinguishes five stages: account/device, recorded consent, saved configuration,
-current game connection and background upload. **准备本机录制配置** creates inactive private
-paths; **绑定本机录制目录** uses the packaged Platform helper while the game is closed; after
-launching the game, **启用本机上传** requires fresh native binding and delivery preflight.
-The binding field accepts a local game directory only on the collector's workbench. Cloud
-views cannot bind local files, start the game or activate its uploader.
+**准备 / 继续检查** composes the existing setup, binding and upload owners. It reports the next
+necessary operation and never claims a pending stage is ready. Binding requires the game to be
+closed; enabling uploads requires current native binding and preflight. Cloud views cannot bind
+local files or start the game. Saved **暂停自动上传** survives restart, remains available while
+offline or signed out, and does not delete queues. Resuming requires current authorization and
+readiness. Exact endpoint/persistence behavior is owned by [collection flow](COLLECTION_FLOW.md).
 
 Refresh and a new browser session read persisted consent/configuration again. They do not
 repeat attestation or infer native readiness from a saved file. A stopped game may have a
@@ -253,10 +270,10 @@ Full research/CI environments continue to use `--all-extras`.
 4. Stop the workbench, register the trusted fixed tool, then reopen the same configuration,
    as shown in [daily recording setup](B_PIPELINE_HANDOFF.md#set-up-daily-recording-once-reopen-it-thereafter).
    Registration holds the stopped-workbench lock; closing a browser tab is insufficient.
-5. Open **录制与上传**, review the daily default and give the three explicit declarations.
-   Prepare local files, close the game and bind its recording directory, then launch and refresh.
-   Enable uploads only after the current native connection passes. No topic activity is required.
-   Finish this terminal's bounded Recorder Close-to-receipt check before routine recording.
+5. Open **真人采集**, read the explanation and deliberately select **同意并开启采集**.
+   Follow **准备 / 继续检查** through the necessary game-directory, stopped-game binding and
+   fresh native checks. Reuse saved consent thereafter. Complete a bounded Recorder Close-to-receipt
+   check before routine recording; no activity or repeated three-checkbox flow is required.
 
 The device may remain authorized when the person logs out. Local logout clears personal pages
 and revokes its short-lived personal session when Hub is reachable; otherwise expiry bounds

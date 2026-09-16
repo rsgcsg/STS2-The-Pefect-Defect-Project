@@ -22,6 +22,21 @@ def config(path):
     return ProjectConfig(path, "https://hub.example", "", None, combination())
 
 
+@pytest.mark.parametrize("email", [None, "saved@example.test", "invalid", "other@example.test\n"])
+def test_previous_email_is_only_an_explicit_local_hint_not_a_login(tmp_path, email):
+    account = LocalIdentity(config(tmp_path))
+    atomic_json(account.path, {
+        "hub_url": account.config.hub_url, "expires_at": 0,
+        "session_token": "expired-secret", **({"email": email} if email is not None else {}),
+    })
+    report = account.status()
+    assert report["status"] == "signed_out" and "principal" not in report
+    expected = email if email == "saved@example.test" else None
+    assert report.get("previous_account_email") == expected
+    assert "expired-secret" not in json.dumps(report)
+    assert account.session() == {}
+
+
 def test_grant_publication_ack_loss_retry_and_logout_keep_device(tmp_path, monkeypatch):
     account = LocalIdentity(config(tmp_path))
     flow = "a" * 32
