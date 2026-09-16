@@ -6,6 +6,7 @@ stay exclusions; retaining neighbouring decisions does not repair sequence conti
 
 from __future__ import annotations
 
+import hashlib
 import json
 import tempfile
 from collections import Counter, defaultdict
@@ -16,7 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 from spireagent.json_boundary import BoundaryError, FrozenObject, object_fields, unsigned
 
-from ..canonical import semantic_hash
+from ..canonical import canonical_json, semantic_hash
 from .contracts import ResearchTransitionV2, SourceProjection
 from .data import split_whole_runs
 from .platform_bundle3 import PlatformBundle3SourceAdapter, _extract
@@ -99,13 +100,19 @@ class DecisionDataset:
 
     @property
     def logical_id(self) -> str:
-        return semantic_hash(
-            {
-                "schema": SCHEMA,
-                "records": [r.to_dict() for r in self.records],
-                "report": self.report.value(),
-            }
-        )
+        # Emit the exact sorted-key canonical object one record at a time. Building
+        # every decoded record and another canonical tree exhausts bounded workers.
+        digest = hashlib.sha256(b'{"records":[')
+        for index, record in enumerate(self.records):
+            if index:
+                digest.update(b",")
+            digest.update(canonical_json(record.to_dict()).encode("utf-8"))
+        digest.update(b'],"report":')
+        digest.update(self.report.encoded.encode("utf-8"))
+        digest.update(b',"schema":')
+        digest.update(canonical_json(SCHEMA).encode("utf-8"))
+        digest.update(b"}")
+        return digest.hexdigest()
 
 
 def _identity(record: ResearchTransitionV2) -> str:
@@ -217,6 +224,46 @@ def _runs(projection: SourceProjection) -> list[dict[str, Any]]:
     return result
 
 
+def _merge_environment(
+    environments: dict[str, Any], fingerprint: str, value: dict[str, Any],
+    *, boundary: str = "decision_dataset",
+) -> None:
+    """Join process provenance without weakening exact environment identity.
+
+    Connector's fingerprint excludes RuntimeInstanceId (SnapshotBuilder's
+    ToSessionReference). Recorder retains it as provenance. Preserve old single-runtime
+    reports verbatim for immutable re-projection; only new multi-runtime selections
+    use a sorted set. Every other field, including unknown future identity fields,
+    must agree exactly. Inputs and original source bytes are never mutated.
+    """
+    if fingerprint not in environments:
+        environments[fingerprint] = value
+        return
+    previous = environments[fingerprint]
+    if previous == value:
+        return
+    runtime_fields = {"runtime_instance_id", "runtime_instance_ids"}
+    stable = {k: v for k, v in previous.items() if k not in runtime_fields}
+    if stable != {k: v for k, v in value.items() if k not in runtime_fields}:
+        raise BoundaryError(boundary, "environment_identity_conflict")
+
+    def runtimes(environment: dict[str, Any]) -> list[str]:
+        if "runtime_instance_id" in environment and "runtime_instance_ids" not in environment:
+            values = [environment["runtime_instance_id"]]
+        elif "runtime_instance_ids" in environment and "runtime_instance_id" not in environment:
+            values = environment["runtime_instance_ids"]
+        else:
+            raise BoundaryError(boundary, "environment_identity_conflict")
+        if not isinstance(values, list) or not values or any(
+            not isinstance(runtime, str) or not runtime for runtime in values
+        ):
+            raise BoundaryError(boundary, "environment_identity_conflict")
+        return values
+
+    identities = sorted(set(runtimes(previous)) | set(runtimes(value)))
+    environments[fingerprint] = {**stable, "runtime_instance_ids": identities}
+
+
 def _versions(source: bytes) -> dict[str, Any]:
     # Called only after the installed verifier accepted the archive. Join identity
     # metadata by the exact environment fingerprint, never by a current runtime.
@@ -237,9 +284,7 @@ def _versions(source: bytes) -> dict[str, Any]:
                 fingerprint = environment.get("environment_fingerprint")
                 if not isinstance(fingerprint, str):
                     continue
-                if fingerprint in result and result[fingerprint] != environment:
-                    raise BoundaryError("decision_dataset", "environment_identity_conflict")
-                result[fingerprint] = environment
+                _merge_environment(result, fingerprint, environment)
     return result
 
 
@@ -247,6 +292,7 @@ def select_decisions(
     sources: tuple[bytes, ...], rules: SelectionRules | None = None,
     *, cache: VerifiedSourceCache | None = None,
     on_source: Callable[[int, int], None] | None = None,
+    on_projection: Callable[[SourceProjection], None] | None = None,
 ) -> DecisionDataset:
     """Verify original bytes or reuse a private owner-bound verification of identical bytes."""
     if not 1 <= len(sources) <= 100:
@@ -262,10 +308,10 @@ def select_decisions(
         else:
             projection, environments = cache.resolve(source)
         projections.append(projection)
+        if on_projection:
+            on_projection(projection)
         for key, value in environments.items():
-            if key in versions and versions[key] != value:
-                raise BoundaryError("decision_dataset", "environment_identity_conflict")
-            versions[key] = value
+            _merge_environment(versions, key, value)
     if on_source:
         on_source(len(projections), len(sources))
     return _select(projections, rules or SelectionRules(), versions)

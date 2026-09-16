@@ -91,3 +91,76 @@ Use the owning stopped Workbench/configuration and Hub rollout procedures.
 The old image ignores additive visibility and coverage metadata; removed previews
 may reappear. Preserve new records, revocations and queued deliveries. Do not
 restore an old database merely to roll back application code.
+
+## Follow-up: large game overview response
+
+Final observation found that the game list also returned per-decision `journal_refs`.
+With 16 shared recordings / 25 runs or fragments its response reached 1,072,609 bytes,
+exceeding the local member gateway's 1 MiB bound. The Hub was healthy but the local
+view correctly refused the oversized response. Publication was paused for an owning
+Hub correction rather than increasing the gateway limit.
+
+Hub source `0290e2532eee8fca835f90f4367ece7444e17a78` returns the same run summaries
+with `journal_ref_count`; full references remain unchanged in original stored profiles
+and immutable artifacts. The Workbench/kit stays at `bf17e69`, with the same native
+bytes, lock and account/configuration. Hub image is
+`ghcr.io/rsgcsg/spireagent-hub@sha256:c349ac4dcf018ed019a6794b1d166686785235856713b1ee94517ae1ec9ef20d`.
+The unchanged-lock qualified-image refresh, locked offline sync and package consistency
+checks passed. Hub-only rollout plan
+`305ce9dd69e252405cc4564f50cf0df659459b85bd3d4a630bfd21e7491da5bb`
+passed the owning schema/capacity/fresh-backup/health checks; no database restore,
+Workbench restart, TLS restart or native installation was needed.
+
+The actual local member response is 22,285 bytes. Its canonical JSON SHA256
+`fe0ca9e19984a86de382a5e9f2c1986ec833497dbbd1e92f99c0af5cc660e1e1`
+matches the pre-deployment summaries after only replacing references with their count.
+The browser receives all 25 rows, including four complete native boundaries; no profile
+is pending or failed at this observation. These are run/fragments in shared profiles,
+not a new scientific-admission or globally unique-game claim.
+
+A regression constructs a profile larger than 1 MiB, checks the compact overview and
+proves stored profile bytes and native/count fields are unchanged. Fourteen focused
+store tests and the full root gate at `51598ee79cf51fbe721390e3d7792f553231ecf6` passed
+(965 Python tests, three skips, 21 subtests; 40 console regressions and component gates).
+That head differs from the deployed Hub source only in test formatting. Subsequent
+acceptance/documentation commits do not change the application bytes. Final follow-up
+PR and integration refs/CI are recorded in the formal release integration receipt.
+
+The preceding `bf17e69` image remains a compatible same-schema rollback, but can
+reproduce this large-list error. The earlier `f4a21a2` rollback remains retained as
+recorded above. Source rollback never requires deleting/restoring the live database.
+
+## Follow-up: apply the same summary boundary to previews
+
+The same full journal inventory was still exposed by preview detail and task-list
+responses. A faithful member preview regression reproduced a 1,401,368-byte response,
+above the unchanged 1 MiB local bound. A shared run-summary projection now covers
+all three member surfaces: games, preview detail and task list. Full references
+remain in stored results/artifacts. Missing reference counts stay unknown, not zero.
+The regression also publishes from the compact preview and verifies the same selected
+records and unchanged original result bytes.
+
+Final Hub source `dd934ececa51bda16257013bce1deb57ef4416e6`, image
+`ghcr.io/rsgcsg/spireagent-hub@sha256:c11e3b3a58b06b15c4fc42a9e47897a2c24c2a9892092112483bee50cba48499`,
+uses the same lock and an offline locked refresh from the preceding qualified image.
+Hub-only rollout plan
+`0445b3672cfdff0a9fa6569064ccd6f030aca7ce98c9533921c179a63fd99060`
+passed its preflight, unchanged-schema, backup/capacity and exact producer checks.
+Workbench/kit, native bytes, account and persistent state were retained.
+
+The actual four-task response (three previews and one build) decreased from 417,982
+to 13,822 bytes. Canonical summary SHA256
+`9730cbfca5d5fb7c26a46e9333704abca064efee1931130968d032fd5b58349f`
+matched the pre-deployment results after only projecting journal references to counts.
+Every individual task detail matched its list entry; the browser rendered previews
+without page errors, and game-list/member-library access remained available.
+
+Forty-nine focused store/union/member regressions passed. Clean full root at the
+exact Hub source passed: 966 Python tests, three skips, 21 subtests, 40 console
+regressions and component/type/package/CPU E2E checks. Later acceptance-only commits
+do not change the deployed application bytes. PR #16 and the updated release PR #15
+record final source integration and latest-head CI; release attachments carry the
+complete integration and publication receipts. No new native/Human, training or
+scientific qualification is claimed. Rollback remains an owner image/config rollout,
+not restoration or deletion of live records; preceding images may reproduce the
+large-preview issue.

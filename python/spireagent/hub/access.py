@@ -1,7 +1,7 @@
 """One public artifact policy; project membership never opens sealed research results.
 
 Research-owner store operations are separate from HTTP sharing. Legacy machine tokens
-retain result-only downloads; immutable evidence archives need an explicit collection grant.
+retain result-only downloads; accepted project collections are available to project members.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ RESULT_KINDS = frozenset(
     }
 )
 PROJECT_KINDS = RESULT_KINDS | {"dataset", "training_input", "experiment", "run"}
-POLICY_VERSION = "stpd/project-sharing-v1"
+POLICY_VERSION = "stpd/project-sharing-v2"
 
 
 def project_member(principal: object) -> bool:
@@ -69,7 +69,8 @@ def require_artifact_access(
     project_member: bool = False,
     payload_role: str | None = None,
     store: ArtifactStore | None = None,
-) -> None:
+) -> tuple[Manifest, ...]:
+    """Authorize once and return the exact checked closure for the request owner."""
     allowed = PROJECT_KINDS if project_member else RESULT_KINDS
     if manifest.kind not in allowed:
         raise BoundaryError("hub", "unauthorized")
@@ -80,3 +81,4 @@ def require_artifact_access(
         raise BoundaryError("hub", "unauthorized")
     if payload_role is not None:
         manifest.payload(payload_role)
+    return nodes

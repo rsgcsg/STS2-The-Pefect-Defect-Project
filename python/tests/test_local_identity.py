@@ -22,6 +22,51 @@ def config(path):
     return ProjectConfig(path, "https://hub.example", "", None, combination())
 
 
+@pytest.mark.parametrize("slow_status", [False, True])
+def test_slow_read_does_not_block_navigation_or_return_data_after_logout(
+    tmp_path, monkeypatch, slow_status,
+):
+    account = LocalIdentity(config(tmp_path))
+    atomic_json(account.path, {"hub_url": account.config.hub_url,
+                              "expires_at": time.time() + 300, "session_token": "session"})
+    started, release, fast_done = threading.Event(), threading.Event(), threading.Event()
+    responses, failures = [], []
+
+    def request(route, **_):
+        if route.endswith("/me" if slow_status else "/datasets"):
+            started.set()
+            assert release.wait(5)
+            return {"principal": {"subject": "old"}} if slow_status else {"items": ["old"]}
+        if route.endswith("/collections?from=1&to=2&selectable=true"):
+            fast_done.set()
+        return {"items": []}
+
+    monkeypatch.setattr(account, "request", request)
+    def slow():
+        try:
+            responses.append(account.status() if slow_status else account.read("datasets"))
+        except BoundaryError as error:
+            failures.append(error.code)
+    thread = threading.Thread(target=slow)
+    thread.start()
+    try:
+        assert started.wait(2)
+        fast = threading.Thread(
+            target=lambda: account.read("collections?from=1&to=2&selectable=true"))
+        fast.start()
+        assert fast_done.wait(2), "unrelated navigation waited behind the slow network request"
+        fast.join(2)
+        account.logout()
+    finally:
+        release.set()
+        thread.join(5)
+    if slow_status:
+        assert responses[0]["status"] == "reconnect_required"
+        assert "principal" not in responses[0]
+    else:
+        assert failures == ["account_changed"] and responses == []
+
+
 @pytest.mark.parametrize("email", [None, "saved@example.test", "invalid", "other@example.test\n"])
 def test_previous_email_is_only_an_explicit_local_hint_not_a_login(tmp_path, email):
     account = LocalIdentity(config(tmp_path))

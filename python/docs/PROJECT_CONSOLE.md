@@ -195,11 +195,11 @@ limits. Zero launch budget does not stop an already active provider job.
 ### Data selection and local model evaluation
 
 **数据下载** freezes a bounded immutable inventory before downloading selected bytes. It does
-not build a new training Dataset or silently repack all history. A raw collection needs an explicit
-durable sharing grant tied to its exact verified upload; legacy upload consent alone is
-insufficient. Dataset/derived downloads must satisfy the same source-grant policy, and knowing a
-sealed test/Gold artifact ID cannot bypass it. Model weights do not grant access to parent training
-data. Missing sharing consent is displayed as unavailable while authorized metadata can remain visible.
+not build a new training Dataset or silently repack all history. Accepted project recordings
+and discoverable datasets are available to authenticated members without another publication
+grant. Explicit source withdrawals, revoked membership and sealed test/Gold boundaries remain
+effective. Quarantined recordings are not dataset inputs. See [ADR-0009](adr/0009-project-dataset-selection.md)
+for the project access policy and compatible reading of existing export inventories.
 
 **模型与评估** keeps cloud artifacts and local execution separate. A downloaded Full-Run model
 can appear in the catalog while remaining unsupported for gameplay. Only a reviewed local policy
@@ -307,15 +307,15 @@ recovery; arbitrary filesystem or power-loss survival is not a qualified claim.
 
 [ADR-0007](adr/0007-fixed-decision-datasets.md) adds **对局与片段** and dataset creation.
 After a shared verified upload, the bounded background worker prepares its run summary.
-The game page shows the latest 100 shared profiles, with incomplete/complete and unknown/win/loss
+The game page shows the current available profiles, with incomplete/complete and unknown/win/loss
 separated. Failed profiles do not change receiver acceptance. It never calls uploads unique games.
 
 In **数据集**, select received recordings, keep permissive defaults or select optional filters,
 then **预览选定记录**. Refresh after background completion, inspect counts/exclusions/run facts,
 and use **按此预览生成固定数据集**. The resulting artifact ID identifies an immutable version.
 Use **数据下载** to select that artifact's Parquet and selection report. New uploads require a
-new preview/build. Existing artifact detail links remain valid. Collection sharing is checked
-again; revocation also blocks future downloads of derived decision bytes.
+new preview/build. Existing artifact detail links remain valid. Current project access is checked again; explicit withdrawal also blocks future downloads
+of the corresponding derived decision bytes.
 
 This candidate does not start training. The strict old Full-Run loader remains unchanged;
 training integration must explicitly select the new decision-dataset contract.
@@ -350,3 +350,18 @@ The **对局与片段** view reports boundaries, recording continuity, outcome, 
 conditions separately. Source profiles refresh once in the existing bounded worker; old
 profiles awaiting refresh report unknown, and older immutable selection reports keep their
 original strict meaning. Several fragments never manufacture an uninterrupted game.
+
+The game overview, preview detail and task lists return run summaries and
+`journal_ref_count`. Full per-decision
+references remain in original profiles/artifacts; the overview does not transport that
+unbounded inventory or weaken the local response limit.
+
+## Date selection and responsive navigation
+
+**新建数据集** offers local start/end dates, all matching recordings (up to 100), a persistent
+selection count and clear selection. Filtering covers the whole catalog before pagination.
+The next-step button is above the source table. A newly submitted preview/build is followed
+directly; failed previews offer **修改录制选择** while retaining the original failed task.
+Dataset tabs show their own loading state immediately; slower old replies cannot replace the
+selected tab. Task reads use indexed access rather than fetching remote source manifests.
+Full original-byte validation remains in the background worker.

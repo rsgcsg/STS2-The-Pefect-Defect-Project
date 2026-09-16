@@ -118,7 +118,7 @@ def main() -> int:
         if args.isolated:
             from spireagent.hub.verification_worker import constrain_worker
 
-            constrain_worker()
+            constrain_worker(dataset=bool(args.decision_job))
         if args.command == "members-bootstrap":
             from spireagent.hub.console_auth import load_legacy_allowlist
             from spireagent.hub.membership import MembershipService
@@ -326,6 +326,7 @@ def main() -> int:
                     if pending is None:
                         from spireagent.hub.decision_jobs import DecisionJobs
                         from spireagent.hub.verification_worker import (
+                            DATASET_TIMEOUT_SECONDS,
                             VerifierCapacityDeferred,
                             run_verifier,
                         )
@@ -339,7 +340,9 @@ def main() -> int:
                                          "--staging", args.staging, "--public-url", args.public_url,
                                          "--decision-job", job]
                             try:
-                                completed = run_verifier(arguments, shutdown=shutdown)
+                                completed = run_verifier(
+                                    arguments, shutdown=shutdown, timeout=DATASET_TIMEOUT_SECONDS,
+                                )
                                 if not completed and not shutdown.is_set():
                                     jobs.fail(job, "worker_resource_or_process_limit")
                             except VerifierCapacityDeferred:

@@ -126,6 +126,70 @@ def test_payload_tamper_cannot_pass_reprojection(tmp_path: Path) -> None:
         load(owner.store, tampered.artifact_id)
 
 
+def test_game_overview_keeps_large_journal_inventory_in_stored_profile(tmp_path: Path) -> None:
+    import json
+
+    owner, upload, _, jobs = setup(tmp_path)
+    identity = jobs.pending()
+    assert identity is not None
+    jobs.run(identity)
+    with owner.operations.transaction() as db:
+        row = db.execute("SELECT result FROM decision_jobs WHERE id=?", (identity,)).fetchone()
+        profile = json.loads(row[0])
+        references = ["journal.jsonl:" + str(i) + ":" + "a" * 64 for i in range(16000)]
+        profile["runs"][0]["journal_refs"] = references
+        stored = json.dumps(profile)
+        assert len(stored.encode()) > 1048576
+        db.execute("UPDATE decision_jobs SET result=? WHERE id=?", (stored, identity))
+    overview = jobs.games(MEMBER)
+    assert len(json.dumps(overview).encode()) < 20000
+    first = overview["items"][0]
+    assert "journal_refs" not in first
+    assert first["journal_ref_count"] == len(references)
+    assert first["uploads"] == [upload]
+    assert first["coverage"] is not None
+    for field in ("run_id", "complete", "outcome", "canonical", "native_starts", "native_ends"):
+        assert first[field] == profile["runs"][0][field]
+    with owner.operations.transaction() as db:
+        saved = db.execute("SELECT result FROM decision_jobs WHERE id=?", (identity,)).fetchone()
+        assert saved[0] == stored
+
+
+def test_preview_read_and_list_compact_references_without_changing_build(tmp_path: Path) -> None:
+    import json
+
+    owner, upload, _, jobs = setup(tmp_path)
+    body = {"uploads": [upload], "rules": SelectionRules().to_dict(),
+            "preview_id": None, "name": "Large preview"}
+    identity = jobs.create(MEMBER, body)["id"]
+    jobs.run(identity)
+    with owner.operations.transaction() as db:
+        row = db.execute("SELECT result FROM decision_jobs WHERE id=?", (identity,)).fetchone()
+        result = json.loads(row[0])
+        references = ["journal.jsonl:" + str(i) + ":" + "a" * 64 for i in range(16000)]
+        result["runs"][0]["journal_refs"] = references
+        stored = json.dumps(result)
+        assert len(stored.encode()) > 1048576
+        db.execute("UPDATE decision_jobs SET result=? WHERE id=?", (stored, identity))
+    detail = jobs.read(MEMBER, identity)
+    listed = jobs.list(MEMBER)
+    for response in (detail, listed):
+        assert len(json.dumps(response).encode()) < 20000
+    assert listed["items"] == [detail]
+    assert detail["result"]["runs"][0]["journal_ref_count"] == len(references)
+    assert "journal_refs" not in detail["result"]["runs"][0]
+    for key in ("logical_id", "selected", "selected_facets", "exclusion_counts", "split_status"):
+        assert detail["result"][key] == result[key]
+    build = jobs.create(MEMBER, {**body, "preview_id": identity})
+    jobs.run(build["id"])
+    built = jobs.read(MEMBER, build["id"])
+    assert built["state"] == "completed"
+    assert len(load(owner.store, built["result"]["artifact_id"])[1].records) == result["selected"]
+    with owner.operations.transaction() as db:
+        saved = db.execute("SELECT result FROM decision_jobs WHERE id=?", (identity,)).fetchone()
+        assert saved[0] == stored
+
+
 def test_concurrent_worker_claim_runs_once(tmp_path: Path) -> None:
     from concurrent.futures import ThreadPoolExecutor
     from unittest.mock import patch
@@ -325,3 +389,102 @@ def test_old_game_profiles_refresh_once_without_rewriting_history(tmp_path: Path
     with owner.operations.transaction() as db:
         saved = db.execute("SELECT result FROM decision_jobs WHERE id=?", (old_id,)).fetchone()
         assert saved[0] == old_result
+
+
+def test_logical_identity_streams_exact_legacy_bytes(tmp_path: Path, monkeypatch) -> None:
+    import weakref
+    from dataclasses import replace
+
+    from spireagent.json_boundary import FrozenObject
+    from stpd.canonical import semantic_hash
+    from stpd.fullrun.contracts import ResearchTransitionV2
+    from stpd.fullrun.decision_dataset import SCHEMA, DecisionDataset
+
+    owner, _, source, _ = setup(tmp_path)
+    selected = preview(owner.store, (source,), SelectionRules())
+    # Unicode, escaped text and numeric edge cases must use the original encoder.
+    selected = replace(selected, report=FrozenObject.of({
+        **selected.report.value(), "encoding_probe": ["中文\n\"\\", -0.0, 1e-12, None],
+    }))
+    expected = semantic_hash({"schema": SCHEMA,
+        "records": [r.to_dict() for r in selected.records], "report": selected.report.value()})
+    original = ResearchTransitionV2.to_dict
+    previous = None
+
+    class TrackedDict(dict):
+        pass
+
+    def one_at_a_time(record):
+        nonlocal previous
+        assert previous is None or previous() is None, "retained decoded previous record"
+        value = TrackedDict(original(record))
+        previous = weakref.ref(value)
+        return value
+
+    monkeypatch.setattr(ResearchTransitionV2, "to_dict", one_at_a_time)
+    assert selected.logical_id == expected
+    empty = DecisionDataset((), selected.report)
+    assert empty.logical_id == semantic_hash({
+        "schema": SCHEMA, "records": [], "report": selected.report.value(),
+    })
+
+
+def test_batched_parquet_preserves_order_and_exact_reprojection(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    import io
+    from dataclasses import replace
+
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    import stpd.fullrun.decision_store as module
+    from stpd.canonical import canonical_json
+    from stpd.fullrun.decision_dataset import SCHEMA
+
+    owner, _, source, _ = setup(tmp_path)
+    rules = SelectionRules()
+    selected = preview(owner.store, (source,), rules)
+    # More than two physical row groups; the existing reprojection must compare
+    # every row, including order, missing rows and extra rows.
+    selected = replace(selected, records=selected.records * 50)
+    manifest = module._publish(owner.store, (source,), rules, owner.producer,
+                               selected.logical_id, selected, SCHEMA, None)
+    raw = b"".join(owner.store.read_payload(manifest.payload("records")))
+    parquet = pq.ParquetFile(io.BytesIO(raw))
+    assert parquet.num_row_groups == 3
+    rows = parquet.read().to_pylist()
+    assert [r["record_json"] for r in rows] == [
+        canonical_json(r.to_dict()) for r in selected.records
+    ]
+    assert max(parquet.metadata.row_group(i).num_rows for i in range(3)) <= 128
+    monkeypatch.setattr(module, "preview", lambda *args, **kwargs: selected)
+    monkeypatch.setattr(pq, "read_table", lambda *args, **kwargs: pytest.fail("whole-table reader"))
+    assert load(owner.store, manifest.artifact_id)[1] == selected
+    legacy = io.BytesIO()
+    pq.write_table(pa.Table.from_pylist(rows, schema=parquet.schema_arrow), legacy)
+    legacy.seek(0)
+    legacy_payload = owner.store.put_payload("records", legacy, "application/vnd.apache.parquet")
+    legacy_manifest = replace(manifest, payloads=(legacy_payload, manifest.payload("selection")))
+    owner.store.publish(legacy_manifest)
+    assert load(owner.store, legacy_manifest.artifact_id)[1] == selected
+    changed_value = [*rows[:-1], {**rows[-1], "split": "tampered"}]
+    reordered = [*rows[:127], rows[128], rows[127], *rows[129:]]
+    for changed in [rows[:-1], rows + rows[:1], reordered, changed_value]:
+        output = io.BytesIO()
+        pq.write_table(pa.Table.from_pylist(changed, schema=parquet.schema_arrow), output)
+        output.seek(0)
+        payload = owner.store.put_payload("records", output, "application/vnd.apache.parquet")
+        bad = replace(manifest, payloads=(payload, manifest.payload("selection")))
+        owner.store.publish(bad)
+        with pytest.raises(BoundaryError, match="records_reprojection_mismatch"):
+            load(owner.store, bad.artifact_id)
+    extra = io.BytesIO()
+    pq.write_table(pa.Table.from_pylist([{**row, "extra": "not-in-contract"} for row in rows]),
+                   extra)
+    extra.seek(0)
+    extra_payload = owner.store.put_payload("records", extra, "application/vnd.apache.parquet")
+    bad = replace(manifest, payloads=(extra_payload, manifest.payload("selection")))
+    owner.store.publish(bad)
+    with pytest.raises(BoundaryError, match="records_reprojection_mismatch"):
+        load(owner.store, bad.artifact_id)

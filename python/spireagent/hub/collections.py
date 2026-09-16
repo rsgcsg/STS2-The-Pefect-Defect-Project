@@ -1,4 +1,4 @@
-"""One owner for collection sharing and verified source access across Hub features."""
+"""Project members use accepted project data; explicit withdrawals remain effective."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from contextlib import closing
 from typing import TYPE_CHECKING, Any
 
 from spireagent.artifact_contracts import Manifest
-from spireagent.hub.access import lineage, project_member, require_artifact_access
+from spireagent.hub.access import project_member, require_artifact_access
 from spireagent.hub.console_auth import ConsolePrincipal
 from spireagent.json_boundary import BoundaryError, digest, json_bytes
 from stpd.collection_activity import ENROLLMENT_SCHEMA, validate_enrollment
@@ -185,7 +185,7 @@ class CollectionAccess:
                     (identity,),
                 ).fetchone()
                 reason = "not_granted"
-                if row and row[1] == 1:
+                if row and (row[1] == 1 or (row[1] is None and row[0] == "verified")):
                     reason = (
                         "available" if row[0] in {"verified", "quarantined"} else "not_received"
                     )
@@ -200,7 +200,9 @@ class CollectionAccess:
                 "ON s.upload_id=u.id WHERE u.id=?",
                 (identity,),
             ).fetchone()
-        if row is None or row["approved"] != 1:
+        if row is None or row["approved"] == 0 or (
+            row["approved"] is None and row["status"] != "verified"
+        ):
             raise BoundaryError("sharing", "collection_not_shared")
         if row["status"] not in {"verified", "quarantined"} or not row["receipt"]:
             raise BoundaryError("sharing", "collection_not_received")
@@ -224,42 +226,22 @@ class CollectionAccess:
 
     def artifact(self, artifact_id: str) -> Manifest:
         manifest = self.service.store.get_manifest(digest(artifact_id, "export.artifact_id"))
-        require_artifact_access(manifest, project_member=True, store=self.service.store)
-        # A derived Dataset exposes Human decision bytes. Its received-source ancestors
-        # require the same sharing grants as their archives; model weights do not grant
-        # permission to pull source data implicitly.
+        checked = require_artifact_access(
+            manifest, project_member=True, store=self.service.store,
+        )
+        # Catalogued project datasets need no second publication grant. A deliberate
+        # withdrawal of a received source still applies to its derived data.
         if manifest.kind == "dataset":
-            for ancestor in lineage(self.service.store, manifest):
+            for ancestor in checked:
                 info = ancestor.parameters.value()
-                if (
-                    info.get("schema") == "stpd/source-projection-v1"
-                    and info.get("scope") != "engineering"
-                    and not any(
-                        node.parameters.value().get("schema") == "stpd/received-bundle-v1"
-                        for node in lineage(self.service.store, ancestor)
-                    )
-                ):
-                    raise BoundaryError("sharing", "source_sharing_not_established")
                 if info.get("schema") != "stpd/received-bundle-v1":
                     continue
                 with closing(self.service.console_index.read()) as db:
                     rows = db.execute(
-                        "SELECT id FROM uploads WHERE json_extract(receipt,'$.evidence_id')=?",
+                        "SELECT u.id,s.approved FROM uploads u LEFT JOIN collection_sharing s "
+                        "ON s.upload_id=u.id WHERE json_extract(u.receipt,'$.evidence_id')=?",
                         (ancestor.artifact_id,),
                     ).fetchall()
-                if not rows:
-                    raise BoundaryError("sharing", "source_sharing_not_established")
-                # Identical data received by another device is not a grant for this
-                # immutable received-source artifact; the exact parent must be shared.
-                shared = False
-                for row in rows:
-                    try:
-                        shared = self.collection(row[0]).artifact_id == ancestor.artifact_id
-                    except BoundaryError as error:
-                        if error.code != "collection_not_shared":
-                            raise
-                    if shared:
-                        break
-                if not shared:
+                if any(row["approved"] == 0 for row in rows):
                     raise BoundaryError("sharing", "source_sharing_not_established")
         return manifest

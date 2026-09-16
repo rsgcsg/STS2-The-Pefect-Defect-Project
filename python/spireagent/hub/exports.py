@@ -2,7 +2,7 @@
 
 Every HTTP request authenticates again. Inventories contain exact selected own files,
 never storage keys, presigned URLs, credentials, local paths or recursive parent bytes.
-Raw collection sharing is an explicit durable owner grant independent of upload consent.
+Accepted project collections need no second grant; explicit withdrawal still applies.
 """
 
 from __future__ import annotations
@@ -135,7 +135,11 @@ class ExportService:
                 identity,
                 {"files": len(files), "bytes": size},
             )
-        return self.read(principal, identity)
+        # This request already authorized every selected source above. Re-reading
+        # their entire immutable lineage here doubles remote work and can time out
+        # after the inventory was durably created. Every later read/payload request
+        # still performs fresh access checks, including explicit source withdrawal.
+        return self._inventory(principal, identity)
 
     def _inventory(self, principal: ConsolePrincipal, export_id: str) -> dict[str, Any]:
         self.collections.require_member(principal)
@@ -151,13 +155,15 @@ class ExportService:
         if len(raw) > MAX_INVENTORY_BYTES or hashlib.sha256(raw).hexdigest() != identity:
             raise BoundaryError("export", "inventory_integrity_failure")
         value = json.loads(raw)
-        if value["schema"] != SCHEMA or value["policy"] != POLICY_VERSION:
+        if value["schema"] != SCHEMA or value["policy"] not in {
+            "stpd/project-sharing-v1", POLICY_VERSION,
+        }:
             raise BoundaryError("export", "export_policy_changed")
         return {**value, "export_id": identity, "created_at": timestamp(row[1])}
 
     def read(self, principal: ConsolePrincipal, export_id: str) -> dict[str, Any]:
         value = self._inventory(principal, export_id)
-        # No cached capability: current consent and sealed boundaries are rechecked.
+        # Old inventories retain their hash and policy; current access is still rechecked.
         for upload_id in value["selection"]["collections"]:
             self.collections.collection(upload_id)
         for item in value["selection"]["artifacts"]:

@@ -18,17 +18,21 @@ from spireagent.hub.capacity import IMAGE_RESERVE_INODES, RESERVE_INODES, filesy
 if TYPE_CHECKING:
     from spireagent.hub.database import Operations
 
+DATASET_TIMEOUT_SECONDS = 900
+DATASET_CPU_SECONDS = 600
+
 
 class VerifierCapacityDeferred(Exception):
     """No upload was claimed or attempted; retry accounting must remain unchanged."""
 
 
-def constrain_worker() -> None:
+def constrain_worker(*, dataset: bool = False) -> None:
     if sys.platform == "linux":
         import resource
 
         resource.setrlimit(resource.RLIMIT_AS, (1536 * 1024**2, 1536 * 1024**2))
-        resource.setrlimit(resource.RLIMIT_CPU, (120, 125))
+        cpu = DATASET_CPU_SECONDS if dataset else 120
+        resource.setrlimit(resource.RLIMIT_CPU, (cpu, cpu + 5))
         resource.setrlimit(resource.RLIMIT_FSIZE, (3 * 1024**3, 3 * 1024**3))
 
 
