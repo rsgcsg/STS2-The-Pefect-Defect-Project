@@ -168,6 +168,8 @@ internal sealed class PlatformLivePanel : IDisposable
     private string? _displayedPolicyRunId;
     private Button _endTestButton = null!;
     private bool _policyCommandPending;
+    private readonly PlatformPolicyCommands _policyCommands = new();
+    private long _policyUiIntent;
     private string? _pendingPollError;
     private long _lastRecordingEventSequence;
     private string? _actionFeedSessionId;
@@ -217,6 +219,8 @@ internal sealed class PlatformLivePanel : IDisposable
         if (_disposed)
             return;
         _disposed = true;
+        _policyCommands.InvalidatePending();
+        Interlocked.Increment(ref _policyUiIntent);
         if (_tree != null && _processFrameHandler != null && GodotObject.IsInstanceValid(_tree))
             _tree.ProcessFrame -= _processFrameHandler;
         Root.Resized -= ApplyWorkspaceBounds;
@@ -1032,79 +1036,65 @@ internal sealed class PlatformLivePanel : IDisposable
             _ = PollAsync();
     }
 
-    private async Task SetRuntimeModeAsync(PlatformCommandMode mode)
+    private Task SetRuntimeModeAsync(PlatformCommandMode mode) => RunPolicyCommandAsync(mode switch
     {
-        if (_policyCommandPending && mode != PlatformCommandMode.Human) return;
+        PlatformCommandMode.Human => PlatformPolicyCommand.Human,
+        PlatformCommandMode.Shadow => PlatformPolicyCommand.Shadow,
+        PlatformCommandMode.OneStep => PlatformPolicyCommand.OneStep,
+        PlatformCommandMode.Auto => PlatformPolicyCommand.Auto,
+        _ => throw new ArgumentOutOfRangeException(nameof(mode))
+    });
+
+    private Task EndRuntimeAsync() => RunPolicyCommandAsync(PlatformPolicyCommand.Stop);
+    private Task TickRuntimeAsync() => RunPolicyCommandAsync(PlatformPolicyCommand.Tick);
+
+    private async Task RunPolicyCommandAsync(PlatformPolicyCommand command)
+    {
+        bool recovery = command is PlatformPolicyCommand.Human or PlatformPolicyCommand.Stop;
+        if (_policyCommandPending && !recovery) return;
+        long intent = Interlocked.Increment(ref _policyUiIntent);
         _policyCommandPending = true;
-        _command.Text = $"Policy Runtime: setting mode {ToRuntimeMode(mode)}...";
+        _command.Text = recovery ? "正在归还控制，请等待实际回执…" : "正在准备模型测试…";
         try
         {
-            string expectedRunId = _displayedPolicyRunId
-                ?? throw new InvalidOperationException("Observe the Policy Runtime before commanding it.");
-            if (mode != PlatformCommandMode.Human)
-            {
-                var recording = STS2HumanAnnotator.Mod.RecordingApplicationService.Instance.QueryStatus();
-                var prepared = PlatformCollectionHandoff.Prepare(recording.Lifecycle.SessionId,
-                    Guid.NewGuid().ToString("D"),
-                    STS2HumanAnnotator.Mod.RecordingApplicationService.Instance.QueryStatus,
-                    STS2HumanAnnotator.Mod.RecordingApplicationService.Instance.ExecuteForSession);
-                if (!PlatformCollectionHandoff.Ready(prepared))
-                    throw new InvalidOperationException("真人录制正在封存。完成后再开始测试；模型尚未接管。");
-            }
-            PolicyRuntimeStatus response = await _statusClient.SetModeAsync(ToRuntimeMode(mode), expectedRunId);
+            string expected = _displayedPolicyRunId
+                ?? throw new InvalidOperationException("请先加载模型并读取其状态。");
+            PlatformPolicyBinding? binding = null;
+            PolicyRuntimeStatus response = await _policyCommands.RunAsync(
+                command,
+                async () => {
+                    string game = STS2Connector.PlayerEnvironment.PlayerEnvironmentService.GetPlayerEnvironmentControlSnapshot().RuntimeInstanceId;
+                    binding = await _statusClient.ObserveBindingAsync(expected, game);
+                    var recording = STS2HumanAnnotator.Mod.RecordingApplicationService.Instance.QueryStatus();
+                    var prepared = PlatformCollectionHandoff.Prepare(recording.Lifecycle.SessionId,
+                        Guid.NewGuid().ToString("D"),
+                        STS2HumanAnnotator.Mod.RecordingApplicationService.Instance.QueryStatus,
+                        STS2HumanAnnotator.Mod.RecordingApplicationService.Instance.ExecuteForSession);
+                    if (!PlatformCollectionHandoff.Ready(prepared))
+                        throw new InvalidOperationException("真人录制正在封存。完成后再开始测试；模型尚未接管。");
+                },
+                mode => _statusClient.SetModeAsync(mode, expected, binding),
+                () => _statusClient.TickAsync(expected, binding ?? throw new InvalidOperationException("Game binding unavailable.")),
+                () => _statusClient.StopAsync(expected));
+            if (intent != Interlocked.Read(ref _policyUiIntent) || _disposed) return;
             _mode = ParseRuntimeMode(response.Mode);
             ApplyModeButtonState();
-            if (mode == PlatformCommandMode.OneStep)
-            {
-                await _statusClient.TickAsync(expectedRunId);
-                _command.Text = "Policy Runtime One-Step completed and returned control according to Runtime status.";
-            }
-            else
-            {
-                _command.Text = $"Policy Runtime mode set to {ToRuntimeMode(mode)}.";
-            }
-            PushToast("policy.mode", $"Policy mode: {ToRuntimeMode(mode)}.");
+            _command.Text = command == PlatformPolicyCommand.Stop
+                ? response.Lifecycle == "stopped" ? "本次测试已结束。工作台会整理实战记录。" : "正在等待停止回执。"
+                : $"模型状态：{response.Mode}。";
             RefreshVisibleStatus();
         }
+        catch (PlatformPolicyCommandSupersededException) { /* A newer user intent owns the UI. */ }
         catch (Exception exception)
         {
-            _command.Text = $"Policy Runtime unavailable: {exception.Message}";
-            PushToast("policy.error", $"Policy command rejected: {exception.Message}");
+            if (intent != Interlocked.Read(ref _policyUiIntent) || _disposed) return;
+            _command.Text = $"操作未确认：{exception.Message}。请查看状态，不要重复决策。";
+            PushToast("policy.error", exception.Message);
             SetPolicyControlsAvailable(false);
         }
-        finally { _policyCommandPending = false; }
-    }
-
-    private async Task EndRuntimeAsync()
-    {
-        try
+        finally
         {
-            string expected = _displayedPolicyRunId ?? throw new InvalidOperationException("请先读取当前模型状态。");
-            PolicyRuntimeStatus stopped = await _statusClient.StopAsync(expected);
-            _command.Text = stopped.Lifecycle == "stopped" ? "本次测试已结束。工作台会整理实战记录。" : "正在等待停止回执。";
-            RefreshVisibleStatus();
-        }
-        catch (Exception exception)
-        { _command.Text = $"停止结果尚未确认：{exception.Message}。不要重复决策。"; SetPolicyControlsAvailable(false); }
-    }
-
-    private async Task TickRuntimeAsync()
-    {
-        _command.Text = "Policy Runtime: ticking with max_ticks=1...";
-        try
-        {
-            string expectedRunId = _displayedPolicyRunId
-                ?? throw new InvalidOperationException("Observe the Policy Runtime before commanding it.");
-            await _statusClient.TickAsync(expectedRunId);
-            _command.Text = "Policy Runtime tick completed.";
-            PushToast("policy.tick", "Policy Runtime tick completed.");
-            RefreshVisibleStatus();
-        }
-        catch (Exception exception)
-        {
-            _command.Text = $"Policy Runtime unavailable: {exception.Message}";
-            PushToast("policy.error", $"Policy tick rejected: {exception.Message}");
-            SetPolicyControlsAvailable(false);
+            if (intent == Interlocked.Read(ref _policyUiIntent)) _policyCommandPending = false;
         }
     }
 

@@ -38,9 +38,6 @@ public sealed record RecordingCommand(
     string? CaptureProfileId = null,
     string Schema = RecordingApplicationContract.CommandSchema);
 
-/// <summary>Optional in-process mutation precondition; not an evidence format.</summary>
-public sealed record RecordingSessionExpectation(string? SessionId);
-
 public sealed record RecordingLifecycleSnapshot(
     RecordingLifecycleState State,
     string? SessionId,

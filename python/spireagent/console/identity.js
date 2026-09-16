@@ -40,8 +40,9 @@ window.SpireIdentity = (() => {
     const memberLink = document.querySelector('[data-view="members"]');
     if (memberLink) memberLink.hidden = principal?.role !== "admin";
     if (principal && (!local || identity.status === "signed_in")) {
+      target.append(action("账号与电脑", () => { location.assign("?view=devices"); }));
       target.append(el("span", principal.email, "account-label"));
-      target.append(action("退出账号", async () => {
+      target.append(action("退出网页账号", async () => {
         clearTimeout(timer);
         const csrf = identity.csrf_token;
         loggingOut = true; epoch++; busy = null; identity = null; scope = "local";
@@ -131,7 +132,7 @@ window.SpireIdentity = (() => {
     if (local) {
       box.append(el("p", identity?.device_credential_present ?
         "这台电脑已保存上传凭据；是否有效以 Hub 最近验证为准。个人退出不会删除它。" :
-        "先登录并确认电脑名称。绑定成功后，打开“录制与上传”确认日常录制授权并完成本机设置；登录不代表同意上传。"));
+        "先登录并确认电脑名称。绑定成功后，打开“真人采集”确认日常录制授权并完成本机设置；登录不代表同意上传。"));
       if (!identity?.hub_configured) box.append(el("p", "尚未配置项目 Hub 地址。请使用项目提供的启动配置。"));
       else if (!who || identity.status !== "signed_in") {
         const label = el("label", "这台电脑的名称"), input = el("input");
@@ -152,11 +153,11 @@ window.SpireIdentity = (() => {
         refreshPage();
       }));
       box.append(el("p", identity?.delivery_configured ?
-        "这台电脑已有投递配置；在“录制与上传”查看本机检查，在“这台电脑”的采集记录中查看上传与云端收据。" :
-        "当前尚未配置投递。打开“录制与上传”，确认日常录制授权并查看本机设置的下一步。"));
+        "这台电脑已有投递配置；在“真人采集”查看本机检查，在“数据”的本机记录中查看上传与云端收据。" :
+        "当前尚未配置投递。打开“真人采集”，确认日常录制授权并查看本机设置的下一步。"));
     }
     if (who) {
-      const recording = el("a", "继续录制与上传 →", "button");
+      const recording = el("a", "打开真人采集 →", "button");
       recording.href = "?view=campaigns";
       box.append(recording);
       box.append(el("p", `当前账号：${who.email} · ${who.role}`));

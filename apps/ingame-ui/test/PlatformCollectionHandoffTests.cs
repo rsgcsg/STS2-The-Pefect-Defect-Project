@@ -42,6 +42,23 @@ public sealed class PlatformCollectionHandoffTests
     }
 
     [Fact]
+    public void ClosePassesObservedSessionToAtomicRecorderOwner()
+    {
+        var before = Status(RecordingLifecycleState.Recording);
+        var replacement = Status(RecordingLifecycleState.Recording, session: "recording-b");
+        bool mutated = false;
+        Assert.Throws<InvalidOperationException>(() => PlatformCollectionHandoff.Prepare(
+            "recording-a", "command", () => before, (_, expected) => {
+                Assert.Equal("recording-a", expected);
+                if (expected != replacement.Lifecycle.SessionId)
+                    return new(false, false, "recording_session_changed", "changed under owner lock", replacement.Lifecycle);
+                mutated = true;
+                return new(true, true, "closed", "closed", replacement.Lifecycle);
+            }));
+        Assert.False(mutated);
+    }
+
+    [Fact]
     public void RejectionAndIncompleteCloseDoNotGrantModelReadiness()
     {
         var current = Status(RecordingLifecycleState.Recording);

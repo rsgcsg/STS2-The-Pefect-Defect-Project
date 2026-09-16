@@ -43,6 +43,20 @@ def upload_preference(config: ProjectConfig) -> dict[str, Any]:
     return {"enabled": value["enabled"], "explicit": True}
 
 
+def upload_preference_status(config: ProjectConfig) -> dict[str, Any]:
+    """Keep diagnostics available while an invalid preference blocks uploading."""
+    try:
+        return upload_preference(config)
+    except (BoundaryError, OSError, ValueError) as error:
+        return {
+            "enabled": False,
+            "explicit": True,
+            "error": error.code
+            if isinstance(error, BoundaryError)
+            else "upload_preference_unreadable",
+        }
+
+
 def save_upload_preference(config: ProjectConfig, enabled: bool) -> dict[str, Any]:
     if type(enabled) is not bool:
         raise BoundaryError("collection", "upload_boolean_required")
@@ -93,8 +107,7 @@ class CollectionFlow:
             for item in items:
                 root = self.config.state_dir / "campaigns" / item["enrollment_id"]
                 if active == root / "delivery.json" or (
-                    active.name == "delivery.json"
-                    and active.parent.parent == root / "generations"
+                    active.name == "delivery.json" and active.parent.parent == root / "generations"
                 ):
                     attached.append(item)
             if len(attached) != 1:
@@ -112,9 +125,10 @@ class CollectionFlow:
         )
 
     def status(self) -> dict[str, Any]:
-        preference = upload_preference(self.config)
+        preference = upload_preference_status(self.config)
         result: dict[str, Any] = {
             "schema": FLOW_SCHEMA,
+            "device_id": self.members.account.device().get("device_id"),
             "upload": {**preference, "process": self.delivery_process()},
             "stage": "unavailable",
             "next_action": "reconnect",
@@ -122,6 +136,13 @@ class CollectionFlow:
             "enrollment": None,
             "default": None,
         }
+        if preference.get("error"):
+            result.update(
+                stage="upload_blocked",
+                next_action="review_upload_preference",
+                error=preference["error"],
+            )
+            return result
         try:
             current = self.setup.status(self.delivery_process())
             selected = self._selected(current)
@@ -231,7 +252,13 @@ class CollectionFlow:
         with self.lock:
             if not body["enabled"]:
                 # Persist first. Even a process-stop failure cannot re-enable on restart.
-                save_upload_preference(self.config, False)
+                try:
+                    save_upload_preference(self.config, False)
+                except (BoundaryError, OSError, ValueError):
+                    # Bad state stays intact and blocks future start; stopping a
+                    # running uploader must still be possible without cloud access.
+                    self.stop_delivery()
+                    return self.status()
                 self.stop_delivery()
                 process = self.delivery_process()
                 return {

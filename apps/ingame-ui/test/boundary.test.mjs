@@ -24,8 +24,8 @@ test("Live UI has a visible entry without keyboard or gameplay authority", () =>
   assert.doesNotMatch(mod, /override void _(Ready|Process|Input)/u);
 });
 
-test("Product navigation exposes exactly Agent Run and Human Recorder", () => {
-  assert.match(mod, /new\[\] \{ "Agent Run", "Human Recorder" \}/u);
+test("Product navigation exposes exactly model tests and Human collection", () => {
+  assert.match(mod, /new\[\] \{ "模型实战", "真人采集" \}/u);
   assert.match(mod, /BuildAgentRunPage\(_surfaceViewport\)/u);
   assert.match(mod, /BuildRecorderPage\(_surfaceViewport\)/u);
   assert.match(mod, /_surfaces\.Add\(_agentRunPage\)/u);
@@ -104,13 +104,13 @@ test("Agent Run uses only existing typed Policy Runtime status and controls", ()
   assert.match(mod, /Policy Runtime: \{status\.PolicyRuntimeTransportStatus\}/u);
   assert.match(mod, /SetRuntimeModeAsync\(mode\)/u);
   assert.match(mod, /TickRuntimeAsync\(\)/u);
-  assert.match(mod, /Human is the safe default/u);
+  assert.match(mod, /准备模型不会自动操作游戏/u);
   assert.match(mod, /PolicyUnavailableReason/u);
   assert.match(client, /sts2\.policy-runtime\/http-2/u);
   assert.match(client, /Headers\.Add\("X-STS2-Policy-Run-ID", expectedRunId\)/u);
   assert.match(client, /HttpMethod\.Post, "v2\/" \+ relativePath/u);
-  assert.match(mod, /SetModeAsync\(ToRuntimeMode\(mode\), expectedRunId\)/u);
-  assert.match(mod, /TickAsync\(expectedRunId\)/u);
+  assert.match(mod, /SetModeAsync\(mode, expected, binding\)/u);
+  assert.match(mod, /TickAsync\(expected, binding/u);
   assert.match(contracts, /PolicyRuntime/u);
   assert.doesNotMatch(contracts, /ReadScoreNodes|Contains\("score"/u);
 });
@@ -198,4 +198,24 @@ test("Event retention is bounded and a reconnect gap is reread before cursor adv
   assert.match(gap, /OldestAvailableSequence - 1/u);
   assert.match(gap, /batch = STS2HumanAnnotator.Mod.RecordingApplicationService.Instance.QueryEvents/u);
   assert.doesNotMatch(gap, /_lastRecordingEventSequence = Math.Max\(_lastRecordingEventSequence, batch.LatestSequence/u);
+});
+
+
+test("recording handoff validates expected session inside the Recorder owner lock", () => {
+  const owner = fs.readFileSync(path.join(root, "../../components/annotator/src/STS2HumanAnnotator.Mod/RecorderRuntime.cs"), "utf8");
+  const method = owner.slice(owner.indexOf("internal static RecordingCommandResult ExecuteRecordingCommand("));
+  assert.match(method, /lock \(Gate\)[\s\S]*expectedSession.SessionId != _lifecycle.SessionId/u);
+  assert.ok(method.indexOf("expectedSession.SessionId") < method.indexOf("CommandLedger.TryGet"));
+  const bridge = fs.readFileSync(path.join(root, "../game-mod/PlatformTaskBridge.cs"), "utf8");
+  assert.match(bridge, /ExecuteForSession/u);
+  assert.match(mod, /_policyCommands.RunAsync/u);
+});
+
+
+test("model commands bind the observed Runtime to this game and recovery epoch", () => {
+  assert.match(mod, /GetPlayerEnvironmentControlSnapshot\(\).RuntimeInstanceId/u);
+  assert.match(mod, /ObserveBindingAsync\(expected, game\)/u);
+  assert.ok(mod.indexOf("binding = await _statusClient.ObserveBindingAsync") < mod.indexOf("var prepared = PlatformCollectionHandoff.Prepare"));
+  assert.match(client, /X-STS2-Game-Instance-ID/u);
+  assert.match(client, /X-STS2-Recovery-Epoch/u);
 });

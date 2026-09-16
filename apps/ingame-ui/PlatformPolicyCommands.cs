@@ -10,7 +10,8 @@ public enum PlatformPolicyCommand
     Shadow,
     OneStep,
     Auto,
-    Stop
+    Stop,
+    Tick
 }
 
 /// <summary>An older UI intent completed after another command superseded it.</summary>
@@ -53,12 +54,14 @@ public sealed class PlatformPolicyCommands
         cancellationToken.ThrowIfCancellationRequested();
         long intent = Interlocked.Increment(ref _generation);
 
-        if (command is PlatformPolicyCommand.Shadow or PlatformPolicyCommand.OneStep or PlatformPolicyCommand.Auto)
+        if (command is PlatformPolicyCommand.Shadow or PlatformPolicyCommand.OneStep or PlatformPolicyCommand.Auto or PlatformPolicyCommand.Tick)
         {
             EnsureCurrent(intent, cancellationToken);
             await prepareModel().ConfigureAwait(false);
             EnsureCurrent(intent, cancellationToken);
         }
+        if (command == PlatformPolicyCommand.Tick)
+            return await SendAsync(intent, tick, cancellationToken).ConfigureAwait(false);
         if (command == PlatformPolicyCommand.Stop)
             return await SendAsync(intent, stop, cancellationToken).ConfigureAwait(false);
 

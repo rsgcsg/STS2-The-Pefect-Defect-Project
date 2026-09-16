@@ -304,3 +304,19 @@ def test_resume_revalidates_device_even_with_valid_personal_membership(journey, 
     with pytest.raises(BoundaryError, match="matching_local_device_required"):
         flow.set_upload({"enabled": True})
     assert upload_preference(flow.config)["enabled"] is False
+
+
+def test_broken_preference_blocks_upload_but_keeps_status_and_stop(journey, monkeypatch):
+    flow, state, _ = journey
+    path = flow.config.state_dir / PREFERENCE_FILE
+    path.write_text("broken json")
+    path.chmod(0o600)
+    state["running"] = True
+    monkeypatch.setattr(flow, "stop_delivery", lambda: state.update(running=False))
+    status = flow.status()
+    assert status["stage"] == "upload_blocked"
+    assert status["upload"]["enabled"] is False
+    stopped = flow.set_upload({"enabled": False})
+    assert stopped["upload"]["process"] != "running"
+    assert path.read_text() == "broken json"
+    assert stopped["error"]

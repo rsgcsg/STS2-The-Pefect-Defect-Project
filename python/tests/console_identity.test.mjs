@@ -31,7 +31,7 @@ test('account logout rejects an already in-flight identity response and retains 
   const {ui, nodes, calls} = setup();
   const initial = ui.refresh(true); calls.shift().answer(person()); await initial;
   const pending = ui.refresh(true), old = calls.shift();
-  const logout = nodes.get('account-actions').children.find(x => x.tag === 'button');
+  const logout = nodes.get('account-actions').children.find(x => x.textContent === '退出网页账号');
   const exiting = logout.onclick();
   assert.equal(nodes.get('account-actions').children.some(x => x.textContent === 'one@example.test'), false);
   old.answer(person()); await pending;
@@ -181,7 +181,7 @@ test('bound member continues into recording setup without the old configuration 
   const flatten = element => [element.textContent || '', ...(element.children || []).map(flatten)].join(' ');
   assert.match(flatten(page), /确认日常录制授权/);
   assert.doesNotMatch(flatten(page), /领取活动配置/);
-  assert.equal(page.children.find(item => item.textContent === '继续录制与上传 →')?.href,
+  assert.equal(page.children.find(item => item.textContent === '打开真人采集 →')?.href,
     '?view=campaigns');
 });
 

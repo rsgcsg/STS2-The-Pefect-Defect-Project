@@ -10,6 +10,17 @@ public sealed class PlatformPolicyCommandsTests
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     [Fact]
+    public void GameBindingRejectsOtherRuntimeOtherGameAndAbsentEpoch()
+    {
+        var binding = new PlatformPolicyBinding("sts2.policy-runtime/environment-1", "run-a", "game-a", 0);
+        binding.Validate("run-a", "game-a");
+        Assert.Throws<InvalidOperationException>(() => binding.Validate("run-b", "game-a"));
+        Assert.Throws<InvalidOperationException>(() => binding.Validate("run-a", "game-b"));
+        Assert.Throws<InvalidOperationException>(() => (binding with { RecoveryEpoch = null }).Validate("run-a", "game-a"));
+        Assert.Throws<InvalidOperationException>(() => (binding with { RecoveryEpoch = -1 }).Validate("run-a", "game-a"));
+    }
+
+    [Fact]
     public async Task OneStepModePendingThenHumanNeverSendsLateTick()
     {
         var commands = new PlatformPolicyCommands();
@@ -44,6 +55,7 @@ public sealed class PlatformPolicyCommandsTests
     [InlineData(PlatformPolicyCommand.Auto)]
     [InlineData(PlatformPolicyCommand.OneStep)]
     [InlineData(PlatformPolicyCommand.Shadow)]
+    [InlineData(PlatformPolicyCommand.Tick)]
     public async Task HumanOvertakesPendingPreparationAndOldCommandNeverSendsMode(PlatformPolicyCommand action)
     {
         var commands = new PlatformPolicyCommands();

@@ -114,17 +114,28 @@ public sealed class PlatformLiveStatusClient : IDisposable
             errors);
     }
 
+    public async Task<PlatformPolicyBinding> ObserveBindingAsync(
+        string expectedRunId, string expectedGameInstanceId, CancellationToken cancellationToken = default)
+    {
+        PlatformPolicyBinding observed = await GetAsync<PlatformPolicyBinding>(
+            _policyRuntimeHttp, "v2/environment", cancellationToken);
+        observed.Validate(expectedRunId, expectedGameInstanceId);
+        return observed;
+    }
+
     public async Task<PolicyRuntimeStatus> SetModeAsync(
         string mode,
         string expectedRunId,
+        PlatformPolicyBinding? binding = null,
         CancellationToken cancellationToken = default)
     {
         ValidateMode(mode);
+        if (mode != "human" && binding is null) throw new InvalidOperationException("A fresh game binding is required.");
         PolicyRuntimeHttpStatusResponse response = await PostAsync<PolicyRuntimeHttpStatusResponse>(
             "mode",
             new { mode },
             expectedRunId,
-            cancellationToken);
+            cancellationToken, binding);
         EnsurePolicyRuntimeStatus(response.Schema, response.Status);
         return response.Status;
     }
@@ -136,13 +147,13 @@ public sealed class PlatformLiveStatusClient : IDisposable
         return response.Status;
     }
 
-    public async Task<PolicyRuntimeStatus> TickAsync(string expectedRunId, CancellationToken cancellationToken = default)
+    public async Task<PolicyRuntimeStatus> TickAsync(string expectedRunId, PlatformPolicyBinding binding, CancellationToken cancellationToken = default)
     {
         PolicyRuntimeTickResponse response = await PostAsync<PolicyRuntimeTickResponse>(
             "tick",
             new { max_ticks = 1 },
             expectedRunId,
-            cancellationToken);
+            cancellationToken, binding);
         if (response.Schema != PolicyRuntimeTickSchema)
             throw new JsonException($"Policy Runtime tick schema is unsupported: {response.Schema}");
         EnsurePolicyRuntimeStatus(response.Schema, response.Status, allowTickSchema: true);
@@ -168,7 +179,8 @@ public sealed class PlatformLiveStatusClient : IDisposable
         string relativePath,
         object body,
         string expectedRunId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        PlatformPolicyBinding? binding = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(expectedRunId);
         using var request = new HttpRequestMessage(HttpMethod.Post, "v2/" + relativePath)
@@ -176,6 +188,12 @@ public sealed class PlatformLiveStatusClient : IDisposable
             Content = JsonContent.Create(body, options: JsonOptions)
         };
         request.Headers.Add("X-STS2-Policy-Run-ID", expectedRunId);
+        if (binding is not null)
+        {
+            binding.Validate(expectedRunId, binding.RuntimeInstanceId);
+            request.Headers.Add("X-STS2-Game-Instance-ID", binding.RuntimeInstanceId);
+            request.Headers.Add("X-STS2-Recovery-Epoch", binding.RecoveryEpoch!.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
         using HttpResponseMessage response = await _policyRuntimeHttp.SendAsync(request, cancellationToken);
         return await ReadResponseAsync<T>(response, relativePath, cancellationToken);
     }
