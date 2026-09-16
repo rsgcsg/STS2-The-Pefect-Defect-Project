@@ -46,6 +46,14 @@ reaps the process and cleans scratch; no automatic retry is introduced. The sing
 verification worker is shared with uploads: a long dataset can defer the next upload
 verification until the batch exits (up to its wall budget); HTTP remains responsive.
 
+Dataset logical IDs are hashed as the exact original canonical byte stream, one record
+at a time, instead of constructing decoded copies of the entire selection. Publication
+uses bounded Parquet row groups and scratch files; loading compares every ordered row
+in batches, including missing, additional and reordered rows. New physical Parquet
+bytes may differ; immutable artifact identity records that difference while logical
+identity and existing-reader row semantics stay unchanged. Full payload SHA verification
+still consumes every byte before parsing.
+
 Single-process reports remain byte-identical so existing dataset logical IDs and reprojection
 continue to work. Original source archives and per-decision execution identity are unchanged.
 

@@ -389,3 +389,84 @@ def test_old_game_profiles_refresh_once_without_rewriting_history(tmp_path: Path
     with owner.operations.transaction() as db:
         saved = db.execute("SELECT result FROM decision_jobs WHERE id=?", (old_id,)).fetchone()
         assert saved[0] == old_result
+
+
+def test_logical_identity_streams_exact_legacy_bytes(tmp_path: Path, monkeypatch) -> None:
+    import weakref
+    from dataclasses import replace
+
+    from spireagent.json_boundary import FrozenObject
+    from stpd.canonical import semantic_hash
+    from stpd.fullrun.contracts import ResearchTransitionV2
+    from stpd.fullrun.decision_dataset import SCHEMA, DecisionDataset
+
+    owner, _, source, _ = setup(tmp_path)
+    selected = preview(owner.store, (source,), SelectionRules())
+    # Unicode, escaped text and numeric edge cases must use the original encoder.
+    selected = replace(selected, report=FrozenObject.of({
+        **selected.report.value(), "encoding_probe": ["中文\n\"\\", -0.0, 1e-12, None],
+    }))
+    expected = semantic_hash({"schema": SCHEMA,
+        "records": [r.to_dict() for r in selected.records], "report": selected.report.value()})
+    original = ResearchTransitionV2.to_dict
+    previous = None
+
+    class TrackedDict(dict):
+        pass
+
+    def one_at_a_time(record):
+        nonlocal previous
+        assert previous is None or previous() is None, "retained decoded previous record"
+        value = TrackedDict(original(record))
+        previous = weakref.ref(value)
+        return value
+
+    monkeypatch.setattr(ResearchTransitionV2, "to_dict", one_at_a_time)
+    assert selected.logical_id == expected
+    empty = DecisionDataset((), selected.report)
+    assert empty.logical_id == semantic_hash({
+        "schema": SCHEMA, "records": [], "report": selected.report.value(),
+    })
+
+
+def test_batched_parquet_preserves_order_and_exact_reprojection(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    import io
+    from dataclasses import replace
+
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    import stpd.fullrun.decision_store as module
+    from stpd.canonical import canonical_json
+    from stpd.fullrun.decision_dataset import SCHEMA
+
+    owner, _, source, _ = setup(tmp_path)
+    rules = SelectionRules()
+    selected = preview(owner.store, (source,), rules)
+    # More than two physical row groups; the existing reprojection must compare
+    # every row, including order, missing rows and extra rows.
+    selected = replace(selected, records=selected.records * 50)
+    manifest = module._publish(owner.store, (source,), rules, owner.producer,
+                               selected.logical_id, selected, SCHEMA, None)
+    raw = b"".join(owner.store.read_payload(manifest.payload("records")))
+    parquet = pq.ParquetFile(io.BytesIO(raw))
+    assert parquet.num_row_groups == 3
+    rows = parquet.read().to_pylist()
+    assert [r["record_json"] for r in rows] == [
+        canonical_json(r.to_dict()) for r in selected.records
+    ]
+    assert max(parquet.metadata.row_group(i).num_rows for i in range(3)) <= 128
+    monkeypatch.setattr(module, "preview", lambda *args, **kwargs: selected)
+    monkeypatch.setattr(pq, "read_table", lambda *args, **kwargs: pytest.fail("whole-table reader"))
+    assert load(owner.store, manifest.artifact_id)[1] == selected
+    for changed in [rows[:-1], rows + rows[:1], [rows[1], rows[0], *rows[2:]]]:
+        output = io.BytesIO()
+        pq.write_table(pa.Table.from_pylist(changed, schema=parquet.schema_arrow), output)
+        output.seek(0)
+        payload = owner.store.put_payload("records", output, "application/vnd.apache.parquet")
+        bad = replace(manifest, payloads=(payload, manifest.payload("selection")))
+        owner.store.publish(bad)
+        with pytest.raises(BoundaryError, match="records_reprojection_mismatch"):
+            load(owner.store, bad.artifact_id)

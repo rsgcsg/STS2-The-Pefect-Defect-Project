@@ -6,6 +6,7 @@ stay exclusions; retaining neighbouring decisions does not repair sequence conti
 
 from __future__ import annotations
 
+import hashlib
 import json
 import tempfile
 from collections import Counter, defaultdict
@@ -16,7 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 from spireagent.json_boundary import BoundaryError, FrozenObject, object_fields, unsigned
 
-from ..canonical import semantic_hash
+from ..canonical import canonical_json, semantic_hash
 from .contracts import ResearchTransitionV2, SourceProjection
 from .data import split_whole_runs
 from .platform_bundle3 import PlatformBundle3SourceAdapter, _extract
@@ -99,13 +100,19 @@ class DecisionDataset:
 
     @property
     def logical_id(self) -> str:
-        return semantic_hash(
-            {
-                "schema": SCHEMA,
-                "records": [r.to_dict() for r in self.records],
-                "report": self.report.value(),
-            }
-        )
+        # Emit the exact sorted-key canonical object one record at a time. Building
+        # every decoded record and another canonical tree exhausts bounded workers.
+        digest = hashlib.sha256(b'{"records":[')
+        for index, record in enumerate(self.records):
+            if index:
+                digest.update(b",")
+            digest.update(canonical_json(record.to_dict()).encode("utf-8"))
+        digest.update(b'],"report":')
+        digest.update(self.report.encoded.encode("utf-8"))
+        digest.update(b',"schema":')
+        digest.update(canonical_json(SCHEMA).encode("utf-8"))
+        digest.update(b"}")
+        return digest.hexdigest()
 
 
 def _identity(record: ResearchTransitionV2) -> str:
