@@ -129,3 +129,38 @@ PR and integration refs/CI are recorded in the formal release integration receip
 The preceding `bf17e69` image remains a compatible same-schema rollback, but can
 reproduce this large-list error. The earlier `f4a21a2` rollback remains retained as
 recorded above. Source rollback never requires deleting/restoring the live database.
+
+## Follow-up: apply the same summary boundary to previews
+
+The same full journal inventory was still exposed by preview detail and task-list
+responses. A faithful member preview regression reproduced a 1,401,368-byte response,
+above the unchanged 1 MiB local bound. A shared run-summary projection now covers
+all three member surfaces: games, preview detail and task list. Full references
+remain in stored results/artifacts. Missing reference counts stay unknown, not zero.
+The regression also publishes from the compact preview and verifies the same selected
+records and unchanged original result bytes.
+
+Final Hub source `dd934ececa51bda16257013bce1deb57ef4416e6`, image
+`ghcr.io/rsgcsg/spireagent-hub@sha256:c11e3b3a58b06b15c4fc42a9e47897a2c24c2a9892092112483bee50cba48499`,
+uses the same lock and an offline locked refresh from the preceding qualified image.
+Hub-only rollout plan
+`0445b3672cfdff0a9fa6569064ccd6f030aca7ce98c9533921c179a63fd99060`
+passed its preflight, unchanged-schema, backup/capacity and exact producer checks.
+Workbench/kit, native bytes, account and persistent state were retained.
+
+The actual four-task response (three previews and one build) decreased from 417,982
+to 13,822 bytes. Canonical summary SHA256
+`9730cbfca5d5fb7c26a46e9333704abca064efee1931130968d032fd5b58349f`
+matched the pre-deployment results after only projecting journal references to counts.
+Every individual task detail matched its list entry; the browser rendered previews
+without page errors, and game-list/member-library access remained available.
+
+Forty-nine focused store/union/member regressions passed. Clean full root at the
+exact Hub source passed: 966 Python tests, three skips, 21 subtests, 40 console
+regressions and component/type/package/CPU E2E checks. Later acceptance-only commits
+do not change the deployed application bytes. PR #16 and the updated release PR #15
+record final source integration and latest-head CI; release attachments carry the
+complete integration and publication receipts. No new native/Human, training or
+scientific qualification is claimed. Rollback remains an owner image/config rollout,
+not restoration or deletion of live records; preceding images may reproduce the
+large-preview issue.
