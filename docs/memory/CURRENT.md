@@ -4,14 +4,16 @@ Use rsgcsg/STS2-The-Perfect-Defect-Project for all new development.
 Platform components, `python/spireagent` applications and `python/stpd` research
 share root governance, one local/cloud console and one Hub membership authority.
 
-The current Workbench source is `bf17e6927dcb1f3645c1baa6cac673ce9e4d2c61`;
-Hub uses `dd934ececa51bda16257013bce1deb57ef4416e6` with compact game/preview/task summaries; see [dataset-library acceptance](../evidence/DATASET_LIBRARY_2026-09-16.md).
-Generated datasets, creation, previews/tasks and removed items are separate workspaces.
-Defeat counts as a native terminal; boundary coverage and strict research sequence
-proof remain separate. Windows PR #9 is normally integrated, Evidence rc.11.
-The compatible rollback is the prior `f4a21a2` application/image/configuration;
-no native/tool replacement or new Human/model qualification was performed.
-PR #12 and release integration receipts own the latest Git/CI/publication facts.
+Workbench source is `fedbed097e30fb78bf0e86efff560fd8b1263c99`; Hub source is
+`3a4b8997d06011952a2248902c67f64f531dbcff`. Dataset selection has recording-date
+filters, whole-result selection, responsive navigation and direct accepted-project-data
+access. Runtime process provenance is merged without weakening game/artifact identity;
+batch workers have a separate bounded budget, one-pass coverage and incremental hash/file processing. See [selection evidence](../evidence/DATASET_SELECTION_2026-09-16.md).
+PR17 and the release receipt own final integration, real batch and publication facts.
+New multi-runtime datasets require the corrected reader for rollback; the fedbed
+fallback retains it but can reproduce batch timeout. Native/tool bytes and original
+Human evidence remain. Windows PR9 is integrated through Evidence rc.11; defeat is
+a native terminal, separate from strict research sequence conditions.
 
 The previously accepted unified task flow used Workbench/Hub source
 `f4a21a2d67392b557c593cd396b894d1c3439779`; the native/tool bytes retain their

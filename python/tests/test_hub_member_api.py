@@ -270,6 +270,7 @@ def test_receiver_wrong_device_and_missing_enrollment_do_not_grant(api, tmp_path
     router, owner, _, _, _ = api
     upload, bundle, _ = staged(api, tmp_path)
     # A valid archive claiming another enrolled device never borrows that consent.
+    # Project access to accepted bytes does not assert an enrollment association.
     with owner.operations.transaction() as db:
         db.execute("UPDATE uploads SET device='two' WHERE id=?", (upload,))
     owner.verify_pending()
@@ -283,7 +284,7 @@ def test_receiver_wrong_device_and_missing_enrollment_do_not_grant(api, tmp_path
         assert json.loads(detail)["reason"] == "verified_bundle_identity_mismatch"
     assert (
         router.exports.collections.collection_access([upload])[upload]["availability"]
-        == "not_granted"
+        == "available"
     )
     with pytest.raises(BoundaryError, match="verified_bundle_identity_mismatch"):
         owner.associate_verified_bundle(upload, bundle)
@@ -293,5 +294,5 @@ def test_receiver_wrong_device_and_missing_enrollment_do_not_grant(api, tmp_path
     assert owner.associate_verified_bundle(upload, bundle)["reason"] == "enrollment_not_found"
     assert (
         router.exports.collections.collection_access([upload])[upload]["availability"]
-        == "not_granted"
+        == "available"
     )

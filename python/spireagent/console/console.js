@@ -978,7 +978,7 @@ function navigate(view, id = null) {
   if (id) query.set("id", id);
   history.pushState({}, "", "?" + query);
   readLocation();
-  load(true);
+  load(true, false);
 }
 function changePage(offset) {
   if (!Number.isInteger(offset)) return;
@@ -988,7 +988,7 @@ function changePage(offset) {
   });
   history.pushState({}, "", "?" + query);
   readLocation();
-  load(true);
+  load(true, false);
 }
 function navigationGroup(view) {
   if (["collections", "statistics", "games", "downloads", "overview"].includes(view)) return "collections";
@@ -1010,7 +1010,7 @@ function renderTaskTabs(view) {
     target.append(item);
   }
 }
-async function load(manual = false) {
+async function load(manual = false, forceIdentity = manual) {
   if (!manual && (document.activeElement?.id === "device-name" || document.activeElement?.closest("[data-editor], [data-project-editor]"))) return;
   if (state.busy && !manual) return;
   state.busy = true;
@@ -1018,7 +1018,7 @@ async function load(manual = false) {
   const view = state.view,
     id = state.id;
   const record = view === "connect" ? new URLSearchParams(location.search).get("flow") : id;
-  const pageContext = `${view}:${record || ""}:${state.offset}:${state.limit}`;
+  const pageContext = `${view}:${record || ""}:${state.offset}:${state.limit}:${view === "datasets" && !id ? window.SpireProject.datasetContext() : ""}`;
   let context = `${pageContext}:${window.SpireIdentity.context()}`;
   if (renderedContext !== context) {
     $("content").replaceChildren(
@@ -1042,7 +1042,7 @@ async function load(manual = false) {
       ? `?limit=${state.limit}&offset=${state.offset}`
       : "";
   try {
-    const identity = await window.SpireIdentity.refresh(manual);
+    const identity = await window.SpireIdentity.refresh(forceIdentity);
     if (serial !== state.serial) return;
     document.querySelectorAll("[data-admin-only]").forEach(item => { item.hidden = identity?.principal?.role !== "admin"; });
     if (["members", "statistics", "downloads", "research", "campaigns"].includes(view) || (["datasets", "games"].includes(view) && !id)) {
@@ -1054,7 +1054,9 @@ async function load(manual = false) {
     local = window.SpireIdentity.isLocal();
     if (["members", "statistics", "downloads", "research", "local-models", "campaigns", "evaluations"].includes(view) || (["datasets", "games"].includes(view) && !id)) {
       const opened = [...document.querySelectorAll("details[open]")].map(item => item.dataset.preserve);
-      const content = await window.SpireProject.render(view, identity);
+      const content = await window.SpireProject.render(view, identity, shell => {
+        if (serial === state.serial && identityContext === window.SpireIdentity.context()) $("content").replaceChildren(shell);
+      });
       if (serial !== state.serial || identityContext !== window.SpireIdentity.context()) return;
       $("content").replaceChildren(content);
       document.querySelectorAll("details[data-preserve]").forEach(item => {
@@ -1188,11 +1190,11 @@ $("refresh").addEventListener("click", () => load(true));
 $("lifecycle-note").textContent = localShell
   ? "关闭网页 ≠ 停止后台投递"
   : "邀请制项目 · 共享数据按权限访问";
-window.SpireProject.reload = () => load(true);
+window.SpireProject.reload = () => load(true, false);
 window.SpireProject.navigate = (view, id = null) => navigate(view, id);
 window.addEventListener("popstate", () => {
   readLocation();
-  load(true);
+  load(true, false);
 });
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) load();

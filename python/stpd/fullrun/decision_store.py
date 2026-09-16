@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import io
+import tempfile
 from collections.abc import Callable
+from itertools import zip_longest
 from typing import TYPE_CHECKING
 
 from spireagent.artifact_contracts import Manifest, Parent, Producer
@@ -11,6 +13,7 @@ from spireagent.json_boundary import BoundaryError, FrozenObject, decode_json, j
 from spireagent.storage.store import ArtifactStore
 
 from ..canonical import canonical_json
+from .contracts import SourceProjection
 from .decision_dataset import SCHEMA, DecisionDataset, SelectionRules, select_decisions
 from .decision_union import UNION_SCHEMA, union_decisions
 from .platform_bundle3 import MAX_BYTES
@@ -49,12 +52,13 @@ def _sources(
 def preview(
     store: ArtifactStore, sources: tuple[Manifest, ...], rules: SelectionRules,
     *, cache: VerifiedSourceCache | None = None, progress: Progress | None = None,
+    on_projection: Callable[[SourceProjection], None] | None = None,
 ) -> DecisionDataset:
     raw = _sources(store, sources, progress)
     if progress:
         progress("verifying_sources", 0, len(sources))
     dataset = select_decisions(
-        raw, rules, cache=cache,
+        raw, rules, cache=cache, on_projection=on_projection,
         on_source=(lambda completed, total: progress("verifying_sources", completed, total))
         if progress else None,
     )
@@ -121,23 +125,14 @@ def _publish(
     import pyarrow as pa
     import pyarrow.parquet as pq
 
-    if dataset.logical_id != expected_preview:
+    logical_id = dataset.logical_id
+    if logical_id != expected_preview:
         raise BoundaryError("decision_dataset", "preview_changed")
     if not dataset.records:
         raise BoundaryError("decision_dataset", "empty_selection")
     if progress:
         progress("publishing_dataset", 0, 1)
     splits = dataset.report.value()["splits"]
-    rows = [
-        {
-            "transition_id": r.transition_id,
-            "run_id": r.run_id,
-            "original_sequence": r.source_evidence.value()["action_sequence"],
-            "split": splits[r.run_id],
-            "record_json": canonical_json(r.to_dict()),
-        }
-        for r in dataset.records
-    ]
     schema = pa.schema(
         [
             ("transition_id", pa.string()),
@@ -147,10 +142,32 @@ def _publish(
             ("record_json", pa.string()),
         ]
     )
-    output = io.BytesIO()
-    pq.write_table(pa.Table.from_pylist(rows, schema=schema), output, compression="zstd")
-    output.seek(0)
-    records = store.put_payload("records", output, "application/vnd.apache.parquet")
+    # Keep decoded rows/Arrow buffers bounded, and spool compressed bytes to the
+    # verifier-owned scratch directory. Row groups are physical artifact layout;
+    # ordered row content and the semantic dataset identity remain unchanged.
+    with tempfile.TemporaryFile() as output:
+        with pq.ParquetWriter(output, schema, compression="zstd") as writer:
+            rows: list[dict[str, str | int]] = []
+            row_bytes = 0
+            for record in dataset.records:
+                encoded = canonical_json(record.to_dict())
+                size = len(encoded.encode("utf-8"))
+                if rows and (len(rows) >= 128 or row_bytes + size > 8 * 1024**2):
+                    writer.write_table(pa.Table.from_pylist(rows, schema=schema))
+                    rows.clear()
+                    row_bytes = 0
+                rows.append({
+                    "transition_id": record.transition_id,
+                    "run_id": record.run_id,
+                    "original_sequence": record.source_evidence.value()["action_sequence"],
+                    "split": splits[record.run_id],
+                    "record_json": encoded,
+                })
+                row_bytes += size
+            if rows:
+                writer.write_table(pa.Table.from_pylist(rows, schema=schema))
+        output.seek(0)
+        records = store.put_payload("records", output, "application/vnd.apache.parquet")
     report = store.put_payload(
         "selection", io.BytesIO(json_bytes(dataset.report.value())), "application/json"
     )
@@ -164,7 +181,7 @@ def _publish(
         parameters=FrozenObject.of(
             {
                 "schema": schema_id,
-                "logical_id": dataset.logical_id,
+                "logical_id": logical_id,
                 "rules": rules.to_dict(),
                 "records": len(dataset.records),
                 "scope": "platform_verified",
@@ -225,19 +242,23 @@ def _load(
     report = decode_json(b"".join(store.read_payload(manifest.payload("selection"))))
     if report != dataset.report.value():
         raise BoundaryError("decision_dataset", "selection_reprojection_mismatch")
-    table = pq.read_table(io.BytesIO(b"".join(store.read_payload(manifest.payload("records")))))
-    expected = [
-        {
-            "transition_id": r.transition_id,
-            "run_id": r.run_id,
-            "original_sequence": r.source_evidence.value()["action_sequence"],
-            "split": report["splits"][r.run_id],
-            "record_json": canonical_json(r.to_dict()),
-        }
-        for r in dataset.records
-    ]
-    if table.to_pylist() != expected:
-        raise BoundaryError("decision_dataset", "records_reprojection_mismatch")
+    with tempfile.TemporaryFile() as source_file:
+        for chunk in store.read_payload(manifest.payload("records")):
+            source_file.write(chunk)
+        source_file.seek(0)
+        parquet = pq.ParquetFile(source_file)
+        actual = (row for batch in parquet.iter_batches(batch_size=64)
+                  for row in batch.to_pylist())
+        for row, record in zip_longest(actual, dataset.records):
+            expected = None if record is None else {
+                "transition_id": record.transition_id,
+                "run_id": record.run_id,
+                "original_sequence": record.source_evidence.value()["action_sequence"],
+                "split": report["splits"][record.run_id],
+                "record_json": canonical_json(record.to_dict()),
+            }
+            if row != expected:
+                raise BoundaryError("decision_dataset", "records_reprojection_mismatch")
     visiting.remove(artifact_id)
     memo[artifact_id] = (manifest, dataset)
     return manifest, dataset

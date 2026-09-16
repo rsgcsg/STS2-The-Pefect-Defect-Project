@@ -9,7 +9,15 @@ from spireagent.json_boundary import BoundaryError, FrozenObject
 
 from .contracts import ResearchTransitionV2
 from .data import split_whole_runs
-from .decision_dataset import DecisionDataset, SelectionRules, _facets, _fact, _identity, _metadata
+from .decision_dataset import (
+    DecisionDataset,
+    SelectionRules,
+    _facets,
+    _fact,
+    _identity,
+    _merge_environment,
+    _metadata,
+)
 
 UNION_SCHEMA = "stpd/decision-union-v1"
 
@@ -34,9 +42,7 @@ def union_decisions(
     for parent_id, dataset in sorted(parents):
         report = dataset.report.value()
         for key, value in report["environments"].items():
-            if key in environments and environments[key] != value:
-                raise BoundaryError("decision_union", "environment_identity_conflict")
-            environments[key] = value
+            _merge_environment(environments, key, value, boundary="decision_union")
         for key, value in report["source_contracts"].items():
             if key in source_contracts and source_contracts[key] != value:
                 raise BoundaryError("decision_union", "source_identity_conflict")

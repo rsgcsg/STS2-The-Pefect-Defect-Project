@@ -473,7 +473,7 @@ class IdentityService:
 
     def scoped_query(self, principal: ConsolePrincipal, query: str) -> tuple[ConsolePrincipal, str]:
         try:
-            values = parse_qsl(query, strict_parsing=True, keep_blank_values=True, max_num_fields=4)
+            values = parse_qsl(query, strict_parsing=True, keep_blank_values=True, max_num_fields=7)
             devices = [value for name, value in values if name == "device"]
             if len(devices) > 1:
                 raise ValueError

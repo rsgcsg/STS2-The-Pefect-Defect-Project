@@ -230,6 +230,11 @@ class ConsoleIndex:
                 ),
                 "summary": json.loads(value["summary"]) if value["summary"] else None,
                 "summary_status": value["summary_status"] or "not_indexed",
+                "dataset_selectable": value["status"] == "verified" and value["approved"] != 0,
+                "selection_unavailable_reason": (
+                    "source_withdrawn" if value["approved"] == 0 else
+                    "source_not_verified" if value["status"] != "verified" else None
+                ),
                 "research": {"status": "not_assessed", "scope": "explicit_input_set_required"},
                 "collection_context": (
                     {
@@ -255,23 +260,43 @@ class ConsoleIndex:
         offset: int,
         status: str | None = None,
         upload_id: str | None = None,
+        date_from: float | None = None,
+        date_to: float | None = None,
+        selectable: bool = False,
     ) -> dict[str, Any]:
-        where, values = self._scope(principal)
+        where, scoped = self._scope(principal)
+        values: tuple[Any, ...] = scoped
         if status:
             where += " AND u.status=?"
             values += (status,)
         if upload_id:
             where += " AND u.id=?"
             values += (upload_id,)
+        # The visible recording date owns filtering; upload time is an explicit
+        # fallback only when the recording summary has no parseable date.
+        recorded_at = (
+            "COALESCE(CAST(strftime('%s',json_extract(c.summary,'$.created_at')) AS REAL),"
+            "(SELECT MIN(at) FROM events e WHERE e.subject=u.id AND e.operation='upload_created'))"
+        )
+        for bound, operator in ((date_from, ">="), (date_to, "<")):
+            if bound is not None:
+                where += f" AND {recorded_at}{operator}?"
+                values += (bound,)
+        if selectable:
+            where += " AND u.status='verified' AND COALESCE(s.approved,1)=1"
+        joined = (
+            " FROM uploads u LEFT JOIN console_collections c ON c.upload_id=u.id "
+            "LEFT JOIN collection_sharing s ON s.upload_id=u.id "
+        )
         query = (
             "SELECT u.id,u.device,u.content_id,u.status,u.receipt,u.retry_at,u.verify_attempts,"
-            "u.last_error,c.archive_bytes,c.summary,c.summary_status,"
+            "u.last_error,c.archive_bytes,c.summary,c.summary_status,s.approved,"
             "json_extract(a.template,'$.name') AS collection_name,a.id AS collection_template,"
             "a.activity_id AS collection_activity,"
             "(SELECT MIN(at) FROM events e WHERE e.subject=u.id AND e.operation='upload_created') "
             "AS created_at,"
             "(SELECT MAX(at) FROM events e WHERE e.subject=u.id AND e.operation='upload_receipt') "
-            "AS verified_at FROM uploads u LEFT JOIN console_collections c ON c.upload_id=u.id "
+            "AS verified_at" + joined +
             "LEFT JOIN collection_enrollments ce "
             "ON ('campaign-'||ce.id)=json_extract(c.summary,'$.campaign_id') "
             "AND ce.device_id=u.device AND u.status='verified' "
@@ -279,11 +304,12 @@ class ConsoleIndex:
             "WHERE " + where
         )
         with closing(self.read()) as db:
-            total = db.execute("SELECT COUNT(*) FROM uploads u WHERE " + where, values).fetchone()[
+            total = db.execute("SELECT COUNT(*)" + joined + "WHERE " + where, values).fetchone()[
                 0
             ]
             rows = db.execute(
-                query + " ORDER BY u.rowid DESC LIMIT ? OFFSET ?", (*values, limit, offset)
+                query + f" ORDER BY {recorded_at} DESC,u.id DESC LIMIT ? OFFSET ?",
+                (*values, limit, offset)
             ).fetchall()
             result = envelope([self._collection(row) for row in rows], total, limit, offset)
             if upload_id:
