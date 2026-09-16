@@ -217,6 +217,46 @@ def _runs(projection: SourceProjection) -> list[dict[str, Any]]:
     return result
 
 
+def _merge_environment(
+    environments: dict[str, Any], fingerprint: str, value: dict[str, Any],
+    *, boundary: str = "decision_dataset",
+) -> None:
+    """Join process provenance without weakening exact environment identity.
+
+    Connector's fingerprint excludes RuntimeInstanceId (SnapshotBuilder's
+    ToSessionReference). Recorder retains it as provenance. Preserve old single-runtime
+    reports verbatim for immutable re-projection; only new multi-runtime selections
+    use a sorted set. Every other field, including unknown future identity fields,
+    must agree exactly. Inputs and original source bytes are never mutated.
+    """
+    if fingerprint not in environments:
+        environments[fingerprint] = value
+        return
+    previous = environments[fingerprint]
+    if previous == value:
+        return
+    runtime_fields = {"runtime_instance_id", "runtime_instance_ids"}
+    stable = {k: v for k, v in previous.items() if k not in runtime_fields}
+    if stable != {k: v for k, v in value.items() if k not in runtime_fields}:
+        raise BoundaryError(boundary, "environment_identity_conflict")
+
+    def runtimes(environment: dict[str, Any]) -> list[str]:
+        if "runtime_instance_id" in environment and "runtime_instance_ids" not in environment:
+            values = [environment["runtime_instance_id"]]
+        elif "runtime_instance_ids" in environment and "runtime_instance_id" not in environment:
+            values = environment["runtime_instance_ids"]
+        else:
+            raise BoundaryError(boundary, "environment_identity_conflict")
+        if not isinstance(values, list) or not values or any(
+            not isinstance(runtime, str) or not runtime for runtime in values
+        ):
+            raise BoundaryError(boundary, "environment_identity_conflict")
+        return values
+
+    identities = sorted(set(runtimes(previous)) | set(runtimes(value)))
+    environments[fingerprint] = {**stable, "runtime_instance_ids": identities}
+
+
 def _versions(source: bytes) -> dict[str, Any]:
     # Called only after the installed verifier accepted the archive. Join identity
     # metadata by the exact environment fingerprint, never by a current runtime.
@@ -237,9 +277,7 @@ def _versions(source: bytes) -> dict[str, Any]:
                 fingerprint = environment.get("environment_fingerprint")
                 if not isinstance(fingerprint, str):
                     continue
-                if fingerprint in result and result[fingerprint] != environment:
-                    raise BoundaryError("decision_dataset", "environment_identity_conflict")
-                result[fingerprint] = environment
+                _merge_environment(result, fingerprint, environment)
     return result
 
 
@@ -263,9 +301,7 @@ def select_decisions(
             projection, environments = cache.resolve(source)
         projections.append(projection)
         for key, value in environments.items():
-            if key in versions and versions[key] != value:
-                raise BoundaryError("decision_dataset", "environment_identity_conflict")
-            versions[key] = value
+            _merge_environment(versions, key, value)
     if on_source:
         on_source(len(projections), len(sources))
     return _select(projections, rules or SelectionRules(), versions)
