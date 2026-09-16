@@ -11,6 +11,7 @@ from spireagent.json_boundary import BoundaryError, FrozenObject, decode_json, j
 from spireagent.storage.store import ArtifactStore
 
 from ..canonical import canonical_json
+from .contracts import SourceProjection
 from .decision_dataset import SCHEMA, DecisionDataset, SelectionRules, select_decisions
 from .decision_union import UNION_SCHEMA, union_decisions
 from .platform_bundle3 import MAX_BYTES
@@ -49,12 +50,13 @@ def _sources(
 def preview(
     store: ArtifactStore, sources: tuple[Manifest, ...], rules: SelectionRules,
     *, cache: VerifiedSourceCache | None = None, progress: Progress | None = None,
+    on_projection: Callable[[SourceProjection], None] | None = None,
 ) -> DecisionDataset:
     raw = _sources(store, sources, progress)
     if progress:
         progress("verifying_sources", 0, len(sources))
     dataset = select_decisions(
-        raw, rules, cache=cache,
+        raw, rules, cache=cache, on_projection=on_projection,
         on_source=(lambda completed, total: progress("verifying_sources", completed, total))
         if progress else None,
     )

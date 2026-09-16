@@ -12,6 +12,7 @@ from spireagent.hub.console_auth import ConsolePrincipal
 from spireagent.hub.uploads import UploadService
 from spireagent.json_boundary import BoundaryError, digest, object_fields
 from stpd.canonical import semantic_hash
+from stpd.fullrun.contracts import SourceProjection
 from stpd.fullrun.decision_cache import VerifiedSourceCache
 from stpd.fullrun.decision_dataset import SelectionRules
 from stpd.fullrun.decision_store import preview, preview_union, publish, publish_union
@@ -412,9 +413,24 @@ class DecisionJobs:
             sources = self._inputs(request)
             rules = SelectionRules.decode(request["rules"])
             merging = "datasets" in request
+            coverage: dict[str, Any] = {}
+
+            def collect_coverage(projection: SourceProjection) -> None:
+                for run in summarize_run_coverage(projection)["runs"]:
+                    prior = coverage.setdefault(run["run_id"], run)
+                    if prior != run:
+                        # Overlapping exports cannot synthesize continuity.
+                        coverage[run["run_id"]] = {**prior,
+                            "native_boundary_complete": False,
+                            "boundary_status": "overlapping_exports_differ",
+                            "recording_continuity": "unknown"}
+
             if request["expected"] is None:
-                dataset = (preview_union if merging else preview)(
+                dataset = preview_union(
                     self.service.store, sources, rules, cache=cache, progress=progress
+                ) if merging else preview(
+                    self.service.store, sources, rules, cache=cache, progress=progress,
+                    on_projection=collect_coverage,
                 )
                 report = dataset.report.value()
                 if row["owner"] == "receiver":
@@ -457,19 +473,6 @@ class DecisionJobs:
                 )
                 result = {"artifact_id": manifest.artifact_id, **manifest.parameters.value()}
             if request["expected"] is None and not merging:
-                coverage: dict[str, Any] = {}
-                for source in sources:
-                    payload = source.payload("archive")
-                    raw = b"".join(self.service.store.read_payload(payload))
-                    projection, _ = cache.resolve(raw)
-                    for run in summarize_run_coverage(projection)["runs"]:
-                        prior = coverage.setdefault(run["run_id"], run)
-                        if prior != run:
-                            # Overlapping exports do not synthesize continuity.
-                            coverage[run["run_id"]] = {**prior,
-                                "native_boundary_complete": False,
-                                "boundary_status": "overlapping_exports_differ",
-                                "recording_continuity": "unknown"}
                 result["run_coverage"] = list(coverage.values())
             self._inputs(request)
             result["progress"] = {

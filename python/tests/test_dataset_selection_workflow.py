@@ -66,3 +66,36 @@ def test_task_navigation_and_enqueue_do_not_read_object_storage(tmp_path: Path, 
     next_job = jobs.create(MEMBER, body)
     jobs.run(next_job["id"])
     assert jobs.read(MEMBER, next_job["id"])["error"] == "collection_identity_mismatch"
+
+
+def test_preview_reuses_verified_projection_for_run_coverage(tmp_path: Path, monkeypatch):
+    from stpd.fullrun.decision_cache import VerifiedSourceCache
+    from stpd.fullrun.run_coverage import summarize_run_coverage
+
+    owner, upload, _, jobs = setup(tmp_path)
+    read = owner.store.read_payload
+    seen = set()
+
+    def once(payload):
+        assert payload.sha256 not in seen, "preview reread an already verified archive"
+        seen.add(payload.sha256)
+        return read(payload)
+
+    resolve = VerifiedSourceCache.resolve
+    projections = []
+
+    def project(cache, raw):
+        assert not projections, "preview decoded a second projection for run coverage"
+        value = resolve(cache, raw)
+        projections.append(value[0])
+        return value
+
+    monkeypatch.setattr(owner.store, "read_payload", once)
+    monkeypatch.setattr(VerifiedSourceCache, "resolve", project)
+    job = jobs.create(MEMBER, {"uploads": [upload], "name": "one traversal", "preview_id": None,
+                               "rules": SelectionRules().to_dict()})
+    jobs.run(job["id"])
+    result = jobs.read(MEMBER, job["id"])
+    assert result["state"] == "completed"
+    assert result["result"]["selected"] == 6
+    assert result["result"]["run_coverage"] == summarize_run_coverage(projections[0])["runs"]

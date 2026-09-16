@@ -285,6 +285,7 @@ def select_decisions(
     sources: tuple[bytes, ...], rules: SelectionRules | None = None,
     *, cache: VerifiedSourceCache | None = None,
     on_source: Callable[[int, int], None] | None = None,
+    on_projection: Callable[[SourceProjection], None] | None = None,
 ) -> DecisionDataset:
     """Verify original bytes or reuse a private owner-bound verification of identical bytes."""
     if not 1 <= len(sources) <= 100:
@@ -300,6 +301,8 @@ def select_decisions(
         else:
             projection, environments = cache.resolve(source)
         projections.append(projection)
+        if on_projection:
+            on_projection(projection)
         for key, value in environments.items():
             _merge_environment(versions, key, value)
     if on_source:
