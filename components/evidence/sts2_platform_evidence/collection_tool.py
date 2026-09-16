@@ -56,8 +56,18 @@ class CollectionTool:
                 or identity.get("entrypoint") != "sts2-human-annotator.dll"
                 or identity.get("supported_recording_schema") != "sts2.human-annotator/recording-manifest-2"):
             raise ValueError("unsupported collection tool identity")
-        actual = [{"path": p, "bytes": n, "sha256": h} for p, n, h in _inventory(self.directory)
-                  if p != "collection-tool.json"]
+        # Collection-tool publishers order relative POSIX paths with ordinal
+        # string comparison.  ``_inventory`` intentionally retains the
+        # historical filesystem traversal order used by transfer manifests;
+        # on Windows, sorting Path objects is case-insensitive and therefore
+        # can disagree with the publisher for mixed-case file names.  Sort
+        # this verification boundary by the already-normalized path string,
+        # while preserving the exact declared bytes, sizes, hashes and order.
+        actual = sorted(
+            ({"path": p, "bytes": n, "sha256": h} for p, n, h in _inventory(self.directory)
+             if p != "collection-tool.json"),
+            key=lambda row: row["path"],
+        )
         if identity.get("files") != actual:
             raise ValueError("collection tool release bytes differ")
         if not any(row["path"] == "platform-bom.json" for row in actual):

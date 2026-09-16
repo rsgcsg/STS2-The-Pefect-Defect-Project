@@ -99,6 +99,9 @@ default newcomer or Codex context.
 
 - [Packaging identity correction](evidence/B_WORKFLOW_PACKAGING_IDENTITY_CORRECTION_2026-09-13.md): actual BOM file SHA and separate tool revisions.
 
+- [Windows CollectionTool inventory repair](evidence/WINDOWS_COLLECTION_TOOL_INVENTORY_REPAIR_2026-09-16.md):
+  exact Evidence source/test scope, local Windows verification, and current non-claims.
+
 ## Project migration
 
 - [Migration and unified application ownership](MONOREPO_MIGRATION.md).
