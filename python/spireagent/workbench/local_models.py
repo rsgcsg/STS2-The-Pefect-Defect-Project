@@ -19,6 +19,7 @@ import sys
 import threading
 from collections import Counter
 from collections.abc import Callable
+from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -594,9 +595,11 @@ class LocalModelService:
         self, client: RuntimeClient, route: str, body: dict[str, Any], intent: int,
         binding: RuntimeControlBinding | None = None,
     ) -> dict[str, Any]:
-        # Recovery invalidates old intents immediately, then queues behind any
-        # submitted effect. This guarantees the final command returns control.
-        with self.control_send_lock:
+        # Keep model mutations serialized, but never queue recovery behind their
+        # potentially slow HTTP replies. Runtime's shared epoch fences effects;
+        # our intent checks fence stale replies and a One-Step's later tick.
+        recovery = route == "/stop" or (route == "/mode" and body.get("mode") == "human")
+        with nullcontext() if recovery else self.control_send_lock:
             self._require_intent(intent)
             if binding is None and (route == "/tick" or (
                 route == "/mode" and body.get("mode") != "human"
@@ -1002,8 +1005,9 @@ class LocalModelService:
         observed = None
         try:
             if client is not None:
-                with self.control_send_lock:
-                    observed = client.request("/stop", {})["status"]
+                # Shutdown recovery must also reach the exact Runtime while an
+                # earlier model request is still awaiting its response.
+                observed = client.request("/stop", {})["status"]
         except BoundaryError:
             pass
         finally:

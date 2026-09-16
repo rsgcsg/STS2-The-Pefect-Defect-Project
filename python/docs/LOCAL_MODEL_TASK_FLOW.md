@@ -61,9 +61,11 @@ loaded afresh before model control is available. A missing/malformed endpoint,
 unsupported identity contract, mismatched game instance or unavailable Connector
 blocks model control without retrying Close or changing mode.
 
-Human/Stop immediately invalidate earlier local control intents. Runtime mutations
-are serialized in Workbench; recovery waits behind an already submitted local
-mutation and is then the final local command. The Runtime owner additionally
+Human/Stop immediately invalidate earlier local control intents. Model mutations
+are serialized in Workbench; recovery bypasses that queue so it reaches Runtime
+without waiting for an earlier model HTTP response. Shutdown uses the same
+recovery path. A late success or unknown response cannot replace a newer recovery
+result, and a superseded One-Step never sends its later tick. The Runtime owner additionally
 advances a shared recovery epoch when either Workbench or the in-game UI requests
 Human/Stop. A different caller's recovery therefore rejects delayed model entry
 or a follow-up tick even though Workbench's own generation did not change.

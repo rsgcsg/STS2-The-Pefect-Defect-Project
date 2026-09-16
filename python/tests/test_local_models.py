@@ -428,14 +428,70 @@ def test_human_handoff_can_be_requested_while_tick_pending(service):
     service.command("one_step")
     assert started.wait(timeout=2)
     service.command("human")
-    # Recovery invalidates old intent immediately, but its effect follows the
-    # already-submitted tick rather than racing it over a second HTTP request.
-    assert ("/mode", {"mode": "human"}) not in calls
+    # Recovery reaches the owner without waiting for the held tick response.
+    assert finished(service)["operation"]["status"] == "completed"
+    assert ("/mode", {"mode": "human"}) in calls
+    assert service.control_send_lock.locked()
     release.set()
-    finished(service)
     for thread in service.threads:
         thread.join(timeout=2)
     assert [body for route, body in calls if route == "/mode"][-1] == {"mode": "human"}
+
+
+@pytest.mark.parametrize("blocked_route", ["/mode", "/tick"])
+@pytest.mark.parametrize("late_reply", ["success", "unknown"])
+@pytest.mark.parametrize("recovery", ["human", "stop"])
+def test_recovery_bypasses_stalled_model_reply_and_old_result_cannot_retake_control(
+    service, monkeypatch, blocked_route, late_reply, recovery,
+):
+    entered, release = threading.Event(), threading.Event()
+    runtime, calls = status(), []
+
+    class Runtime:
+        def request(self, route, body=None, *, binding=None):
+            calls.append((route, body))
+            if route == "/environment":
+                return environment()
+            if route == "/mode":
+                runtime.update(mode=body["mode"], controller=(
+                    "released" if body["mode"] == "human" else "held"
+                ))
+            if route == "/stop":
+                runtime.update(mode="human", controller="released", lifecycle="stopped")
+            old_observation = copy.deepcopy(runtime)
+            if route == blocked_route and body != {"mode": "human"}:
+                entered.set()
+                assert release.wait(timeout=3)
+                if late_reply == "unknown":
+                    raise BoundaryError("local_model", "runtime_command_unknown")
+            return {"status": old_observation}
+
+    monkeypatch.setattr(service, "_evaluation_handoff", lambda: None)
+    service.client = Runtime()
+    service.state.update(status="loaded", loaded=True)
+    service.command("one_step")
+    old_thread, old_operation = service.thread, service.state["operation"]
+    assert entered.wait(timeout=2)
+    try:
+        service.command(recovery)
+        recovered = finished(service)
+        assert old_thread.is_alive()
+        assert service.control_send_lock.locked()  # model-model serialization remains
+        assert recovered["operation"]["action"] == recovery
+        assert recovered["operation"]["status"] == "completed"
+        assert recovered["runtime"]["controller"] == "released"
+        assert runtime["mode"] == "human" and runtime["controller"] == "released"
+    finally:
+        release.set()
+        old_thread.join(timeout=2)
+    final = service.status()
+    assert final["operation"] == recovered["operation"]
+    assert final["error_code"] is None
+    assert final["runtime"]["mode"] == "human"
+    assert final["runtime"]["controller"] == "released"
+    assert final["status"] == ("stopped" if recovery == "stop" else "loaded")
+    assert old_operation["status"] == ("unknown" if late_reply == "unknown" else "failed")
+    assert sum(route == "/tick" for route, _ in calls) == (blocked_route == "/tick")
 
 
 def test_restarted_service_does_not_guess_pid_or_activate(service):
@@ -912,6 +968,37 @@ def test_other_ui_recovery_during_native_prepare_rejects_late_model_mode(
     )
     assert {key.lower(): value for key, value in attempted.items()}["x-sts2-recovery-epoch"] == "0"
     assert client.fixture_control["epoch"] == 1  # the old intent did not refresh and retry
+
+
+@pytest.mark.parametrize("recovery", ["human", "stop"])
+def test_workbench_recovery_reaches_http_owner_before_pending_mode_reply(
+    service, runtime_http, monkeypatch, recovery,
+):
+    client, runtime, requests = runtime_http
+    entered, release = threading.Event(), threading.Event()
+    client.fixture_control.update(mode_entered=entered, release_mode_response=release)
+    monkeypatch.setattr(service, "_evaluation_handoff", lambda: None)
+    service.client = client
+    service.state.update(status="loaded", loaded=True)
+    service.command("one_step")
+    old_thread = service.thread
+    assert entered.wait(timeout=2)
+    try:
+        service.command(recovery)
+        result = finished(service)
+        assert old_thread.is_alive()
+        assert result["operation"]["action"] == recovery
+        assert result["operation"]["status"] == "completed"
+        assert client.fixture_control["epoch"] == 1
+        assert runtime["lifecycle"] == ("stopped" if recovery == "stop" else "running")
+        if recovery == "human":
+            assert runtime["mode"] == "human"
+    finally:
+        release.set()
+        old_thread.join(timeout=2)
+    assert not any(path == "/v2/tick" for path, _ in requests)
+    assert client.fixture_control["ticks"] == 0
+    assert service.state["operation"] == result["operation"]
 
 
 @pytest.mark.parametrize("recovery", ["human", "stop"])
