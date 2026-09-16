@@ -144,7 +144,7 @@ class ConsoleIndex:
             "parents": [parent.to_dict() for parent in manifest.parents],
             "metadata": {
                 key: parameters[key]
-                for key in ("schema", "scope", "records", "runs", "partition")
+                for key in ("schema", "scope", "records", "runs", "partition", "split_status")
                 if key in parameters and isinstance(parameters[key], (str, int))
             },
             "payload_bytes": sum(payload.size for payload in manifest.payloads),
@@ -500,6 +500,7 @@ class ConsoleIndex:
         limit: int,
         offset: int,
         artifact_id: str | None = None,
+        search: str = "",
     ) -> dict[str, Any]:
         if kind in {"datasets", "training"} and not (
             principal.research or project_member(principal)
@@ -513,24 +514,40 @@ class ConsoleIndex:
             "models": tuple(sorted(RESULT_KINDS)),
         }[kind]
         marks = ",".join("?" for _ in kinds)
-        where = "kind IN (" + marks + ")"
+        where = "a.kind IN (" + marks + ")"
         values = kinds
         if artifact_id:
-            where += " AND artifact_id=?"
+            where += " AND a.artifact_id=?"
             values += (artifact_id,)
         with closing(self.read()) as db:
-            total = db.execute(
-                "SELECT COUNT(*) FROM console_artifacts WHERE " + where, values
-            ).fetchone()[0]
+            has_jobs = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
+                                  "AND name='decision_jobs'").fetchone()
+            joined = (" FROM console_artifacts a LEFT JOIN decision_jobs j ON j.id=("
+                      "SELECT id FROM decision_jobs WHERE state='completed' "
+                      "AND json_extract(result,'$.artifact_id')=a.artifact_id "
+                      "ORDER BY created,id LIMIT 1)") if has_jobs else " FROM console_artifacts a"
+            name_sql = "json_extract(j.request,'$.name')" if has_jobs else "NULL"
+            result_sql = "j.result" if has_jobs else "NULL"
+            if search:
+                where += f" AND (instr(lower(a.artifact_id),lower(?))>0 OR " \
+                         f"instr(lower(COALESCE({name_sql},'')),lower(?))>0)"
+                values += (search, search)
+            total = db.execute("SELECT COUNT(*)" + joined + " WHERE " + where,
+                               values).fetchone()[0]
             rows = db.execute(
-                "SELECT summary,indexed_at FROM console_artifacts WHERE "
-                + where
-                + " ORDER BY indexed_at DESC,artifact_id LIMIT ? OFFSET ?",
+                f"SELECT a.summary,a.indexed_at,{name_sql} AS name,{result_sql} AS result"
+                + joined + " WHERE " + where
+                + " ORDER BY a.indexed_at DESC,a.artifact_id LIMIT ? OFFSET ?",
                 (*values, limit, offset),
             ).fetchall()
             items = []
             for row in rows:
                 item = json.loads(row["summary"])
+                if row["name"]:
+                    item["display_name"] = row["name"]
+                if row["result"]:
+                    result = json.loads(row["result"])
+                    item["metadata"]["split_status"] = result.get("split_status")
                 # Lineage IDs are useful only under the same metadata permission as their node.
                 permitted_kinds = (
                     ARTIFACT_KINDS

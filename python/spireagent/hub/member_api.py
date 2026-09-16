@@ -50,8 +50,12 @@ class MemberApi:
         current = self._principal(principal)
         if route == "games" and not query:
             return self.decisions.games(current)
-        if route == "datasets" and not query:
-            return self.decisions.list(current)
+        if route in {"datasets", "datasets/archived"}:
+            limit, offset, status = pagination(query)
+            if status is not None:
+                raise BoundaryError("member_api", "unexpected_status_filter")
+            return self.decisions.list(current, archived=route.endswith("/archived"),
+                                       limit=limit, offset=offset)
         job = re.fullmatch(r"datasets/([a-f0-9]{32})", route)
         if job and not query:
             return self.decisions.read(current, job[1])
@@ -95,6 +99,8 @@ class MemberApi:
             return self.exports.create(current, body)
         if route == "datasets":
             return self.decisions.create(current, body)
+        if route == "datasets/visibility":
+            return self.decisions.set_archived(current, body)
         retry = re.fullmatch(r"datasets/([a-f0-9]{32})/retry", route)
         if retry:
             return self.decisions.retry(current, retry[1], body)

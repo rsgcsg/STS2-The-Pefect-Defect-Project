@@ -11,7 +11,7 @@ requires-python = ">=3.11,<3.12"
 dependencies = [
   "numpy>=2.0,<3",
   "pyarrow>=18,<24",
-  "rsgcsg-sts2-platform-evidence @ git+https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project.git@5e8f39dea38cfd68e7605ba6194400ac60cad5df#subdirectory=components/evidence",
+  "rsgcsg-sts2-platform-evidence @ git+https://github.com/rsgcsg/STS2-The-Perfect-Defect-Project.git@2490dae5366df27cff668feb5860224ae4900182#subdirectory=components/evidence",
 ]
 
 [project.optional-dependencies]

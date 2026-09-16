@@ -26,6 +26,8 @@ Use the smallest route that answers the task.
 ## Finding technical truth
 
 - Current claims and evidence pointers: [Status](STATUS.md).
+- [Dataset library and run boundaries](evidence/DATASET_LIBRARY_2026-09-16.md):
+  generated lists, personal preview cleanup, Windows integration and application/cloud evidence.
 - Semantic evidence storage and measured predecessor baseline:
   [Semantic Evidence Storage Baseline](evidence/SEMANTIC_EVIDENCE_STORAGE_BASELINE_2026-08-29.md).
 - Latest normalized Human runtime and storage closeout:
@@ -98,6 +100,9 @@ default newcomer or Codex context.
 - [B workflow release evidence](evidence/B_UNIFIED_WORKFLOW_RELEASE_2026-09-13.md): exact cross-repository source/service scope and release receipt routing.
 
 - [Packaging identity correction](evidence/B_WORKFLOW_PACKAGING_IDENTITY_CORRECTION_2026-09-13.md): actual BOM file SHA and separate tool revisions.
+
+- [Windows CollectionTool inventory repair](evidence/WINDOWS_COLLECTION_TOOL_INVENTORY_REPAIR_2026-09-16.md):
+  exact Evidence source/test scope, local Windows verification, and current non-claims.
 
 ## Project migration
 

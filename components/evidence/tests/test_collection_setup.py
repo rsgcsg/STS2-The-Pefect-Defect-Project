@@ -51,3 +51,87 @@ class CollectionSetupTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "bytes differ"):
                     tool.setup_status(recordings_root=root / "records")
                 run.assert_not_called()
+
+    def test_mixed_case_publisher_inventory_verifies_on_every_platform(self):
+        """CollectionTool must match the publisher's POSIX path ordering.
+
+        Windows Path ordering is case-insensitive, while the JavaScript
+        publisher's relative POSIX path sort is ordinal.  Building the
+        manifest in explicit publisher order makes this an actual filesystem
+        verification on Windows as well as a portable regression elsewhere.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name, content in {
+                "STS2HumanAnnotator.Core.dll": b"core",
+                "platform-bom.json": b"{}",
+                "sts2-human-annotator.dll": b"entrypoint",
+            }.items():
+                destination = root / name
+                destination.write_bytes(content)
+            discovered = [{"path": p, "bytes": n, "sha256": h} for p, n, h in _inventory(root)]
+            published = sorted(discovered, key=lambda row: row["path"])
+            identity = {
+                "worktree": "clean",
+                "source_revision": "c" * 40,
+                "entrypoint": "sts2-human-annotator.dll",
+                "supported_recording_schema": "sts2.human-annotator/recording-manifest-2",
+                "files": published,
+            }
+            release_id = digest(identity)
+            (root / "collection-tool.json").write_bytes(canonical({
+                "schema": "sts2.evidence/collection-tool-1",
+                "release_id": release_id,
+                "identity": identity,
+            }))
+
+            verified = CollectionTool(root, release_id)
+            self.assertEqual(verified.manifest["identity"]["files"], published)
+
+            # Sorting the actual rows must not weaken the declared manifest
+            # order check: a separately re-pinned but unsorted declaration is
+            # still a release-byte mismatch.
+            identity["files"] = list(reversed(published))
+            release_id = digest(identity)
+            (root / "collection-tool.json").write_bytes(canonical({
+                "schema": "sts2.evidence/collection-tool-1",
+                "release_id": release_id,
+                "identity": identity,
+            }))
+            with self.assertRaisesRegex(ValueError, "bytes differ"):
+                CollectionTool(root, release_id)
+
+    def test_mixed_case_windows_inventory_order_is_normalized_portably(self):
+        """The verification boundary remains correct for Windows-like input."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            rows = [
+                {"path": "STS2HumanAnnotator.Core.dll", "bytes": 4, "sha256": "a" * 64},
+                {"path": "platform-bom.json", "bytes": 2, "sha256": "b" * 64},
+                {"path": "sts2-human-annotator.dll", "bytes": 10, "sha256": "c" * 64},
+            ]
+            for row in rows:
+                (root / row["path"]).write_bytes(b"x" * row["bytes"])
+            identity = {
+                "worktree": "clean",
+                "source_revision": "c" * 40,
+                "entrypoint": "sts2-human-annotator.dll",
+                "supported_recording_schema": "sts2.human-annotator/recording-manifest-2",
+                "files": sorted(rows, key=lambda row: row["path"]),
+            }
+            release_id = digest(identity)
+            (root / "collection-tool.json").write_bytes(canonical({
+                "schema": "sts2.evidence/collection-tool-1",
+                "release_id": release_id,
+                "identity": identity,
+            }))
+            with patch(
+                "sts2_platform_evidence.collection_tool._inventory",
+                return_value=[
+                    ("platform-bom.json", 2, "b" * 64),
+                    ("sts2-human-annotator.dll", 10, "c" * 64),
+                    ("STS2HumanAnnotator.Core.dll", 4, "a" * 64),
+                    ("collection-tool.json", 0, "d" * 64),
+                ],
+            ):
+                CollectionTool(root, release_id)

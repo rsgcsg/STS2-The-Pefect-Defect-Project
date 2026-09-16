@@ -57,6 +57,7 @@ window.SpireProject = (() => {
     format: "记录格式",
     disposition: "记录 disposition",
     action_family: "动作类别",
+    family: "动作类别",
     surface: "交互界面",
     decision_kind: "决策类型",
     character: "角色",
@@ -231,6 +232,7 @@ window.SpireProject = (() => {
       request_unavailable: "暂时无法读取服务，请刷新重试。",
       absolute_game_directory_required: "请填写这台电脑上的游戏安装目录完整路径。",
       default_collection_fields_required: "请填写名称、录制说明和授权说明。",
+      dataset_payload_inventory_missing: "此数据集尚未提供文件清单，请打开详情核对后下载。",
       minimum_two_decision_datasets_required: "请选择至少两个决策数据集后再合并。",
     };
     return (
@@ -1030,10 +1032,18 @@ window.SpireProject = (() => {
     box.append(technical(value, "实际下载回执与观测"));
     return box;
   }
+  function boundaryLabel(coverage) {
+    const labels = {complete:"完整开局至终局", missing_start:"缺少开局", missing_end:"缺少终局", missing_both:"局中片段", ambiguous:"边界有歧义", out_of_order:"边界顺序异常", overlapping_exports_differ:"来源覆盖不同", unknown:"边界未知"};
+    return coverage ? labels[coverage.boundary_status] || "未知" : "等待边界整理";
+  }
+  function continuityLabel(coverage) {
+    return coverage?.recording_continuity === "complete" ? "无已知间断" : coverage?.recording_continuity === "gap" ? "有暂停或恢复间断" : "未确认";
+  }
   async function gamesPage(ctx) {
     const data = await request(ctx, member("games"));
     const box = panel("对局与片段", `已整理 ${data.profiled_recordings ?? "未知"} / ${data.shared_recordings ?? "未知"} 份共享录制。待整理 ${data.pending_profiles ?? "未知"}，整理失败 ${data.failed_profiles ?? "未知"}。上传次数不等于独立局数；跨录制只按已证明身份归并。`);
-    box.append(table(["局身份", "完整性", "胜负", "录入 / 接受", "上传来源数"], (data.items || []).map(r => [r.run_id, r.coverage_status || (r.complete ? "完整" : "不完整"), r.outcome === "win" ? "胜利" : r.outcome === "loss" ? "失败" : "未知", `${r.canonical} / ${r.accepted}`, r.uploads.length])));
+    box.append(el("p", "完整局：原生开局到胜利或失败终局都有记录，且中途没有已知录制间断。胜负、技术失败与严格训练序列条件分别判断。Close 只封存录制，不是游戏终局。", "banner"));
+    box.append(table(["局身份", "对局边界", "录制连续性", "游戏结果", "严格序列条件", "录入 / 接受", "来源数"], (data.items || []).map(r => [r.run_id, boundaryLabel(r.coverage), continuityLabel(r.coverage), r.outcome === "win" ? "胜利" : r.outcome === "loss" ? "失败" : "未知", r.complete ? "满足" : "未满足", `${r.canonical} / ${r.accepted}`, r.uploads.length])));
     for (const failed of data.failures || []) {
       box.append(el("p", `整理失败：${failed.error}`), command(ctx, `retry-profile-${failed.id}`, "重试此整理任务", async () => {
         await request(ctx, member(`datasets/${failed.id}/retry`), {}); await reload(ctx);
@@ -1042,8 +1052,87 @@ window.SpireProject = (() => {
     box.append(link("筛选并建立数据集", route("datasets")), technical(data));
     return box;
   }
+  const datasetTab = () => drafts.get("dataset-tab") || "library";
+  const splitLabel = value => value === "assigned" ? "已按局分组切分" :
+    value === "insufficient_independent_run_components" ? "独立局数不足，尚未切分" : "查看切分条件";
+  const datasetName = item => item.display_name || item.parameters?.name || `数据集 ${item.artifact_id.slice(0, 12)}`;
+  function datasetTabs(ctx) {
+    const nav = el("nav", null, "dataset-tabs");
+    nav.setAttribute("aria-label", "数据集工作区");
+    for (const [key, label] of [["library", "已生成的数据集"], ["create", "新建数据集"], ["previews", "预览与任务"], ["archived", "已移除"]]) {
+      const button = command(ctx, `dataset-tab-${key}`, label, async () => {
+        drafts.set("dataset-tab", key); await reload(ctx);
+      }, {primary: datasetTab() === key});
+      button.setAttribute("aria-current", datasetTab() === key ? "page" : "false");
+      nav.append(button);
+    }
+    return nav;
+  }
   async function decisionDatasets(ctx) {
-    const box = panel("建立固定版本数据集", "默认保留可靠决策，允许不完整局和不同环境身份。整包损坏不能跳过校验；失败决策仍保留在报告中。");
+    const box = el("div", null, "project-page dataset-workspace");
+    box.append(datasetTabs(ctx));
+    if (datasetTab() === "create") box.append(await datasetCreate(ctx));
+    else if (["previews", "archived"].includes(datasetTab())) box.append(await datasetTasks(ctx));
+    else box.append(await datasetLibrary(ctx));
+    return box;
+  }
+  async function datasetLibrary(ctx) {
+    const box = panel("已生成的数据集", "这里是已固定版本、可查看和下载的数据集。预览在单独的工作区；生成数据集不等于已经通过训练或模型效果验收。");
+    const filters = el("div", null, "project-form"); filters.dataset.projectEditor = "dataset-search";
+    const search = input(filters, "搜索名称或数据集 ID", "dataset-search", drafts.get("dataset-search") || "");
+    search.oninput = () => drafts.set("dataset-search", search.value);
+    filters.append(command(ctx, "search-datasets", "搜索", async () => {
+      drafts.set("dataset-search", search.value.trim()); offsets.set("dataset-catalog", 0); await reload(ctx);
+    }));
+    box.append(filters);
+    const q = encodeURIComponent(drafts.get("dataset-search") || "");
+    const catalog = await request(ctx, project(`datasets?limit=25&offset=${offsets.get("dataset-catalog") || 0}${q ? `&q=${q}` : ""}`));
+    if (catalog.availability === "not_authorized") throw new Error("authentication_required");
+    box.append(el("p", `共 ${count(catalog.total)} 个${q ? "匹配的" : "已生成的"}数据集`, "muted"));
+    const mergeSet = new Set(drafts.get("merge-datasets") || []);
+    const rows = [];
+    for (const item of catalog.items || []) {
+      if (!hex(item.artifact_id)) continue;
+      const metadata = item.metadata || {};
+      const title = el("div"); title.append(link(datasetName(item), route("datasets", item.artifact_id)), el("span", item.artifact_id.slice(0,12), "subtext mono"));
+      const actions = el("div", null, "project-actions");
+      actions.append(command(ctx, `download-dataset-${item.artifact_id}`, "下载", async () => {
+        const downloadPage = location.search;
+        if (!item.payloads?.length) throw new Error("dataset_payload_inventory_missing");
+        const result = await request(ctx, member("exports"), {schema:"stpd/project-export-request-v1", collections:[], artifacts:[{artifact_id:item.artifact_id, roles:item.payloads.map(p => p.role)}]});
+        if (!live(ctx) || location.search !== downloadPage) return;
+        if (!hex(result.export_id)) throw new Error("invalid_export_identity");
+        exportId = result.export_id;
+        if (window.SpireProject.navigate) window.SpireProject.navigate("downloads", exportId);
+      }));
+      const choice = el("div");
+      const supported = ["stpd/decision-dataset-v1", "stpd/decision-union-v1"].includes(metadata.schema);
+      const checkbox = input(choice, "合并", `merge-${item.artifact_id}`, mergeSet.has(item.artifact_id), "checkbox");
+      checkbox.disabled = !supported;
+      checkbox.title = supported ? "合并已选决策，保留原数据集" : "此数据契约不支持决策合并";
+      checkbox.onchange = () => {
+        if (checkbox.checked) mergeSet.add(item.artifact_id); else mergeSet.delete(item.artifact_id);
+        drafts.set("merge-datasets", [...mergeSet].sort());
+      };
+      rows.push([title, count(metadata.records), metadata.schema === "stpd/fullrun-dataset-v1" ? "严格完整局" : supported ? "可靠决策" : "其他契约", splitLabel(metadata.split_status), when(item.indexed_at), actions, choice]);
+    }
+    if (rows.length) box.append(table(["名称 / 版本", "决策数", "内容类型", "训练分组", "生成时间", "操作", "合并选择"], rows));
+    else box.append(empty(q ? "没有匹配的数据集" : "还没有已生成的数据集", q ? "更换关键词，或使用完整数据集 ID。" : "进入新建数据集，选择录制，预览后确认生成。"));
+    box.append(pager(ctx, "dataset-catalog", catalog));
+    const merge = el("details"); merge.dataset.preserve = "dataset-merge"; merge.append(el("summary", "合并已有数据集"));
+    merge.append(el("p", "勾选列表中的两个或更多可靠决策数据集。只合并已选中的决策，去重后重新按真实局分组；原版本保留。", "muted"));
+    merge.append(command(ctx, "preview-dataset-merge", "预览合并结果", async () => {
+      if (mergeSet.size < 2) throw new Error("minimum_two_decision_datasets_required");
+      await request(ctx, member("datasets"), {name: "合并决策数据集", datasets: [...mergeSet].sort(),
+        rules: {schema: "stpd/decision-selection-v1", complete_only: false, wins_only: false,
+          no_failures_only: false, filters: {}, seed: 0}, preview_id: null});
+      drafts.set("dataset-tab", "previews"); await reload(ctx);
+    }));
+    box.append(merge);
+    return box;
+  }
+  async function datasetCreate(ctx) {
+    const box = panel("1. 选择录制与筛选条件", "选择来源 → 查看预览 → 确认生成。默认保留可靠决策，包括失败局和不完整片段。");
     const form = el("div", null, "project-form");
     form.dataset.projectEditor = "decision-dataset";
     box.append(form);
@@ -1052,8 +1141,8 @@ window.SpireProject = (() => {
     const advanced = el("details");
     advanced.append(el("summary", "筛选条件（默认保留所有合格决策）"));
     advanced.dataset.preserve = "decision-dataset-filters";
-    const complete = input(advanced, "仅完整局", "complete-only", draft.complete, "checkbox");
-    const noFailures = input(advanced, "仅无真实记录失败的局", "no-failures", draft.noFailures, "checkbox");
+    const complete = input(advanced, "仅满足严格连续序列条件的完整局（包括失败局）", "complete-only", draft.complete, "checkbox");
+    const noFailures = input(advanced, "排除有录制技术失败的局（与游戏失败无关）", "no-failures", draft.noFailures, "checkbox");
     const wins = input(advanced, "仅已确认胜利", "wins-only", draft.wins, "checkbox");
     const filterFields = {};
     for (const [key, title] of [["game_version", "游戏版本"], ["connector_version", "连接器版本"], ["annotator_version", "采集器版本"], ["character", "角色"], ["difficulty", "难度"], ["family", "动作类别"], ["surface", "界面"], ["decision_kind", "决策类型"], ["environment_identity", "精确环境身份"]]) {
@@ -1076,89 +1165,88 @@ window.SpireProject = (() => {
     for (const field of [name, ...Object.values(filterFields)]) field.oninput = save;
     const listing = await request(ctx, project(`collections?limit=25&offset=${offsets.get("dataset-sources") || 0}`));
     const selection = new Set(draft.uploads);
+    const sourceRows = [];
+    const selectedCount = el("p", `已选择 ${selection.size} 份录制`, "project-selection");
+    box.append(el("h3", "选择录制来源"), selectedCount);
     for (const item of listing.items || []) {
       const id = item.upload_id || item.id;
       if (!hex(id, 32)) continue;
-      const choice = input(box, `${item.summary?.session_id || id} · ${show(item.status)}`, `source-${id}`, selection.has(id), "checkbox");
+      const choiceCell = el("div");
+      const choice = input(choiceCell, "选择", `source-${id}`, selection.has(id), "checkbox");
       choice.disabled = item.status !== "verified";
       choice.onchange = () => {
         if (choice.checked) selection.add(id); else selection.delete(id);
         draft.uploads = [...selection].sort(); save();
+        selectedCount.textContent = `已选择 ${selection.size} 份录制`;
       };
+      sourceRows.push([choiceCell, when(item.summary?.created_at || item.created_at),
+        count(item.summary?.counts?.canonical), count(item.summary?.assigned_run_count), show(item.status),
+        link((item.summary?.session_id || id).slice(0, 28), route("collections", id))]);
     }
+    if (sourceRows.length) box.append(table(["选择", "录制时间", "已录入决策", "局 / 片段数", "状态", "记录详情"], sourceRows));
+    else box.append(empty("没有可选择的录制", "先完成录制 Close 和上传，再回到这里选择来源。"));
     box.append(pager(ctx, "dataset-sources", listing));
     box.append(command(ctx, "preview-dataset", "预览选定记录", async () => {
       save();
       await request(ctx, member("datasets"), {name: draft.name, uploads: draft.uploads,
         rules: {schema: "stpd/decision-selection-v1", complete_only: draft.complete,
           wins_only: draft.wins, no_failures_only: draft.noFailures, filters: draft.filters, seed: 0}, preview_id: null});
+      drafts.set("dataset-tab", "previews");
       await reload(ctx);
+    }, {primary: true}));
+    return box;
+  }
+
+  async function datasetTasks(ctx) {
+    const archived = datasetTab() === "archived";
+    const key = archived ? "dataset-archived" : "dataset-tasks";
+    const jobs = await request(ctx, member(`datasets${archived ? "/archived" : ""}?limit=25&offset=${offsets.get(key) || 0}`));
+    const box = panel(archived ? "已移除的预览与任务" : "预览与任务", archived ? "可以恢复到任务列表。原始录制、固定数据集和失败记录始终保留。" : "预览成功后，确认生成才会进入数据集列表。处理中可离开页面，回来查看同一任务。");
+    const disposable = (jobs.items || []).filter(j => j.state === "completed" && !j.request.preview_id);
+    async function visibility(ids, value) {
+      await request(ctx, member("datasets/visibility"), {ids, archived:value}); await reload(ctx);
+    }
+    if (!archived && disposable.length) box.append(command(ctx, "remove-finished-previews", "移除本页已完成预览", async () => {
+      await visibility(disposable.map(j => j.id), true);
     }));
-    const jobs = await request(ctx, member("datasets"));
-    const history = panel("正在处理与最近结果", "后台处理，可离开页面；状态自动刷新。修改筛选时保留输入。生成后数据集固定，不随新上传改变。");
     for (const job of jobs.items || []) {
-      const row = panel(job.request.name, `${show(job.state)} · ${job.request.preview_id ? "生成数据集" : "预览"}`);
-      if (job.progress) {
-        const phaseNames = {checking_access: "核对权限", reading_sources: "读取来源", verifying_sources: "校验并整理", loading_selected_datasets: "读取已选数据", union_selected_decisions: "合并与去重", publishing_dataset: "保存固定数据集", completed: "已完成"};
-        row.append(fields([["当前阶段", phaseNames[job.progress.phase] || job.progress.phase],
-          ["完成来源", `${count(job.progress.completed)} / ${count(job.progress.total)}`],
-          ["已用时间", `${Number(job.progress.elapsed_seconds || 0).toFixed(1)} 秒`]]));
+      const row = panel(job.request.name, `${job.request.preview_id ? "生成数据集" : "预览"} · ${show(job.state)} · ${when(job.created_at)}`);
+      if (job.progress && ["pending", "running"].includes(job.state)) {
+        const phases = {checking_access:"核对权限", reading_sources:"读取来源", verifying_sources:"校验并整理", loading_selected_datasets:"读取已选数据", union_selected_decisions:"合并与去重", publishing_dataset:"保存固定数据集"};
+        row.append(el("p", `${phases[job.progress.phase] || show(job.progress.phase)} · ${count(job.progress.completed)} / ${count(job.progress.total)} 个来源 · ${Number(job.progress.elapsed_seconds || 0).toFixed(1)} 秒`));
       }
-      if (job.error) row.append(el("p", `原因：${job.error}。可核对来源后重新预览。`, "banner"));
-      if (job.state === "failed") row.append(command(ctx, `retry-dataset-${job.id}`, "重试此任务", async () => {
+      if (job.error) row.append(el("p", `原因：${job.error}`, "banner error"));
+      if (job.result) {
+        row.append(fields([["保留决策", job.result.selected ?? job.result.records], ["训练分组", splitLabel(job.result.split_status)], ["去除重复", job.result.exact_duplicate_decisions ?? "见详情"]]));
+        if (job.result.artifact_id) row.append(link("打开已生成的数据集", route("datasets", job.result.artifact_id)));
+        const report = el("details"); report.dataset.preserve = `dataset-report-${job.id}`; report.append(el("summary", "查看分类、对局和排除原因"));
+        const facets = job.result.selected_facets || {};
+        const categories = [];
+        for (const key of ["character", "difficulty", "game_version", "family", "surface", "decision_kind"]) {
+          const facet = facets[key]; if (!facet) continue;
+          categories.push([labels[key] || key, facet.items.map(x => `${x.value} · ${count(x.count)}`).join("；") || "无已知值", count(facet.unknown)]);
+        }
+        if (categories.length) report.append(table(["分类", "内容与决策数", "未知"], categories));
+        if (job.result.runs) report.append(table(["对局 / 片段", "对局边界", "录制连续性", "游戏结果", "严格序列条件", "录入 / 接受"], job.result.runs.map(r => {
+          const coverage = (job.result.run_coverage || []).find(c => c.run_id === r.run_id);
+          return [r.run_id, boundaryLabel(coverage), continuityLabel(coverage), r.outcome === "win" ? "胜利" : r.outcome === "loss" ? "失败" : "未知", r.complete ? "满足" : "未满足", `${r.canonical} / ${r.accepted}`];
+        })));
+
+        if (job.result.exclusion_counts) report.append(table(["排除原因", "数量"], Object.entries(job.result.exclusion_counts)));
+        report.append(technical(job.result, "精确身份与完整报告")); row.append(report);
+      }
+      if (!archived && job.state === "completed" && !job.request.preview_id) row.append(command(ctx, `build-${job.id}`, "确认生成数据集", async () => {
+        await request(ctx, member("datasets"), {name:job.request.name, ...(job.request.datasets ? {datasets:job.request.datasets} : {uploads:job.request.uploads}), rules:job.request.rules, preview_id:job.id});
+        await reload(ctx);
+      }, {primary:true, disabled: !job.result?.selected}));
+      if (!archived && job.state === "failed") row.append(command(ctx, `retry-dataset-${job.id}`, "重试此任务", async () => {
         await request(ctx, member(`datasets/${job.id}/retry`), {}); await reload(ctx);
       }));
-      if (job.result) {
-        row.append(fields([["保留决策", job.result.selected ?? job.result.records],
-          ["切分状态", job.result.split_status], ["去除精确重复决策", job.result.exact_duplicate_decisions ?? "见产物报告"]]));
-        if (job.result.selected_facets) {
-          const categories = panel("保留数据的分类", "未知单独保留；下次筛选可使用这里显示的类别值。");
-          for (const [key, facet] of Object.entries(job.result.selected_facets)) {
-            categories.append(el("p", `${labels[key] || key}：${facet.items.map(x => `${x.value} (${x.count})`).join("、") || "无已知值"}；未知 ${facet.unknown}`));
-          }
-          row.append(categories);
-        }
-        if (job.result.runs) {
-          row.append(table(["局 / 片段", "完整性", "胜负", "已录入 / 接受"], job.result.runs.map(r => [r.run_id, r.complete ? "完整" : "不完整", r.outcome === "win" ? "胜利" : r.outcome === "loss" ? "失败" : "未知", `${r.canonical} / ${r.accepted}`])));
-        }
-        if (job.state === "completed" && !job.request.preview_id) {
-          row.append(command(ctx, `build-${job.id}`, "按此预览生成固定数据集", async () => {
-            await request(ctx, member("datasets"), {name: job.request.name,
-              ...(job.request.datasets ? {datasets: job.request.datasets} : {uploads: job.request.uploads}),
-              rules: job.request.rules, preview_id: job.id});
-            await reload(ctx);
-          }));
-        }
-        if (job.result.artifact_id) row.append(link("查看数据集文件", route("datasets", job.result.artifact_id)), link("下载数据", route("downloads")));
-        row.append(technical(job.result, "查看筛选报告与身份"));
-      }
-      history.append(row);
+      if (["completed", "failed"].includes(job.state)) row.append(command(ctx, `visibility-${job.id}`, archived ? "恢复到任务列表" : job.request.preview_id ? "移除任务记录" : "移除预览", () => visibility([job.id], !archived)));
+      box.append(row);
     }
-    box.append(history);
-    const catalog = await request(ctx, project(`datasets?limit=25&offset=${offsets.get("dataset-catalog") || 0}`));
-    const published = panel("项目已发布数据集", "所有获授权成员可查看，包括原有严格 Full-Run 数据集。具体契约和切分状态见产物详情。");
-    const mergeSet = new Set(drafts.get("merge-datasets") || []);
-    for (const item of catalog.items || []) {
-      if (!hex(item.artifact_id)) continue;
-      const row = el("div", null, "project-actions");
-      const choice = input(row, "选择合并", `merge-${item.artifact_id}`, mergeSet.has(item.artifact_id), "checkbox");
-      choice.onchange = () => {
-        if (choice.checked) mergeSet.add(item.artifact_id); else mergeSet.delete(item.artifact_id);
-        drafts.set("merge-datasets", [...mergeSet].sort());
-      };
-      row.append(link(item.parameters?.name || item.artifact_id.slice(0, 12), route("datasets", item.artifact_id)));
-      published.append(row);
-    }
-    published.append(command(ctx, "preview-dataset-merge", "合并选中数据集 · 先预览", async () => {
-      if (mergeSet.size < 2) throw new Error("minimum_two_decision_datasets_required");
-      await request(ctx, member("datasets"), {name: "合并决策数据集", datasets: [...mergeSet].sort(),
-        rules: {schema: "stpd/decision-selection-v1", complete_only: false, wins_only: false,
-          no_failures_only: false, filters: {}, seed: 0}, preview_id: null});
-      await reload(ctx);
-    }));
-    published.append(el("p", "只合并各数据集已选中的决策，自动去除精确重复并重新按真实局分组切分；原数据集保留。旧 Full-Run 契约不支持此合并时会明确说明。", "small muted"));
-    published.append(pager(ctx, "dataset-catalog", catalog));
-    box.append(published);
+    if (!jobs.items?.length) box.append(empty(archived ? "没有已移除的任务" : "没有待确认的预览或任务", "已生成的数据集在第一个页签中。"));
+    box.append(pager(ctx, key, jobs));
     return box;
   }
 
@@ -2001,6 +2089,10 @@ window.SpireProject = (() => {
   }
   return {
     reload: async () => {},
+    openDatasetLibrary() {
+      drafts.set("dataset-tab", "library");
+      if (window.SpireProject.navigate) window.SpireProject.navigate("datasets");
+    },
     async render(view, identity) {
       if (!supported.has(view)) throw new Error("unsupported_project_view");
       const nextAccount = `${identity?.principal?.subject || "anonymous"}:${identity?.principal?.role || ""}:${identity?.status || ""}`;

@@ -343,3 +343,34 @@ def test_live_evaluation_transport_has_bounded_larger_body_and_same_auth(
         >= 400
     )
     assert len(calls) == 1
+
+
+def test_dataset_visibility_uses_current_browser_csrf(tmp_path, signed, monkeypatch):
+    access, token, _ = signed
+    app = HubApplication(service(tmp_path), "admin" * 16, browser_access=access,
+                         public_origin="https://hub.example")
+    jwt = token()
+    identity = request(app, "/app/api/identity", jwt=jwt)[1]
+    calls = []
+    monkeypatch.setattr(app.member_api.decisions, "set_archived",
+                        lambda principal, body: calls.append(body) or {"archived": True})
+    route = "/app/api/member/datasets/visibility"
+    body = {"ids": ["a" * 32], "archived": True}
+    assert request(app, route, method="POST", jwt=jwt, body=body)[0] == 403
+    assert calls == []
+    assert request(app, route, method="POST", jwt=jwt,
+                   body={**body, "csrf_token": identity["csrf_token"]})[0] == 200
+    assert calls == [body]
+
+
+def test_member_bff_allows_visibility_and_archived_pagination(tmp_path, monkeypatch):
+    account = LocalIdentity(config(tmp_path))
+    client = MemberClient(account)
+    monkeypatch.setattr(client, "token", lambda: "private")
+    calls = []
+    monkeypatch.setattr(account, "request",
+                        lambda route, **kwargs: calls.append(route) or {})
+    client.request("datasets/visibility", {"ids": ["a" * 32], "archived": True})
+    client.request("datasets/archived?limit=25&offset=25")
+    assert calls == ["/v1/identity/member/datasets/visibility",
+                     "/v1/identity/member/datasets/archived?limit=25&offset=25"]
