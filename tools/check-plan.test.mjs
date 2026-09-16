@@ -62,3 +62,15 @@ test("reuse requires fresh repository checks; Python scope still requires Window
   assert.equal(aggregatePassed("python",reused),false);
   assert.ok(aggregatePassed("python",{...reused,docs:"skipped",linux:"success",windows:"success"}));
 });
+
+test("real repair-shaped reports do not force unrelated Platform suites", () => {
+  const source = {file:"python/spireagent/hub/exports.py",status:"M"};
+  const report = [{file:"docs/STATUS.md",status:"M"}, {file:"docs/memory/CURRENT.md",status:"M"},
+    {file:"docs/evidence/EXPORT.md",status:"A"}, {file:"python/docs/PROJECT_CONSOLE.md",status:"M"}];
+  assert.equal(classifyChanges([source,...report]).scope,"python");
+  assert.equal(classifyChanges(report).scope,"full");
+  for(const entry of [{file:"docs/evidence/EXPORT.md",status:"D"},
+    {file:"docs/adr/new.md",status:"A"}, {file:"python/spireagent/AGENTS.md",status:"M"},
+    {file:"python/docs/adr/new.md",status:"A"}, {file:"docs/evidence/subdir/code.js",status:"A"}])
+    assert.equal(classifyChanges([source,entry]).scope,"full");
+});

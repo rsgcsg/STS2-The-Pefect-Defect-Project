@@ -37,9 +37,14 @@ The router uses actual committed Git changes, not a caller-selected test list:
 | Scope | Selected checks | Eligible changes |
 |---|---|---|
 | `docs` | Node editorial/route/governance checks | modifications to the explicit editorial allowlist |
-| `python` | repository guards plus the entire Python gate on Linux and Windows | only `python/spireagent/`, `python/stpd/`, `python/tests/` additions/modifications/deletions, optionally allowlisted editorial edits |
+| `python` | repository guards plus the entire Python gate on Linux and Windows | only `python/spireagent/`, `python/stpd/`, `python/tests/` additions/modifications/deletions, optionally explicit report/editorial companions |
 | `full` | complete root gate on both OSes | Platform, shared contracts/locks, CI/tools, deployment, governance, unknown paths or Git state |
 | `reuse` | fresh repository/identity/BOM/history checks, referencing a verified executed receipt | eligible integration/promotion with identical content and check definition |
+
+Companions are modified editorial allowlist files, CURRENT, PROJECT_CONSOLE, and
+added/modified single-file Markdown reports under docs/evidence. They qualify only
+alongside a Python owner change; standalone evidence edits and evidence deletions
+still use full. ADR/governance and unknown docs are not companions.
 
 The Python scope still covers installed Platform consumers, application/research tests,
 SDK contracts, typecheck, CPU E2E and packaging. Platform never imports Python applications;

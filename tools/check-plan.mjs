@@ -19,8 +19,14 @@ export function classifyChanges(entries) {
   if (entries.every(({ status, file }) => status === "M" && editorial.has(file))) {
     return { scope: "docs", reason: "modified_editorial_allowlist_only" };
   }
-  if (entries.every(({status, file}) => ["M", "A", "D"].includes(status) &&
-      (/^python\/(spireagent|stpd|tests)\//.test(file) && !/(^|\/)AGENTS\.md$/.test(file) || (status === "M" && editorial.has(file))))) {
+  const pythonOwner = ({file, status}) => ["M", "A", "D"].includes(status) &&
+    /^python\/(spireagent|stpd|tests)\//.test(file) && !/(^|\/)AGENTS\.md$/.test(file);
+  // Reports accompany a Python fix; they do not introduce another executable owner.
+  // Standalone evidence/governance edits still use full, as do evidence deletions.
+  const companion = ({file, status}) =>
+    (status === "M" && (editorial.has(file) || ["docs/memory/CURRENT.md", "python/docs/PROJECT_CONSOLE.md"].includes(file))) ||
+    (["A", "M"].includes(status) && /^docs\/evidence\/[^/]+\.md$/.test(file));
+  if (entries.some(pythonOwner) && entries.every(entry => pythonOwner(entry) || companion(entry))) {
     return { scope: "python", reason: "python_owners_and_installed_platform_consumers" };
   }
   return { scope: "full", reason: "source_contract_governance_or_unknown_change" };
