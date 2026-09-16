@@ -155,6 +155,41 @@ def test_game_overview_keeps_large_journal_inventory_in_stored_profile(tmp_path:
         assert saved[0] == stored
 
 
+def test_preview_read_and_list_compact_references_without_changing_build(tmp_path: Path) -> None:
+    import json
+
+    owner, upload, _, jobs = setup(tmp_path)
+    body = {"uploads": [upload], "rules": SelectionRules().to_dict(),
+            "preview_id": None, "name": "Large preview"}
+    identity = jobs.create(MEMBER, body)["id"]
+    jobs.run(identity)
+    with owner.operations.transaction() as db:
+        row = db.execute("SELECT result FROM decision_jobs WHERE id=?", (identity,)).fetchone()
+        result = json.loads(row[0])
+        references = ["journal.jsonl:" + str(i) + ":" + "a" * 64 for i in range(16000)]
+        result["runs"][0]["journal_refs"] = references
+        stored = json.dumps(result)
+        assert len(stored.encode()) > 1048576
+        db.execute("UPDATE decision_jobs SET result=? WHERE id=?", (stored, identity))
+    detail = jobs.read(MEMBER, identity)
+    listed = jobs.list(MEMBER)
+    for response in (detail, listed):
+        assert len(json.dumps(response).encode()) < 20000
+    assert listed["items"] == [detail]
+    assert detail["result"]["runs"][0]["journal_ref_count"] == len(references)
+    assert "journal_refs" not in detail["result"]["runs"][0]
+    for key in ("logical_id", "selected", "selected_facets", "exclusion_counts", "split_status"):
+        assert detail["result"][key] == result[key]
+    build = jobs.create(MEMBER, {**body, "preview_id": identity})
+    jobs.run(build["id"])
+    built = jobs.read(MEMBER, build["id"])
+    assert built["state"] == "completed"
+    assert len(load(owner.store, built["result"]["artifact_id"])[1].records) == result["selected"]
+    with owner.operations.transaction() as db:
+        saved = db.execute("SELECT result FROM decision_jobs WHERE id=?", (identity,)).fetchone()
+        assert saved[0] == stored
+
+
 def test_concurrent_worker_claim_runs_once(tmp_path: Path) -> None:
     from concurrent.futures import ThreadPoolExecutor
     from unittest.mock import patch
