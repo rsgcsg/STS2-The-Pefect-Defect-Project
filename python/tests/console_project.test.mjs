@@ -888,6 +888,7 @@ test("decision dataset defaults preview selected uploads without complete-run re
     if (url.includes("collections?")) return {items: [{upload_id: uploadId, status: "verified"}], total: 1};
     return {items: []};
   }});
+  await action(await h.render(), "dataset-tab-create").onclick();
   const page = await h.render();
   const source = field(page, `source-${uploadId}`);
   source.checked = true; source.onchange();
@@ -916,6 +917,7 @@ test("dataset editing uses the shared refresh guard and retains unblurred draft 
     if (url.includes("collections?")) return {items: [{upload_id: uploadId, status: "verified"}], total: 1};
     return {items: []};
   }});
+  await action(await h.render(), "dataset-tab-create").onclick();
   const page = await h.render();
   assert.ok(walk(page).some(item => item.dataset?.projectEditor === "decision-dataset"));
   const name = field(page, "dataset-name");
@@ -981,17 +983,47 @@ test("dataset progress stays visible and selected parent union is exact", async 
   const job = {id:"b".repeat(32),state:"completed",request:{name:"union",datasets:[id("a"),id("b")],rules,preview_id:null},progress:{phase:"completed",completed:2,total:2,elapsed_seconds:1.5},result:{selected:7,exact_duplicate_decisions:2,split_status:"grouped"}};
   const env = setup({view:"datasets",handler:(url, options) => {
     if (options.method === "POST") return {id:"c".repeat(32),state:"pending"};
-    if (url === "/api/member/datasets") return {items:[job]};
-    if (url.includes("/datasets?")) return {items:[{artifact_id:id("a")},{artifact_id:id("b")}]};
+    if (url.startsWith("/api/member/datasets?")) return {items:[job]};
+    if (url.includes("/datasets?")) return {items:[{artifact_id:id("a"),metadata:{schema:"stpd/decision-dataset-v1"}},{artifact_id:id("b"),metadata:{schema:"stpd/decision-dataset-v1"}}]};
     return emptyList();
   }});
   const page = await env.render();
-  assert.match(text(page), /1.5 秒/);
-  assert.match(text(page), /保留决策/);
+  assert.doesNotMatch(text(page), /保留决策/);
   for (const identity of [id("a"),id("b")]) { const checkbox = field(page,`merge-${identity}`); checkbox.checked=true; checkbox.onchange(); }
   await action(page,"preview-dataset-merge").onclick();
   assert.deepEqual(body(post(env.calls)[0]).datasets,[id("a"),id("b")]);
   assert.equal(body(post(env.calls)[0]).uploads,undefined);
-  await action(page,`build-${job.id}`).onclick();
+  const tasks = await env.render();
+  assert.match(text(tasks), /保留决策/);
+  await action(tasks,`build-${job.id}`).onclick();
   assert.deepEqual(body(post(env.calls)[1]),{name:"union",datasets:[id("a"),id("b")],rules,preview_id:job.id});
+});
+
+
+test("dataset library leads with names, counts, search and a complete export", async () => {
+  const item = {artifact_id:id("a"),display_name:"Defeat collection",metadata:{records:814,schema:"stpd/decision-dataset-v1",split_status:"assigned"},payloads:[{role:"records"},{role:"selection"}]};
+  const h = setup({view:"datasets",handler:(url, options) => options.method === "POST" ? {export_id:id("b")} : {items:[item],total:1}});
+  let page = await h.render();
+  assert.match(text(page), /Defeat collection/); assert.match(text(page), /814/);
+  assert.equal(walk(page).some(x => x.name === "dataset-name"), false);
+  const search = field(page,"dataset-search"); search.value="Defeat"; search.oninput();
+  await action(page,"search-datasets").onclick(); page=await h.render();
+  assert.ok(h.calls.some(c => c.url.includes("q=Defeat")));
+  await action(page,`download-dataset-${id("a")}`).onclick();
+  assert.deepEqual(body(post(h.calls)[0]).artifacts,[{artifact_id:id("a"),roles:["records","selection"]}]);
+});
+
+test("preview removal and restore are explicit and never delete artifacts", async () => {
+  const job={id:uploadId,state:"completed",request:{name:"draft",preview_id:null},result:{selected:12}};
+  const h=setup({view:"datasets",handler: url => url.includes("/member/datasets") ? {items:[job]} : emptyList()});
+  await action(await h.render(),"dataset-tab-previews").onclick();
+  const page=await h.render();
+  const report=find(page,x=>x.tag==="details" && x.dataset?.preserve===`dataset-report-${uploadId}`);
+  assert.equal(report.open,undefined);
+  assert.equal(post(h.calls).length,0);
+  await action(page,`visibility-${uploadId}`).onclick();
+  assert.deepEqual(body(post(h.calls)[0]),{ids:[uploadId],archived:true});
+  await action(await h.render(),"dataset-tab-archived").onclick();
+  await action(await h.render(),`visibility-${uploadId}`).onclick();
+  assert.deepEqual(body(post(h.calls)[1]),{ids:[uploadId],archived:false});
 });

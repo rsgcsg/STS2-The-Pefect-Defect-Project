@@ -275,8 +275,10 @@ class LocalIdentity:
             path,
         ):
             raise BoundaryError("identity", "invalid_console_route")
-        values = parse_qs(query, strict_parsing=True, max_num_fields=3)
-        if set(values) - {"limit", "offset", "device"} or any(len(v) != 1 for v in values.values()):
+        values = parse_qs(query, strict_parsing=True, max_num_fields=4)
+        if (set(values) - {"limit", "offset", "device", "q"}
+                or ("q" in values and path != "datasets")
+                or any(len(v) != 1 for v in values.values())):
             raise BoundaryError("identity", "invalid_console_query")
         with self.lock:
             session = self.session()

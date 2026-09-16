@@ -726,6 +726,14 @@ function catalog(data, kind) {
         ),
       );
     else body.append(button("← 返回目录", () => navigate(kind), "link"));
+    if (kind === "datasets") {
+      body.append(node("h2", item.display_name || `数据集 ${short(item.artifact_id)}`));
+      body.append(facts([["收录决策", item.metadata?.records ?? "未报告"],
+        ["数据契约", item.metadata?.schema ?? "未报告"],
+        ["分组切分", item.metadata?.split_status === "assigned" ? "已按真实局分组" : "尚未确认，查看报告"],
+        ["使用条件", "已生成固定版本；训练准入与模型效果需单独验证"]]));
+      body.append(button("返回数据集列表下载", () => navigate("datasets"), "link"));
+    }
     body.append(
       facts([
         ["类型", item.kind],
