@@ -238,6 +238,226 @@ class FakeConnector implements PolicyConnector {
   }
 }
 
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>(done => { resolve = done; });
+  return { promise, resolve };
+}
+
+describe("cross-interface Runtime control preconditions", () => {
+  const makeRuntime = (connector: PolicyConnector = new FakeConnector(bundle(["a"]))) =>
+    new PolicyRuntime({ manifest: manifest(), connector, runId: "run-bound", sleep: async () => {},
+      policy: input => ({ candidate_digest: input.candidate_digest, scores: [1], selected_index: 0 }) });
+  const binding = { gameInstanceId: "runtime", recoveryEpoch: 0 };
+
+  it("reads actual Connector without admitting environment, observing or acquiring control", async () => {
+    const connector = new FakeConnector(bundle(["a"]));
+    const capabilities = vi.spyOn(connector, "capabilities");
+    const runtime = makeRuntime(connector);
+    const before = runtime.status();
+    const service = await startPolicyRuntimeHttpServer(runtime, { port: 0 });
+    try {
+      const response = await fetch(`${service.address}/v2/environment`);
+      expect(response.status).toBe(200);
+      const value = await response.json();
+      const schema = JSON.parse(await readFile(new URL("../../../contracts/policy-runtime/environment.schema.json", import.meta.url), "utf8"));
+      expect(value).toEqual({ schema: schema.$id, run_id: "run-bound", runtime_instance_id: "runtime", recovery_epoch: 0 });
+      expect(Object.keys(value).sort()).toEqual(schema.required.sort());
+      expect(capabilities).toHaveBeenCalledExactlyOnceWith({ fresh: true });
+      expect(runtime.status()).toEqual(before);
+      expect(decodePolicyRuntimeStatus(runtime.status())).toEqual(before);
+      expect(connector.observeCount + connector.acquireCount + connector.submitCount).toBe(0);
+      for (const headers of [{ origin: "https://foreign.invalid" }, { host: "foreign.invalid" }]) {
+        const code = await new Promise<number>((resolve, reject) => {
+          const request = httpRequest(`${service.address}/v2/environment`, { headers }, response => { response.resume(); resolve(response.statusCode!); });
+          request.once("error", reject); request.end();
+        });
+        expect(code).toBe(403);
+      }
+      expect(capabilities).toHaveBeenCalledTimes(1);
+    } finally { await service.close(); }
+  });
+
+  it("bypasses capability cache without replacing admitted identity", async () => {
+    const original = await new FakeConnector(bundle(["a"])).capabilities();
+    let identity = "runtime";
+    const wire = { capabilities: vi.fn(async () => ({ data: { ...original, host: { ...original.host, runtime_instance_id: identity } } })) };
+    const connector = new ConnectorPolicyClient(wire as unknown as ConnectorAdapterClient);
+    expect((await connector.capabilities()).host.runtime_instance_id).toBe("runtime");
+    identity = "replacement";
+    expect((await connector.capabilities({ fresh: true })).host.runtime_instance_id).toBe("replacement");
+    expect((await connector.capabilities()).host.runtime_instance_id).toBe("runtime");
+    expect(wire.capabilities).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects another game before mode/tick, including after environment admission", async () => {
+    const connector = new FakeConnector(bundle(["a"]));
+    const runtime = makeRuntime(connector);
+    const before = runtime.status();
+    await expect(runtime.setMode("auto", { ...binding, gameInstanceId: "other" })).rejects.toMatchObject({ code: "runtime_game_mismatch", httpStatus: 409 });
+    await expect(runtime.tick({ ...binding, gameInstanceId: "other" })).rejects.toMatchObject({ code: "runtime_game_mismatch" });
+    expect(runtime.status()).toEqual(before);
+    await runtime.setMode("shadow", binding);
+    expect((await runtime.tick(binding)).type).toBe("shadow");
+    const admitted = runtime.status();
+    const caps = await connector.capabilities();
+    vi.spyOn(connector, "capabilities").mockResolvedValue({ ...caps, host: { ...caps.host, runtime_instance_id: "replacement" } });
+    await expect(runtime.readEnvironment()).rejects.toMatchObject({ code: "runtime_game_mismatch" });
+    await expect(runtime.setMode("auto", { ...binding, gameInstanceId: "replacement" })).rejects.toMatchObject({ code: "runtime_game_mismatch" });
+    expect(runtime.status()).toEqual(admitted);
+    expect(connector.acquireCount + connector.submitCount).toBe(0);
+  });
+
+  it("invalidates delayed Auto and One-Step tick after another client's legacy Human", async () => {
+    const connector = new FakeConnector(bundle(["a"]));
+    const runtime = makeRuntime(connector);
+    await runtime.setMode("one_step", binding);
+    await runtime.setMode("human");
+    expect((await runtime.readEnvironment()).recovery_epoch).toBe(1);
+    await expect(runtime.setMode("auto", binding)).rejects.toMatchObject({ code: "runtime_recovery_epoch_mismatch" });
+    await expect(runtime.tick(binding)).rejects.toMatchObject({ code: "runtime_recovery_epoch_mismatch" });
+    expect(runtime.status().mode).toBe("human");
+    expect(connector.observeCount + connector.acquireCount + connector.submitCount).toBe(0);
+    const current = { ...binding, recoveryEpoch: 1 };
+    await runtime.setMode("one_step", current);
+    expect((await runtime.tick(current)).type).toBe("delivered");
+    expect(connector.submitCount).toBe(1);
+  });
+
+  it.each(["human", "stop"] as const)("invalidates waiting intent immediately when %s enters owner", async recovery => {
+    const connector = new FakeConnector(bundle(["a"]));
+    const actual = await connector.capabilities();
+    const entered = deferred(), finish = deferred();
+    vi.spyOn(connector, "capabilities").mockImplementationOnce(async () => { entered.resolve(); await finish.promise; return actual; });
+    const runtime = makeRuntime(connector);
+    const pending = runtime.setMode("auto", binding);
+    const rejected = expect(pending).rejects.toMatchObject({ code: "runtime_recovery_epoch_mismatch" });
+    await entered.promise;
+    const recovered = recovery === "human" ? runtime.setMode("human") : runtime.stop();
+    finish.resolve(); await rejected; await recovered;
+    expect(runtime.status().mode).toBe("human");
+    expect(connector.acquireCount + connector.submitCount).toBe(0);
+  });
+
+  it("does not renew a pending environment read across Human recovery", async () => {
+    const connector = new FakeConnector(bundle(["a"]));
+    const actual = await connector.capabilities();
+    const entered = deferred(), finish = deferred();
+    vi.spyOn(connector, "capabilities").mockImplementationOnce(async () => { entered.resolve(); await finish.promise; return actual; });
+    const runtime = makeRuntime(connector);
+    const rejected = expect(runtime.readEnvironment()).rejects.toMatchObject({ code: "runtime_recovery_epoch_mismatch" });
+    await entered.promise; await runtime.setMode("human");
+    finish.resolve(); await rejected;
+    expect((await runtime.readEnvironment()).recovery_epoch).toBe(1);
+  });
+
+  it("rejects queued commands and cancels scoring after Human without native delivery", async () => {
+    const connector = new FakeConnector(bundle(["a"]));
+    const entered = deferred(), finish = deferred();
+    const runtime = new PolicyRuntime({ manifest: manifest(), connector, sleep: async () => {}, policy: async input => {
+      entered.resolve(); await finish.promise;
+      return { candidate_digest: input.candidate_digest, scores: [1], selected_index: 0 };
+    } });
+    await runtime.setMode("one_step", binding);
+    const tick = runtime.tick(binding);
+    await entered.promise;
+    const rejected = expect(runtime.setMode("auto", binding)).rejects.toMatchObject({ code: "runtime_recovery_epoch_mismatch" });
+    const human = runtime.setMode("human");
+    finish.resolve();
+    expect((await tick).type).toBe("not_admitted");
+    await rejected; await human;
+    expect(runtime.status().mode).toBe("human");
+    expect(connector.submitCount).toBe(0);
+  });
+
+  it("bounds epoch exhaustion without blocking Human/Stop", async () => {
+    const runtime = makeRuntime();
+    (runtime as unknown as { recoveryEpoch: number }).recoveryEpoch = Number.MAX_SAFE_INTEGER;
+    await runtime.setMode("human");
+    await expect(runtime.readEnvironment()).rejects.toMatchObject({ code: "runtime_recovery_epoch_mismatch" });
+    await expect(runtime.setMode("auto", { ...binding, recoveryEpoch: Number.MAX_SAFE_INTEGER })).rejects.toMatchObject({ code: "runtime_recovery_epoch_mismatch" });
+    await expect(runtime.stop()).resolves.toMatchObject({ mode: "human", lifecycle: "stopped" });
+  });
+
+  it("preserves completed multi-tick results when a later recovery fence rejects", async () => {
+    const connector = new FakeConnector(bundle(["a"]));
+    const runtime = makeRuntime(connector);
+    await runtime.setMode("auto", binding);
+    const tick = runtime.tick.bind(runtime);
+    let calls = 0;
+    vi.spyOn(runtime, "tick").mockImplementation(async expected => {
+      if (++calls === 2) {
+        await runtime.setMode("human");
+        // Another intentional new command may re-enter Auto. It cannot revive
+        // the original client's multi-tick request carrying the old epoch.
+        await runtime.setMode("auto", { ...binding, recoveryEpoch: 1 });
+      }
+      return tick(expected);
+    });
+    const service = await startPolicyRuntimeHttpServer(runtime, { port: 0, maxAutoTicks: 2 });
+    try {
+      const response = await fetch(`${service.address}/v2/tick`, { method: "POST", headers: {
+        "content-type": "application/json", "x-sts2-policy-run-id": "run-bound",
+        "x-sts2-game-instance-id": "runtime", "x-sts2-recovery-epoch": "0"
+      }, body: JSON.stringify({ max_ticks: 2 }) });
+      expect(response.status).toBe(200);
+      const value = await response.json();
+      expect(value.schema).toBe("sts2.policy-runtime/http-2/tick-1");
+      expect(value.results.map((result: { type: string }) => result.type)).toEqual(["delivered", "not_admitted"]);
+      expect(value.results[1].reason).toBe("runtime_recovery_epoch_mismatch");
+      expect(connector.submitCount).toBe(1);
+    } finally { await service.close(); }
+  });
+
+  it("does not let a matching control fence retry unknown native delivery", async () => {
+    const connector = new FakeConnector(bundle(["a"]), "unknown");
+    const runtime = makeRuntime(connector);
+    await runtime.setMode("one_step", binding);
+    expect((await runtime.tick(binding)).type).toBe("unknown");
+    expect((await runtime.tick(binding)).type).toBe("not_admitted");
+    await expect(runtime.setMode("auto", binding)).rejects.toThrow("runtime is tainted");
+    expect(connector.submitCount).toBe(1);
+    await runtime.setMode("human");
+    expect(runtime.status().tainted).toBe(true);
+    expect(connector.submitCount).toBe(1);
+  });
+
+  it("validates HTTP header syntax but allows recovery despite malformed new headers", async () => {
+    const connector = new FakeConnector(bundle(["a"]));
+    const runtime = makeRuntime(connector);
+    const service = await startPolicyRuntimeHttpServer(runtime, { port: 0 });
+    const send = (route: string, body: unknown, extra: Record<string, string | string[]>) => new Promise<{ status: number; data: { error?: string } }>((resolve, reject) => {
+      const request = httpRequest(`${service.address}/v2/${route}`, { method: "POST", headers: { "content-type": "application/json", "x-sts2-policy-run-id": "run-bound", ...extra } }, response => {
+        let text = ""; response.setEncoding("utf8"); response.on("data", (chunk: string) => { text += chunk; });
+        response.once("end", () => resolve({ status: response.statusCode!, data: JSON.parse(text) }));
+      });
+      request.once("error", reject); request.end(JSON.stringify(body));
+    });
+    try {
+      const invalid: Record<string, string | string[]>[] = [
+        { "x-sts2-game-instance-id": "" }, { "x-sts2-game-instance-id": ["runtime", "runtime"] },
+        ...["", "-1", "1.2", "01", "1e0", "9007199254740992", ["0", "0"]].map(epoch => ({ "x-sts2-recovery-epoch": epoch }))
+      ];
+      for (const extra of invalid) {
+        expect((await send("mode", { mode: "auto" }, extra)).status).toBe(428);
+        expect((await send("tick", { max_ticks: 1 }, extra)).status).toBe(428);
+      }
+      const headers = { "x-sts2-game-instance-id": "runtime", "x-sts2-recovery-epoch": "0" };
+      expect((await send("mode", { mode: "one_step" }, headers)).status).toBe(200);
+      expect((await send("mode", { mode: "human" }, { "x-sts2-game-instance-id": "other", "x-sts2-recovery-epoch": "bad" })).status).toBe(200);
+      expect(await send("mode", { mode: "auto" }, headers)).toMatchObject({ status: 409, data: { error: "runtime_recovery_epoch_mismatch" } });
+      expect(await send("tick", { max_ticks: 1 }, headers)).toMatchObject({ status: 409, data: { error: "runtime_recovery_epoch_mismatch" } });
+      expect(connector.observeCount + connector.acquireCount + connector.submitCount).toBe(0);
+      vi.spyOn(connector, "capabilities").mockRejectedValue(new Error("sensitive implementation detail"));
+      const unavailable = await fetch(`${service.address}/v2/environment`);
+      expect(unavailable.status).toBe(503);
+      expect(await unavailable.json()).toEqual({ schema: "sts2.policy-runtime/http-2", error: "runtime_environment_unavailable" });
+      expect((await send("stop", {}, { "x-sts2-game-instance-id": "other", "x-sts2-recovery-epoch": "bad" })).status).toBe(200);
+      expect(runtime.status().lifecycle).toBe("stopped");
+    } finally { await service.close(); }
+  });
+});
+
 describe("runtime integration fake", () => {
   const environmentDriftCases: Array<[string, string, (value: PolicyManifest) => void]> = [
     ["host_kind", "environment_host_kind_drift", (value) => { value.requirements.environment.host_kind = "headless"; }],

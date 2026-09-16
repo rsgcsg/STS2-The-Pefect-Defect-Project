@@ -31,6 +31,20 @@ const runtime = new PolicyRuntime({ manifest, connector, policy: (input) => ({ c
 const server = await startPolicyRuntimeHttpServer(runtime);
 async function post(address, route, body, runId = runtime.status().run_id) { const response = await fetch(`${address}/v2/${route}`, { method: "POST", headers: { "content-type": "application/json", "x-sts2-policy-run-id": runId }, body: JSON.stringify(body) }); assert.equal(response.status, 200); return response.json(); }
 try {
+  const bindingResponse = await fetch(`${server.address}/v2/environment`);
+  assert.equal(bindingResponse.status, 200);
+  const binding = await bindingResponse.json();
+  assert.deepEqual(binding, { schema: "sts2.policy-runtime/environment-1", run_id: runtime.status().run_id,
+    runtime_instance_id: "fixture-runtime", recovery_epoch: 0 });
+  assert.equal(runtime.status().environment, null);
+  await post(server.address, "mode", { mode: "human" });
+  const stale = await fetch(`${server.address}/v2/mode`, { method: "POST", headers: {
+    "content-type": "application/json", "x-sts2-policy-run-id": binding.run_id,
+    "x-sts2-game-instance-id": binding.runtime_instance_id, "x-sts2-recovery-epoch": String(binding.recovery_epoch)
+  }, body: JSON.stringify({ mode: "auto" }) });
+  assert.equal(stale.status, 409);
+  assert.deepEqual(await stale.json(), { schema: "sts2.policy-runtime/http-2", error: "runtime_recovery_epoch_mismatch" });
+  assert.equal(runtime.status().mode, "human"); assert.equal(submits, 0);
   await post(server.address, "mode", { mode: "shadow" });
   assert.equal((await post(server.address, "tick", { max_ticks: 1 })).results[0].type, "shadow");
   assert.equal(submits, 0); assert.equal(held, false);
@@ -76,4 +90,4 @@ try {
     child.kill("SIGTERM"); await childExit;
   }
 }
-console.log(JSON.stringify({ imported_package: installedEntry.includes("node_modules"), version: POLICY_RUNTIME_VERSION, shadow_submissions: 0, synthetic_deliveries: submits, installed_cli_started_sealed_and_exited: true, game_contact: false }));
+console.log(JSON.stringify({ imported_package: installedEntry.includes("node_modules"), version: POLICY_RUNTIME_VERSION, environment_recovery_fence: true, shadow_submissions: 0, synthetic_deliveries: submits, installed_cli_started_sealed_and_exited: true, game_contact: false }));

@@ -18,7 +18,7 @@ field drift fails closed before Snapshot observation or policy scoring.
 
 ## Standalone consumer package
 
-Version `0.1.0-rc.3` provides a candidate package for external consumers. Build
+Version `0.1.0-rc.4` provides a candidate package for external consumers. Build
 from a committed component checkout with the checked-in lockfile:
 
 ```bash
@@ -27,7 +27,7 @@ npm --prefix components/policy-runtime run check
 npm --prefix components/policy-runtime run package -- --output /absolute/package-output
 ```
 
-The last command creates `rsgcsg-sts2-policy-runtime-0.1.0-rc.3.tgz`,
+The last command creates `rsgcsg-sts2-policy-runtime-0.1.0-rc.4.tgz`,
 `policy-runtime-package.json` and `checksums.sha256`. It requires committed
 component source and does not publish anything. The package contains compiled
 JavaScript/declarations, CLI entries, license, a component identity record and
@@ -86,6 +86,7 @@ verification rejects any digest, identity or event-association drift.
 ## HTTP commands
 
 - `GET /status`
+- `GET /v2/environment`
 - `POST /v2/mode` with `{"mode":"human|shadow|one_step|auto"}`
 - `POST /v2/tick` with `{"max_ticks":1}`
 - `POST /v2/stop` with `{}`
@@ -106,6 +107,48 @@ server that ignores the new header therefore cannot accidentally receive a
 new client's command. There is no fallback to old paths. Keep expected identity
 through all steps of one command; status polling must not silently retarget it.
 
+### Game binding and cross-interface Human recovery
+
+The `rc.4` read-only `GET /v2/environment` returns exactly
+`schema`, `run_id`, `runtime_instance_id`, and `recovery_epoch`, under
+`sts2.policy-runtime/environment-1`. It reads capabilities from this Runtime's
+actual configured Connector endpoint; it does not observe a decision, score,
+acquire control, change `/status`, or write Agent evidence. A previously admitted
+instance must still match. The read requires the same loopback Host/Origin
+validation as commands. Unavailable capabilities return sanitized 503
+`runtime_environment_unavailable`.
+
+New unified UI clients read this binding **before** asynchronous Recorder
+preparation. They compare its game instance with the actual game task bridge and
+send both `X-STS2-Game-Instance-ID` and `X-STS2-Recovery-Epoch` on non-Human mode and
+tick requests, together with the existing Runtime run header. The owner reads
+fresh capabilities and checks identity before dispatch; game drift returns 409
+`runtime_game_mismatch`. Missing/empty/duplicate malformed supplied headers return
+428 `runtime_game_precondition_required` or `runtime_recovery_precondition_required`.
+An omitted new header retains legacy semantics; new UI clients must always send
+both, never substitute a refreshed identity into an old intent, and treat an
+older server's environment 404 as requiring an update before starting a model.
+
+Every explicit Human or Stop advances the process-wide recovery epoch immediately
+on owner entry, before waiting for ongoing work. This also applies to legacy
+callers without new headers. A prepared command with a previous epoch is rejected
+409 `runtime_recovery_epoch_mismatch`; it cannot take back control after the other
+interface returned to Human. The owner rechecks after async capability reads and
+queue waits. A read started before recovery does not return a new epoch to that
+old intent. Normal mode/tick leave the epoch unchanged, so One-Step mode and its
+following tick retain the same binding. The counter is a non-negative safe integer;
+exhaustion blocks new guarded control until a new Runtime run, but never blocks
+Human/Stop. Human/Stop ignore new game/epoch preconditions and remain available if
+the Connector is offline. Existing run-ID and local-request protections still apply.
+
+A precondition error before any tick in a bounded HTTP request uses the ordinary
+error envelope. If earlier ticks already completed, a later precondition failure
+returns the normal HTTP 200 tick envelope with those results and a final
+`not_admitted` result carrying the error code. It cannot label the whole request
+unapplied or retry already executed actions. Existing unknown-delivery handling
+is unchanged. This fence coordinates control intent; it is not authentication,
+new game legality, or proof of scientific model quality.
+
 The service is loopback-only. Every POST requires `Content-Type: application/json`
 (optional UTF-8 charset), a literal supported loopback Host with the bound port,
 and either no Origin (local service clients) or the exact same HTTP origin.
@@ -121,7 +164,7 @@ through HTTP; launch a fresh process/run for a new exact model/Manifest. A
 validated 409/428 precondition rejection is known to be unapplied; it still does
 not authorize automatic command retry or identity substitution.
 
-The rc.3 standalone package and its updated Workbench client do not install a
+The rc.4 standalone package and its updated Workbench client do not install a
 game Mod. The matching Live UI source is part of the unified game DLL and needs
 its own exact build/install/load qualification before use. Existing qualified
 Recorder DLLs, collection-tool packages and historical Human evidence keep their
