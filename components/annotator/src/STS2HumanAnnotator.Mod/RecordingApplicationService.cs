@@ -21,4 +21,7 @@ public sealed class RecordingApplicationService
 
     public RecordingCommandResult Execute(RecordingCommand command) =>
         RecorderRuntime.ExecuteRecordingCommand(command);
+
+    public RecordingCommandResult ExecuteForSession(RecordingCommand command, string? expectedSessionId) =>
+        RecorderRuntime.ExecuteRecordingCommand(command, new RecordingSessionExpectation(expectedSessionId));
 }

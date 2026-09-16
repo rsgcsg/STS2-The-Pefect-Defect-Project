@@ -166,6 +166,8 @@ internal sealed class PlatformLivePanel : IDisposable
     private int _pollInFlight;
     private PlatformLiveStatus? _pendingStatus;
     private string? _displayedPolicyRunId;
+    private Button _endTestButton = null!;
+    private bool _policyCommandPending;
     private string? _pendingPollError;
     private long _lastRecordingEventSequence;
     private string? _actionFeedSessionId;
@@ -302,7 +304,7 @@ internal sealed class PlatformLivePanel : IDisposable
         titleRow.AddChild(_workspaceTitle);
         titleRow.AddChild(BuildHeaderButton("Minimize", MinimizePanel, "Keep a small live view during play."));
         titleRow.AddChild(BuildHeaderButton("Reset", ResetLayout, "Restore position, size and active surface."));
-        var closeButton = BuildHeaderButton("Close", HidePanel, "Close workspace and return to gameplay.");
+        var closeButton = BuildHeaderButton("收起", HidePanel, "Close workspace and return to gameplay.");
         closeButton.Shortcut = WorkspaceShortcut(Key.Escape);
         titleRow.AddChild(closeButton);
         _workspaceBody.AddChild(titleRow);
@@ -326,7 +328,7 @@ internal sealed class PlatformLivePanel : IDisposable
         _tabBar.AddThemeFontSizeOverride("font_size", 13);
         _tabBar.AddThemeColorOverride("font_selected_color", TextPrimary);
         _tabBar.AddThemeColorOverride("font_unselected_color", TextSecondary);
-        foreach (string name in new[] { "Agent Run", "Human Recorder" })
+        foreach (string name in new[] { "模型实战", "真人采集" })
             _tabBar.AddTab(name);
         _tabBar.TabClicked += OnTabClicked;
         _workspaceContent.AddChild(_tabBar);
@@ -490,21 +492,28 @@ internal sealed class PlatformLivePanel : IDisposable
             ClipContents = true
         };
         modeRow.AddThemeConstantOverride("separation", 4);
-        modeRow.AddChild(BuildModeButton("Human", PlatformCommandMode.Human));
-        modeRow.AddChild(BuildModeButton("Shadow", PlatformCommandMode.Shadow));
-        modeRow.AddChild(BuildModeButton("One-Step", PlatformCommandMode.OneStep));
-        modeRow.AddChild(BuildModeButton("Auto", PlatformCommandMode.Auto));
+        modeRow.AddChild(BuildModeButton("开始测试", PlatformCommandMode.Auto));
+        modeRow.AddChild(BuildModeButton("暂停并接管", PlatformCommandMode.Human));
+        _endTestButton = BuildCommandButton("结束测试", () => _ = EndRuntimeAsync(), "停止模型并封存本次实战记录。");
+        _endTestButton.Disabled = true;
+        modeRow.AddChild(_endTestButton);
+        body.AddChild(modeRow);
+        var advancedModes = new HBoxContainer { Visible = false };
+        advancedModes.AddChild(BuildModeButton("只评分", PlatformCommandMode.Shadow));
+        advancedModes.AddChild(BuildModeButton("单步执行", PlatformCommandMode.OneStep));
+        body.AddChild(BuildHeaderButton("高级控制", () => advancedModes.Visible = !advancedModes.Visible,
+            "按需查看只评分与单步调试。"));
         _tickButton = BuildCommandButton(
             "Tick",
             () => _ = TickRuntimeAsync(),
             "Ask Policy Runtime for one bounded tick; action authority remains Connector/Runtime.");
         _tickButton.Disabled = true;
-        modeRow.AddChild(_tickButton);
-        body.AddChild(modeRow);
+        advancedModes.AddChild(_tickButton);
+        body.AddChild(advancedModes);
 
         _command = new Label
         {
-            Text = "Human is the safe default. UI never submits gameplay actions.",
+            Text = "先在本机工作台选择并准备模型，再点开始测试。准备模型不会自动操作游戏。",
             MouseFilter = MouseFilterEnum.Ignore,
             AutowrapMode = TextServer.AutowrapMode.WordSmart
         };
@@ -600,13 +609,13 @@ internal sealed class PlatformLivePanel : IDisposable
         controls.AddThemeConstantOverride("separation", 4);
         _recorderDetails.AddChild(controls);
         _recordingButtons[STS2HumanAnnotator.Core.RecordingCommandKind.StartNewSession] = BuildRecordingButton(
-            controls, "New Session", STS2HumanAnnotator.Core.RecordingCommandKind.StartNewSession);
+            controls, "开始录制", STS2HumanAnnotator.Core.RecordingCommandKind.StartNewSession);
         _recordingButtons[STS2HumanAnnotator.Core.RecordingCommandKind.Pause] = BuildRecordingButton(
-            controls, "Pause", STS2HumanAnnotator.Core.RecordingCommandKind.Pause);
+            controls, "暂停", STS2HumanAnnotator.Core.RecordingCommandKind.Pause);
         _recordingButtons[STS2HumanAnnotator.Core.RecordingCommandKind.Resume] = BuildRecordingButton(
-            controls, "Resume", STS2HumanAnnotator.Core.RecordingCommandKind.Resume);
+            controls, "继续", STS2HumanAnnotator.Core.RecordingCommandKind.Resume);
         _recordingButtons[STS2HumanAnnotator.Core.RecordingCommandKind.Close] = BuildRecordingButton(
-            controls, "Close", STS2HumanAnnotator.Core.RecordingCommandKind.Close);
+            controls, "结束录制", STS2HumanAnnotator.Core.RecordingCommandKind.Close);
 
         _lastAction = new Label
         {
@@ -1025,13 +1034,25 @@ internal sealed class PlatformLivePanel : IDisposable
 
     private async Task SetRuntimeModeAsync(PlatformCommandMode mode)
     {
-        _mode = mode;
+        if (_policyCommandPending && mode != PlatformCommandMode.Human) return;
+        _policyCommandPending = true;
         _command.Text = $"Policy Runtime: setting mode {ToRuntimeMode(mode)}...";
         try
         {
             string expectedRunId = _displayedPolicyRunId
                 ?? throw new InvalidOperationException("Observe the Policy Runtime before commanding it.");
-            await _statusClient.SetModeAsync(ToRuntimeMode(mode), expectedRunId);
+            if (mode != PlatformCommandMode.Human)
+            {
+                var recording = STS2HumanAnnotator.Mod.RecordingApplicationService.Instance.QueryStatus();
+                var prepared = PlatformCollectionHandoff.Prepare(recording.Lifecycle.SessionId,
+                    Guid.NewGuid().ToString("D"),
+                    STS2HumanAnnotator.Mod.RecordingApplicationService.Instance.QueryStatus,
+                    STS2HumanAnnotator.Mod.RecordingApplicationService.Instance.ExecuteForSession);
+                if (!PlatformCollectionHandoff.Ready(prepared))
+                    throw new InvalidOperationException("真人录制正在封存。完成后再开始测试；模型尚未接管。");
+            }
+            PolicyRuntimeStatus response = await _statusClient.SetModeAsync(ToRuntimeMode(mode), expectedRunId);
+            _mode = ParseRuntimeMode(response.Mode);
             ApplyModeButtonState();
             if (mode == PlatformCommandMode.OneStep)
             {
@@ -1051,6 +1072,20 @@ internal sealed class PlatformLivePanel : IDisposable
             PushToast("policy.error", $"Policy command rejected: {exception.Message}");
             SetPolicyControlsAvailable(false);
         }
+        finally { _policyCommandPending = false; }
+    }
+
+    private async Task EndRuntimeAsync()
+    {
+        try
+        {
+            string expected = _displayedPolicyRunId ?? throw new InvalidOperationException("请先读取当前模型状态。");
+            PolicyRuntimeStatus stopped = await _statusClient.StopAsync(expected);
+            _command.Text = stopped.Lifecycle == "stopped" ? "本次测试已结束。工作台会整理实战记录。" : "正在等待停止回执。";
+            RefreshVisibleStatus();
+        }
+        catch (Exception exception)
+        { _command.Text = $"停止结果尚未确认：{exception.Message}。不要重复决策。"; SetPolicyControlsAvailable(false); }
     }
 
     private async Task TickRuntimeAsync()
@@ -1143,6 +1178,7 @@ internal sealed class PlatformLivePanel : IDisposable
                 : $"Unavailable: {reason ?? "Policy Runtime is unavailable."}";
         }
         _compactHumanButton.Disabled = !available;
+        _endTestButton.Disabled = !available;
         _tickButton.Disabled = !available;
         _tickButton.TooltipText = available
             ? "Ask Policy Runtime for one bounded tick; action authority remains Connector/Runtime."

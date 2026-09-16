@@ -129,6 +129,13 @@ public sealed class PlatformLiveStatusClient : IDisposable
         return response.Status;
     }
 
+    public async Task<PolicyRuntimeStatus> StopAsync(string expectedRunId, CancellationToken cancellationToken = default)
+    {
+        var response = await PostAsync<PolicyRuntimeHttpStatusResponse>("stop", new { }, expectedRunId, cancellationToken);
+        EnsurePolicyRuntimeStatus(response.Schema, response.Status);
+        return response.Status;
+    }
+
     public async Task<PolicyRuntimeStatus> TickAsync(string expectedRunId, CancellationToken cancellationToken = default)
     {
         PolicyRuntimeTickResponse response = await PostAsync<PolicyRuntimeTickResponse>(

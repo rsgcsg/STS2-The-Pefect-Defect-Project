@@ -204,7 +204,8 @@ internal static partial class RecorderRuntime
     internal static RecordingEventBatch ReadRecordingEvents(long afterSequence) =>
         ApplicationEvents.ReadAfter(afterSequence);
 
-    internal static RecordingCommandResult ExecuteRecordingCommand(RecordingCommand command)
+    internal static RecordingCommandResult ExecuteRecordingCommand(
+        RecordingCommand command, RecordingSessionExpectation? expectedSession = null)
     {
         if (!string.Equals(
                 command.Schema,
@@ -224,6 +225,9 @@ internal static partial class RecorderRuntime
         lock (Gate)
         {
             initialized = _initialized;
+            if (expectedSession != null && expectedSession.SessionId != _lifecycle.SessionId)
+                return new RecordingCommandResult(false, false, "recording_session_changed",
+                    "The recording changed before this command could be applied.", _lifecycle);
             if (CommandLedger.TryGet(command.CommandId, out RecordingCommandResult? existing))
                 return existing!;
             if (!initialized)
