@@ -5,7 +5,7 @@ Platform components, `python/spireagent` applications and `python/stpd` research
 share root governance, one local/cloud console and one Hub membership authority.
 
 The current Workbench source is `bf17e6927dcb1f3645c1baa6cac673ce9e4d2c61`;
-Hub uses `0290e2532eee8fca835f90f4367ece7444e17a78` with compact game-list summaries; see [dataset-library acceptance](../evidence/DATASET_LIBRARY_2026-09-16.md).
+Hub uses `dd934ececa51bda16257013bce1deb57ef4416e6` with compact game/preview/task summaries; see [dataset-library acceptance](../evidence/DATASET_LIBRARY_2026-09-16.md).
 Generated datasets, creation, previews/tasks and removed items are separate workspaces.
 Defeat counts as a native terminal; boundary coverage and strict research sequence
 proof remain separate. Windows PR #9 is normally integrated, Evidence rc.11.

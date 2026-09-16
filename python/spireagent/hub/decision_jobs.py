@@ -19,6 +19,16 @@ from stpd.fullrun.decision_union import UNION_SCHEMA
 from stpd.fullrun.run_coverage import summarize_run_coverage
 
 
+def _run_summary(run: dict[str, Any]) -> dict[str, Any]:
+    """Keep full evidence inventories in stored profiles, not member overview responses."""
+    return {
+        **{key: value for key, value in run.items() if key != "journal_refs"},
+        "journal_ref_count": (
+            len(run["journal_refs"]) if "journal_refs" in run else run.get("journal_ref_count")
+        ),
+    }
+
+
 class DecisionJobs:
     def __init__(self, service: UploadService) -> None:
         self.service = service
@@ -137,6 +147,8 @@ class DecisionJobs:
         request = json.loads(row["request"])
         self._inputs(request)
         result = json.loads(row["result"]) if row["result"] else None
+        if result and "runs" in result:
+            result = {**result, "runs": [_run_summary(run) for run in result["runs"]]}
         return {
             "id": identity,
             "state": row["state"],
@@ -240,11 +252,8 @@ class DecisionJobs:
             result = json.loads(row["result"])
             coverage = {r["run_id"]: r for r in result.get("run_coverage", [])}
             for run in result["runs"]:
-                # The overview transports summaries, not every decision's evidence
-                # references. Full references remain in the stored profile/artifact.
                 displayed = {
-                    **{key: value for key, value in run.items() if key != "journal_refs"},
-                    "journal_ref_count": len(run.get("journal_refs", [])),
+                    **_run_summary(run),
                     "coverage": coverage.get(run["run_id"]),
                 }
                 previous = games.setdefault(run["run_id"], {**displayed, "uploads": []})

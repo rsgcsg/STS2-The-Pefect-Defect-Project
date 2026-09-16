@@ -3,7 +3,7 @@
 ## Dataset library — application update deployed
 
 Workbench uses source `bf17e6927dcb1f3645c1baa6cac673ce9e4d2c61`; Hub uses
-`0290e2532eee8fca835f90f4367ece7444e17a78` with compact game-list summaries.
+`dd934ececa51bda16257013bce1deb57ef4416e6` with compact game/preview/task summaries.
 The [application acceptance](evidence/DATASET_LIBRARY_2026-09-16.md) records the
 searchable generated library, removable/restorable previews, native boundary versus
 strict sequence display, exact kit/image, member download and isolated backup restore.

@@ -351,6 +351,7 @@ conditions separately. Source profiles refresh once in the existing bounded work
 profiles awaiting refresh report unknown, and older immutable selection reports keep their
 original strict meaning. Several fragments never manufacture an uninterrupted game.
 
-The game overview returns run summaries and `journal_ref_count`. Full per-decision
+The game overview, preview detail and task lists return run summaries and
+`journal_ref_count`. Full per-decision
 references remain in original profiles/artifacts; the overview does not transport that
 unbounded inventory or weaken the local response limit.
