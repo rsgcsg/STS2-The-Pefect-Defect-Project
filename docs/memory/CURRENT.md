@@ -4,7 +4,16 @@ Use rsgcsg/STS2-The-Perfect-Defect-Project for all new development.
 Platform components, `python/spireagent` applications and `python/stpd` research
 share root governance, one local/cloud console and one Hub membership authority.
 
-The current qualified operating combination uses Workbench source
+The unified task-flow candidate is in implementation/integration; it has not yet
+been deployed, newly Human-qualified or released. The
+[user flow](../../python/docs/UNIFIED_TASK_FLOW.zh-CN.md) covers one daily collection,
+local model preparation/control and separate Agent-report sharing. Dataset unions preserve only
+parent-selected decisions; background progress is an observation, not a checkpoint.
+Existing APIs, enrollments, tools and pending queues retain their identities. Model native
+outcome remains not measured; the S1 adapter remains CUDA-only. Final source checks and
+artifact/runtime gates are still required; do not reuse older evidence for these changes.
+
+The previously qualified operating combination uses Workbench source
 `6fcd735e4618c29967528e9d3457d898d2e8283d` and Hub source
 `25777cbce106ec9d64ceeef9e55b889abdbc3d3a`, reusing the existing qualified
 Mod/tool bytes. [Operating acceptance](../evidence/OPERATING_FLOW_2026-09-16.md)
