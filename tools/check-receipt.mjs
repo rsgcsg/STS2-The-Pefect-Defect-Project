@@ -11,7 +11,7 @@ export function eligibleEvent(event, ref, base, branch) {
     (event === 'pull_request' && base === 'main' && branch?.startsWith('release/'));
 }
 export function validReceipt(receipt, run, current, now = Date.now()) {
-  const age = now - Date.parse(run.updated_at);
+  const age = now - Date.parse(run.created_at);
   return Boolean(["full", "python"].includes(current.scope) && receipt && run.status === 'completed' && run.conclusion === 'success' &&
     run.head_repository?.full_name === current.repository &&
     ['push', 'pull_request', 'workflow_dispatch', 'schedule'].includes(run.event) &&
@@ -62,7 +62,7 @@ export async function findReceipt(current, {token, git, runId, request = api, re
     const deadline = Date.now() + 30_000;
     for (const run of data.workflow_runs) {
       if (Date.now() > deadline) break;
-      if (Date.now() - Date.parse(run.updated_at) > 7 * 86400_000) continue;
+      if (Date.now() - Date.parse(run.created_at) > 7 * 86400_000) continue;
       if (String(run.id) === String(runId) || run.head_repository?.full_name !== current.repository ||
           !/^[0-9a-f]{40}$/.test(run.head_sha)) continue;
       // Cheap content filter before downloading a receipt. Missing history falls back to execution.

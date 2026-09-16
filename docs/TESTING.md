@@ -69,7 +69,7 @@ when a runner/environment change or independent requalification requires fresh e
 The shared verifier checks: successful completed original run and current attempt;
 repository and event; exact tree (therefore tracked source, tests, workflow and locks);
 workflow blob; executed scope and both OS outcomes; actual tested checkout recorded in
-the receipt; and a maximum seven-day age. It downloads only the named small receipt,
+the receipt; and a maximum seven-day age from the original run creation (reruns cannot refresh it). It downloads only the named small receipt,
 checks the GitHub artifact SHA256 and never executes artifact content. Missing/expired
 artifacts, unknown refs, API failure or mismatch select real execution. Reused runs do
 not publish another executable receipt, so reuse cannot extend age or form a proof chain.

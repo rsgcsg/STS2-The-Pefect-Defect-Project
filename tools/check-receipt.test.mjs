@@ -4,7 +4,7 @@ import {eligibleEvent, validReceipt, findReceipt} from './check-receipt.mjs';
 const now = Date.UTC(2026, 8, 17);
 const current = {repository: 'owner/project', tree: 'a'.repeat(40), workflow: 'b'.repeat(40), scope: 'full'};
 const run = {id: 1, run_attempt: 2, status: 'completed', conclusion: 'success',
-  event: 'pull_request', head_repository: {full_name: current.repository}, updated_at: new Date(now-1000).toISOString()};
+  event: 'pull_request', head_repository: {full_name: current.repository}, created_at: new Date(now-1000).toISOString()};
 const receipt = {schema: 'spireagent/ci-execution-1', executed: true, repository: current.repository,
   run_id: '1', run_attempt: '2', checkout: 'c'.repeat(40), tree: current.tree, workflow: current.workflow,
   scope: 'full', results: {plan:'success', docs:'skipped', linux:'success', windows:'success'}};
@@ -29,8 +29,8 @@ test('receipt binds repository, actual checkout content, executed scope and atte
 test('failed, cancelled, foreign and stale executions cannot satisfy a promotion', () => {
   for(const patch of [{status:'in_progress'},{conclusion:'cancelled'},{conclusion:'failure'},
     {head_repository:{full_name:'fork/project'}},{event:'pull_request_target'},
-    {updated_at:'invalid'},{updated_at:new Date(now-8*86400_000).toISOString()},
-    {updated_at:new Date(now+1).toISOString()}])
+    {created_at:'invalid'},{created_at:new Date(now-8*86400_000).toISOString()},
+    {created_at:new Date(now+1).toISOString()}])
     assert.equal(validReceipt(receipt,{...run,...patch},current,now),false,JSON.stringify(patch));
 });
 test('missing GitHub credentials has an execution fallback without network', async () => {
@@ -38,7 +38,7 @@ test('missing GitHub credentials has an execution fallback without network', asy
 });
 
 test('lookup uses only matching executed content and falls back on corrupt or absent artifacts', async () => {
-  const liveRun = {...run, head_sha:'d'.repeat(40),updated_at:new Date().toISOString()};
+  const liveRun = {...run, head_sha:'d'.repeat(40),created_at:new Date().toISOString()};
   const artifact = {name:'portable-execution-receipt-2',expired:false,workflow_run:{head_sha:liveRun.head_sha}};
   const options = {token:'fixture',runId:'9',git:()=>current.tree,
     request: async (_repo,suffix) => suffix.includes('/artifacts') ? {artifacts:[artifact]} : {workflow_runs:[liveRun]},
@@ -52,4 +52,9 @@ test('lookup uses only matching executed content and falls back on corrupt or ab
   assert.equal(await findReceipt(current,{...options,read:async()=>({...receipt,executed:false})}),null);
   assert.equal(await findReceipt(current,{...options,read:async()=>{throw Error('digest mismatch');}}),null);
   assert.equal(await findReceipt(current,{...options,request:async()=>{throw Error('API unavailable');}}),null);
+});
+
+test('rerunning an old run cannot refresh the age of its successful lanes', () => {
+  assert.equal(validReceipt(receipt, {...run, created_at:new Date(now-8*86400_000).toISOString(),
+    updated_at:new Date(now).toISOString()}, current, now), false);
 });
