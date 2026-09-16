@@ -6,6 +6,7 @@ import json
 import re
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qsl, urlencode
 
 from spireagent.hub.backup_status import freshness as backup_freshness
 from spireagent.hub.backup_status import project as project_backup_status
@@ -78,6 +79,18 @@ class ConsoleRoutes:
             return {"availability": "unavailable", "error": "backup_status_unreadable"}
 
     def read(self, resource: str, query: str, principal: ConsolePrincipal) -> dict[str, Any]:
+        search = ""
+        if resource == "datasets":
+            try:
+                pairs = parse_qsl(query, strict_parsing=True, keep_blank_values=True,
+                                  max_num_fields=4)
+                searches = [v for k, v in pairs if k == "q"]
+                if len(searches) > 1 or any(len(v) > 100 for v in searches):
+                    raise ValueError
+                search = searches[0].strip() if searches else ""
+                query = urlencode([(k, v) for k, v in pairs if k != "q"])
+            except ValueError:
+                raise BoundaryError("console", "invalid_dataset_search") from None
         limit, offset, status = pagination(query)
         index = self.service.console_index
         if resource == "collections":
@@ -94,7 +107,7 @@ class ConsoleRoutes:
             kind, artifact_id = resource.split("/")
             return index.artifacts(principal, kind, limit=1, offset=0, artifact_id=artifact_id)
         if resource in {"datasets", "models", "training", "evaluations", "analyses"}:
-            return index.artifacts(principal, resource, limit=limit, offset=offset)
+            return index.artifacts(principal, resource, limit=limit, offset=offset, search=search)
         if resource == "statistics":
             if query:
                 raise BoundaryError("console", "unexpected_query")

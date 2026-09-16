@@ -325,3 +325,28 @@ for submissions), separate from the four-second login polling deadline. Export c
 checks remote source manifests and current sharing grants. A lost submission response is
 reported as **result unknown**, not a rejected operation; the client never automatically
 resubmits it. These deadlines do not weaken source authorization or byte verification.
+
+## Dataset library and preview cleanup
+
+The dataset page opens the **已生成的数据集** library: published names (recovered from
+the original durable build request), record counts, contract, split status, date and download.
+Search matches names or artifact IDs across the indexed catalog, with pagination. Names
+are presentation labels; immutable manifest identity and payloads remain unchanged.
+A generated dataset is available to inspect/download, not automatically scientifically
+qualified or compatible with every trainer. Strict Full-Run and decision contracts stay separate.
+
+**新建数据集** selects recordings and rules; **预览与任务** shows bounded background
+work and an explicit confirmation to generate. Category/run/exclusion reports are collapsed
+until requested. Only the owner can remove completed/failed tasks from their own list;
+**已移除** restores them. Batch removal affects only the completed previews displayed on
+that page. Pending/running jobs cannot be hidden. Removal changes a personal durable
+visibility row, never the job state/result, raw recordings, fixed datasets, or failure history.
+Visibility is backed up with Operations and requires current membership and browser CSRF.
+
+Native run coverage is distinct from strict research sequence proof. A fresh native start
+and native terminal (victory **or defeat**) establish the observed boundaries; known
+pause/reload/resume gaps are reported within that interval. Close only seals a recording.
+The **对局与片段** view reports boundaries, recording continuity, outcome, and strict sequence
+conditions separately. Source profiles refresh once in the existing bounded worker; old
+profiles awaiting refresh report unknown, and older immutable selection reports keep their
+original strict meaning. Several fragments never manufacture an uninterrupted game.

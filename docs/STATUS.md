@@ -1,9 +1,20 @@
 # Current Status
 
-## Unified task flow — deployed, bounded acceptance recorded
+## Dataset library — application update deployed
+
+Workbench and Hub use source `bf17e6927dcb1f3645c1baa6cac673ce9e4d2c61`.
+The [application acceptance](evidence/DATASET_LIBRARY_2026-09-16.md) records the
+searchable generated library, removable/restorable previews, native boundary versus
+strict sequence display, exact kit/image, member download and isolated backup restore.
+Windows PR #9 is normally integrated with Evidence rc.11; final release refs/CI are
+owned by PR #12 and its integration receipt. Native/tool bytes and prior Human
+claims are retained. The generated 814-decision dataset is downloadable but lacks
+enough independent run components for train/dev/test splitting.
+
+## Previously accepted unified task flow
 
 The unified daily collection flow is installed on the verified macOS collector and
-its Hub is deployed at source `f4a21a2d67392b557c593cd396b894d1c3439779`.
+its Hub was deployed at source `f4a21a2d67392b557c593cd396b894d1c3439779`.
 [Exact acceptance](evidence/UNIFIED_TASK_FLOW_2026-09-16.md) records the immutable kit,
 native identities, source checks, deployment, rollback and fresh member download.
 Formal integration/publication is recorded separately by PR #10 and release receipts.

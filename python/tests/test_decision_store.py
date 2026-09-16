@@ -235,3 +235,93 @@ def test_all_shared_profile_scope_is_not_recent_hundred_or_upload_count(tmp_path
     assert result["missing_profiles"] == 1 and result["partial"] is True
     assert len(result["items"]) == 3  # Repeated evidence does not create 315 distinct runs.
     assert all(len(run["uploads"]) == 105 for run in result["items"])
+
+
+def test_preview_visibility_is_personal_atomic_and_preserves_publication(tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    owner, upload, _, jobs = setup(tmp_path)
+    body = {"uploads": [upload], "rules": SelectionRules().to_dict(),
+            "preview_id": None, "name": "Named defeat dataset"}
+    first = jobs.create(MEMBER, body)
+    with pytest.raises(BoundaryError, match="active_job_cannot_be_archived"):
+        jobs.set_archived(MEMBER, {"ids": [first["id"]], "archived": True})
+    jobs.run(first["id"])
+    built = jobs.create(MEMBER, {**body, "preview_id": first["id"]})
+    jobs.run(built["id"])
+    artifact = jobs.read(MEMBER, built["id"])["result"]["artifact_id"]
+    other = replace(MEMBER, subject="someone-else", role="admin")
+    with pytest.raises(BoundaryError, match="not_found"):
+        jobs.set_archived(other, {"ids": [first["id"]], "archived": True})
+    with pytest.raises(BoundaryError, match="not_found"):
+        jobs.set_archived(MEMBER, {"ids": [first["id"], "f" * 32], "archived": True})
+    assert jobs.list(MEMBER)["total"] == 2
+    snapshot = jobs.read(MEMBER, first["id"])
+    jobs.set_archived(MEMBER, {"ids": [first["id"]], "archived": True})
+    reopened = DecisionJobs(owner)
+    assert reopened.list(MEMBER)["total"] == 1
+    assert reopened.list(MEMBER, archived=True)["items"][0] == snapshot
+    assert reopened.read(MEMBER, first["id"]) == snapshot
+    assert len(load(owner.store, artifact)[1].records) == 6
+    reopened.set_archived(MEMBER, {"ids": [first["id"]], "archived": False})
+    assert reopened.list(MEMBER)["total"] == 2
+    assert reopened.list(MEMBER, limit=1)["next_offset"] == 1
+
+
+def test_dataset_catalog_name_search_and_split_survive_legacy_index(tmp_path: Path) -> None:
+    import json
+
+    from spireagent.hub.console_routes import ConsoleRoutes
+
+    owner, upload, _, jobs = setup(tmp_path)
+    body = {"uploads": [upload], "rules": SelectionRules().to_dict(),
+            "preview_id": None, "name": "Failed games collection"}
+    first = jobs.create(MEMBER, body)
+    jobs.run(first["id"])
+    built = jobs.create(MEMBER, {**body, "preview_id": first["id"]})
+    jobs.run(built["id"])
+    artifact = jobs.read(MEMBER, built["id"])["result"]["artifact_id"]
+    with owner.operations.transaction() as db:
+        row = db.execute("SELECT summary FROM console_artifacts WHERE artifact_id=?",
+                         (artifact,)).fetchone()
+        old = json.loads(row[0])
+        old["metadata"].pop("split_status", None)
+        db.execute("UPDATE console_artifacts SET summary=? WHERE artifact_id=?",
+                   (json.dumps(old), artifact))
+    routes = ConsoleRoutes(owner, 0)
+    found = routes.read("datasets", "q=Failed&limit=1&offset=0", MEMBER)
+    assert found["total"] == 1
+    assert found["items"][0]["display_name"] == body["name"]
+    assert found["items"][0]["metadata"]["split_status"] is not None
+    assert routes.read("datasets", "q=missing", MEMBER)["total"] == 0
+    assert routes.read("datasets", "q=" + artifact[:12], MEMBER)["total"] == 1
+    assert routes.read("datasets", "q=%25", MEMBER)["total"] == 0
+    with pytest.raises(BoundaryError, match="invalid_dataset_search"):
+        routes.read("datasets", "q=a&q=b", MEMBER)
+
+
+def test_old_game_profiles_refresh_once_without_rewriting_history(tmp_path: Path) -> None:
+    import json
+
+    owner, _, _, jobs = setup(tmp_path)
+    old_id = jobs.pending()
+    assert old_id is not None
+    jobs.run(old_id)
+    with owner.operations.transaction() as db:
+        row = db.execute("SELECT request,result FROM decision_jobs WHERE id=?",
+                         (old_id,)).fetchone()
+        request, result = json.loads(row[0]), json.loads(row[1])
+        request.pop("profile_schema", None)
+        result.pop("run_coverage")
+        old_result = json.dumps(result)
+        db.execute("UPDATE decision_jobs SET request=?,result=? WHERE id=?",
+                   (json.dumps(request), old_result, old_id))
+    assert all(r["coverage"] is None for r in jobs.games(MEMBER)["items"])
+    refreshed = jobs.pending()
+    assert refreshed is not None and refreshed != old_id
+    jobs.run(refreshed)
+    assert all(r["coverage"] is not None for r in jobs.games(MEMBER)["items"])
+    assert jobs.pending() is None
+    with owner.operations.transaction() as db:
+        saved = db.execute("SELECT result FROM decision_jobs WHERE id=?", (old_id,)).fetchone()
+        assert saved[0] == old_result

@@ -16,6 +16,7 @@ from stpd.fullrun.decision_cache import VerifiedSourceCache
 from stpd.fullrun.decision_dataset import SelectionRules
 from stpd.fullrun.decision_store import preview, preview_union, publish, publish_union
 from stpd.fullrun.decision_union import UNION_SCHEMA
+from stpd.fullrun.run_coverage import summarize_run_coverage
 
 
 class DecisionJobs:
@@ -29,6 +30,40 @@ class DecisionJobs:
                 "state TEXT NOT NULL,result TEXT,error TEXT,created REAL NOT NULL,"
                 "updated REAL NOT NULL)"
             )
+            db.execute(
+                "CREATE TABLE IF NOT EXISTS decision_job_visibility("
+                "id TEXT NOT NULL,owner TEXT NOT NULL,archived INTEGER NOT NULL,"
+                "PRIMARY KEY(id,owner))"
+            )
+            db.execute("CREATE INDEX IF NOT EXISTS decision_jobs_artifact ON decision_jobs("
+                       "json_extract(result,'$.artifact_id'))")
+
+    def set_archived(self, principal: ConsolePrincipal, body: object) -> dict[str, Any]:
+        """Personal list cleanup; immutable sources, results and job state remain intact."""
+        self.collections.require_member(principal)
+        obj = object_fields(body, {"ids", "archived"}, "decision_job.visibility")
+        ids = obj["ids"]
+        if (not isinstance(ids, list) or not 1 <= len(ids) <= 100
+                or type(obj["archived"]) is not bool):
+            raise BoundaryError("decision_job", "invalid_visibility_request")
+        for identity in ids:
+            digest(identity, "decision_job.id", length=32)
+        with self.service.operations.transaction() as db:
+            # Validate the whole batch before writing. Only your own terminal tasks may move.
+            for identity in ids:
+                row = db.execute("SELECT owner,state FROM decision_jobs WHERE id=?",
+                                 (identity,)).fetchone()
+                if row is None or row["owner"] != principal.subject:
+                    raise BoundaryError("decision_job", "not_found")
+                if row["state"] not in {"completed", "failed"}:
+                    raise BoundaryError("decision_job", "active_job_cannot_be_archived")
+            for identity in ids:
+                db.execute("INSERT OR REPLACE INTO decision_job_visibility VALUES(?,?,?)",
+                           (identity, principal.subject, int(obj["archived"])))
+                self.service.operations._event(
+                    db, principal.subject, "decision_job_visibility", identity,
+                    {"archived": obj["archived"]})
+        return {"ids": ids, "archived": obj["archived"]}
 
     def _sources(self, selections: object) -> tuple[Any, ...]:
         if not isinstance(selections, list) or not 1 <= len(selections) <= 100:
@@ -113,13 +148,18 @@ class DecisionJobs:
             "error": row["error"],
         }
 
-    def list(self, principal: ConsolePrincipal) -> dict[str, Any]:
+    def list(self, principal: ConsolePrincipal, *, archived: bool = False,
+             limit: int = 50, offset: int = 0) -> dict[str, Any]:
         self.collections.require_member(principal)
         with self.service.operations.transaction() as db:
-            rows = db.execute(
-                "SELECT id FROM decision_jobs WHERE owner=? ORDER BY created DESC LIMIT 50",
-                (principal.subject,),
-            ).fetchall()
+            where = (" FROM decision_jobs j LEFT JOIN decision_job_visibility v "
+                     "ON v.id=j.id AND v.owner=j.owner WHERE j.owner=? "
+                     "AND COALESCE(v.archived,0)=?")
+            total = db.execute("SELECT count(*)" + where,
+                               (principal.subject, int(archived))).fetchone()[0]
+            rows = db.execute("SELECT j.id" + where + " ORDER BY j.created DESC,j.id "
+                              "LIMIT ? OFFSET ?",
+                              (principal.subject, int(archived), limit, offset)).fetchall()
         items = []
         for row in rows:
             try:
@@ -127,7 +167,9 @@ class DecisionJobs:
             except BoundaryError as error:
                 if error.code not in {"collection_not_shared", "source_sharing_not_established"}:
                     raise
-        return {"items": items, "limit": 50}
+        return {"items": items, "limit": limit, "offset": offset, "total": total,
+                "next_offset": offset + limit if offset + limit < total else None,
+                "archived": archived}
 
     def retry(self, principal: ConsolePrincipal, identity: str, body: object) -> dict[str, Any]:
         if body != {}:
@@ -195,8 +237,11 @@ class DecisionJobs:
             if upload in profiled:
                 continue
             profiled.add(upload)
-            for run in json.loads(row["result"])["runs"]:
-                previous = games.setdefault(run["run_id"], {**run, "uploads": []})
+            result = json.loads(row["result"])
+            coverage = {r["run_id"]: r for r in result.get("run_coverage", [])}
+            for run in result["runs"]:
+                displayed = {**run, "coverage": coverage.get(run["run_id"])}
+                previous = games.setdefault(run["run_id"], {**displayed, "uploads": []})
                 previous["uploads"].append(upload)
                 if any(previous[key] != run[key] for key in ("complete", "outcome", "canonical")):
                     previous["coverage_status"] = "overlapping_exports_differ"
@@ -228,7 +273,9 @@ class DecisionJobs:
                 "SELECT u.id FROM uploads u JOIN collection_sharing s ON s.upload_id=u.id "
                 "WHERE u.status='verified' AND s.approved=1 AND NOT EXISTS "
                 "(SELECT 1 FROM decision_jobs j WHERE j.owner='receiver' AND "
-                "json_extract(j.request,'$.uploads[0]')=u.id) ORDER BY u.id LIMIT 1"
+                "json_extract(j.request,'$.uploads[0]')=u.id AND "
+                "(json_extract(j.request,'$.profile_schema')='stpd/run-coverage-v1' OR "
+                "json_type(j.result,'$.run_coverage')='array')) ORDER BY u.id LIMIT 1"
             ).fetchone()
             queue_size = db.execute(
                 "SELECT count(*) FROM decision_jobs WHERE state IN ('pending','running')"
@@ -240,6 +287,7 @@ class DecisionJobs:
                     "rules": SelectionRules().to_dict(),
                     "preview_id": None,
                     "name": "自动对局整理",
+                    "profile_schema": "stpd/run-coverage-v1",
                     "expected": None,
                 }
                 db.execute(
@@ -344,6 +392,21 @@ class DecisionJobs:
                     self.service.store, (manifest.artifact_id,)
                 )
                 result = {"artifact_id": manifest.artifact_id, **manifest.parameters.value()}
+            if request["expected"] is None and not merging:
+                coverage: dict[str, Any] = {}
+                for source in sources:
+                    payload = source.payload("archive")
+                    raw = b"".join(self.service.store.read_payload(payload))
+                    projection, _ = cache.resolve(raw)
+                    for run in summarize_run_coverage(projection)["runs"]:
+                        prior = coverage.setdefault(run["run_id"], run)
+                        if prior != run:
+                            # Overlapping exports do not synthesize continuity.
+                            coverage[run["run_id"]] = {**prior,
+                                "native_boundary_complete": False,
+                                "boundary_status": "overlapping_exports_differ",
+                                "recording_continuity": "unknown"}
+                result["run_coverage"] = list(coverage.values())
             self._inputs(request)
             result["progress"] = {
                 "phase": "completed", "completed": 1, "total": 1,

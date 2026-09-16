@@ -26,6 +26,8 @@ Use the smallest route that answers the task.
 ## Finding technical truth
 
 - Current claims and evidence pointers: [Status](STATUS.md).
+- [Dataset library and run boundaries](evidence/DATASET_LIBRARY_2026-09-16.md):
+  generated lists, personal preview cleanup, Windows integration and application/cloud evidence.
 - Semantic evidence storage and measured predecessor baseline:
   [Semantic Evidence Storage Baseline](evidence/SEMANTIC_EVIDENCE_STORAGE_BASELINE_2026-08-29.md).
 - Latest normalized Human runtime and storage closeout:

@@ -897,3 +897,13 @@ select, .onboarding input { font: inherit; color: inherit; background: transpare
 .task-tab.active { background:#e2ede9; color:#174d3d; font-weight:700; }
 [hidden] { display:none !important; }
 .primary-task { border-left:4px solid #28705b; }
+
+/* Dataset workspaces keep the library first and long reports out of the main list. */
+.dataset-tabs { display:flex; flex-wrap:wrap; gap:8px; margin:0 0 24px; border-bottom:1px solid var(--border, #dce5ed); padding-bottom:16px; }
+.dataset-workspace .project-panel { margin-bottom:20px; }
+.dataset-workspace details { margin-top:16px; }
+.dataset-workspace summary { cursor:pointer; font-weight:600; padding:10px 0; }
+.dataset-workspace .subtext { display:block; }
+.dataset-workspace table td { vertical-align:top; }
+.dataset-workspace .project-form { margin-bottom:20px; }
+.dataset-workspace .project-form > details { flex-basis:100%; width:100%; }
