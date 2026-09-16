@@ -461,7 +461,16 @@ def test_batched_parquet_preserves_order_and_exact_reprojection(
     monkeypatch.setattr(module, "preview", lambda *args, **kwargs: selected)
     monkeypatch.setattr(pq, "read_table", lambda *args, **kwargs: pytest.fail("whole-table reader"))
     assert load(owner.store, manifest.artifact_id)[1] == selected
-    for changed in [rows[:-1], rows + rows[:1], [rows[1], rows[0], *rows[2:]]]:
+    legacy = io.BytesIO()
+    pq.write_table(pa.Table.from_pylist(rows, schema=parquet.schema_arrow), legacy)
+    legacy.seek(0)
+    legacy_payload = owner.store.put_payload("records", legacy, "application/vnd.apache.parquet")
+    legacy_manifest = replace(manifest, payloads=(legacy_payload, manifest.payload("selection")))
+    owner.store.publish(legacy_manifest)
+    assert load(owner.store, legacy_manifest.artifact_id)[1] == selected
+    changed_value = [*rows[:-1], {**rows[-1], "split": "tampered"}]
+    reordered = [*rows[:127], rows[128], rows[127], *rows[129:]]
+    for changed in [rows[:-1], rows + rows[:1], reordered, changed_value]:
         output = io.BytesIO()
         pq.write_table(pa.Table.from_pylist(changed, schema=parquet.schema_arrow), output)
         output.seek(0)
@@ -470,3 +479,12 @@ def test_batched_parquet_preserves_order_and_exact_reprojection(
         owner.store.publish(bad)
         with pytest.raises(BoundaryError, match="records_reprojection_mismatch"):
             load(owner.store, bad.artifact_id)
+    extra = io.BytesIO()
+    pq.write_table(pa.Table.from_pylist([{**row, "extra": "not-in-contract"} for row in rows]),
+                   extra)
+    extra.seek(0)
+    extra_payload = owner.store.put_payload("records", extra, "application/vnd.apache.parquet")
+    bad = replace(manifest, payloads=(extra_payload, manifest.payload("selection")))
+    owner.store.publish(bad)
+    with pytest.raises(BoundaryError, match="records_reprojection_mismatch"):
+        load(owner.store, bad.artifact_id)
