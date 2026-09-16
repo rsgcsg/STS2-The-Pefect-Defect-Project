@@ -1,21 +1,25 @@
 # Current Status
 
-## Unified task-flow candidate — integration in progress
+## Unified task flow — deployed, bounded acceptance recorded
 
-The current task branch implements one daily collection flow across the in-game UI,
-local Workbench and shared Hub views. It replaces repeated collection checkboxes with
-one explicit consent action, composes existing preparation owners, and persists upload
-pause without replacing existing enrollments, APIs or queues. Local model preparation,
-Recorder-to-model handoff and independently authorized Agent-report sharing are separate
-from Human collection. Selected decision unions and bounded verification reuse retain
-original data, exclusions and authorization checks.
+The unified daily collection flow is installed on the verified macOS collector and
+its Hub is deployed at source `f4a21a2d67392b557c593cd396b894d1c3439779`.
+[Exact acceptance](evidence/UNIFIED_TASK_FLOW_2026-09-16.md) records the immutable kit,
+native identities, source checks, deployment, rollback and fresh member download.
+Formal integration/publication is recorded separately by PR #10 and release receipts.
 
-This is a source candidate, **not a deployed or released combination**. Integration checks,
-exact native build/install/load, the affected Human journey and cloud qualification must
-be recorded separately before promotion. Current model reports do not measure native game
-outcome or autonomous complete-run performance; S1 still requires CUDA. Synthetic dataset
-profiling does not establish production transfer time or throughput. Final artifact impact
-comes from the final diff and component identity checks, not this summary.
+The owner-operated canary contains 44 accepted actions and 43 proved/canonical
+decisions (four nested selectors). Its final End Turn was closed before a successor
+boundary: one unresolved / real-failure count remains, with the explicit reason
+`session_closed_before_successor_boundary`. Two pauses/resumes, durable Close,
+verified upload and byte-identical member download passed. This accepts the bounded
+recording/control/transfer journey; it is not a zero-failure Human or Full-Run gate.
+No raw disposition is reclassified. Only in-progress/resume run boundaries exist.
+
+Local model preparation, Recorder-to-model handoff and separately authorized Agent
+reports retain their own boundaries. Native model outcomes remain unmeasured and
+S1 requires CUDA. No Windows native, GPU training, scientific or production-throughput
+qualification is added. Compute budget remains zero.
 
 See [the member task flow](../python/docs/UNIFIED_TASK_FLOW.zh-CN.md),
 [collection orchestration](../python/docs/COLLECTION_FLOW.md),
