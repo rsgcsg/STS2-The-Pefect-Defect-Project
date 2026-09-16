@@ -8,6 +8,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 import tomllib
 from pathlib import Path
 
@@ -66,7 +67,8 @@ def portable_commands(python: str = sys.executable) -> tuple[tuple[str, ...], ..
         (python, "-m", "ruff", "check", "."),
         (python, "-m", "mypy", "stpd", "spireagent", "tools"),
         ("npm", "run", "check:connector-sdk"),
-        (python, "-m", "pytest", "-q"),
+        (python, "-m", "pytest", "-q", "-ra", "--durations=30",
+         "--junitxml=.local/pytest.xml"),
         (python, "-m", "spireagent.workbench", "e2e", "--output", ".local/cpu-e2e.json"),
         (python, "-m", "stpd.cloud_jobs.smoke", "--output", ".local/cloud-worker-cpu.json"),
         (python, "-m", "compileall", "-q", "stpd", "spireagent", "tests", "tools", "deploy"),
@@ -84,7 +86,12 @@ def invoke(command: tuple[str, ...], root: Path) -> None:
         arguments = [os.environ.get("COMSPEC", "cmd.exe"), "/d", "/s", "/c",
                      subprocess.list2cmdline(arguments)]
     print(json.dumps({"stage": "portable", "command": list(command)}), flush=True)
-    subprocess.run(arguments, cwd=root, check=True)
+    started = time.monotonic()
+    try:
+        subprocess.run(arguments, cwd=root, check=True)
+    finally:
+        print(json.dumps({"stage": "portable_duration", "command": list(command),
+                          "seconds": round(time.monotonic() - started, 3)}), flush=True)
 
 
 def check(root: Path, base: str | None = None) -> None:

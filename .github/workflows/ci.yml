@@ -16,6 +16,7 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   plan:
@@ -23,6 +24,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       scope: ${{ steps.route.outputs.scope }}
+      proof: ${{ steps.route.outputs.proof }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -34,13 +36,14 @@ jobs:
       - id: route
         name: Select checks from actual Git changes
         env:
+          GH_TOKEN: ${{ github.token }}
           CHECK_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           CHECK_FULL: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
         run: node tools/check-plan.mjs
 
   docs:
     needs: plan
-    if: needs.plan.outputs.scope == 'docs'
+    if: needs.plan.outputs.scope == 'docs' || needs.plan.outputs.scope == 'reuse'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -51,8 +54,10 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 20
-      - name: Check editorial links, routes and governance
-        run: npm run check:docs
+      - name: Run selected repository checks
+        env:
+          CHECK_SCOPE: ${{ needs.plan.outputs.scope }}
+        run: node tools/check-plan.mjs execute
       - name: Check committed editorial patch
         env:
           CHECK_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
@@ -60,7 +65,7 @@ jobs:
 
   linux-portability:
     needs: plan
-    if: needs.plan.outputs.scope == 'full'
+    if: needs.plan.outputs.scope == 'full' || needs.plan.outputs.scope == 'python'
     runs-on: ubuntu-latest
     timeout-minutes: 55
     steps:
@@ -78,6 +83,9 @@ jobs:
         with:
           node-version: 20
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            python/package-lock.json
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 9.0.x
@@ -91,14 +99,25 @@ jobs:
         run: npm ci --prefix python
       - name: Install dependencies
         run: npm ci
-      - name: Run full portable source/test gate
-        run: npm run check
+      - name: Run selected portable source/test gate
+        env:
+          CHECK_SCOPE: ${{ needs.plan.outputs.scope }}
+        run: node tools/check-plan.mjs execute
+      - name: Retain Python test timings and failures
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pytest-${{ runner.os }}-${{ github.run_attempt }}
+          path: python/.local/pytest.xml
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Check patch hygiene
         run: git diff --check
 
   windows-portability:
     needs: plan
-    if: needs.plan.outputs.scope == 'full'
+    if: needs.plan.outputs.scope == 'full' || needs.plan.outputs.scope == 'python'
     runs-on: windows-latest
     timeout-minutes: 55
     steps:
@@ -110,6 +129,9 @@ jobs:
         with:
           node-version: 20
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            python/package-lock.json
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 9.0.x
@@ -123,8 +145,19 @@ jobs:
         run: npm ci --prefix python
       - name: Install dependencies
         run: npm ci
-      - name: Run full portable source/test gate
-        run: npm run check
+      - name: Run selected portable source/test gate
+        env:
+          CHECK_SCOPE: ${{ needs.plan.outputs.scope }}
+        run: node tools/check-plan.mjs execute
+      - name: Retain Python test timings and failures
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pytest-${{ runner.os }}-${{ github.run_attempt }}
+          path: python/.local/pytest.xml
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Check patch hygiene
         run: git diff --check
 
@@ -144,8 +177,18 @@ jobs:
       - name: Require every selected check; skipped is not a full PASS
         env:
           CHECK_SCOPE: ${{ needs.plan.outputs.scope }}
+          CHECK_PROOF: ${{ needs.plan.outputs.proof }}
           PLAN_RESULT: ${{ needs.plan.result }}
           DOCS_RESULT: ${{ needs.docs.result }}
           LINUX_RESULT: ${{ needs.linux-portability.result }}
           WINDOWS_RESULT: ${{ needs.windows-portability.result }}
         run: node tools/check-plan.mjs aggregate
+      - name: Retain fresh execution receipt
+        if: needs.plan.outputs.scope == 'full' || needs.plan.outputs.scope == 'python'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: portable-execution-receipt-${{ github.run_attempt }}
+          path: .local/ci/receipt.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7

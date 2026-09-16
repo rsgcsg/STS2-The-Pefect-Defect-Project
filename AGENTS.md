@@ -21,7 +21,10 @@ promotion.
 Normal work starts from current `origin/develop`, uses one short-lived topic
 branch and targets `develop` by pull request. Do not direct-push `main` or
 `develop`, share a writable branch between agents, or create permanent component
-develop lines. Use `npm run project:context -- --component <name>` for a bounded
+develop lines. Ordinary tasks finish at reviewed develop integration; promote a selected
+batch to main only when release is in scope. Matching trees need no empty sync PR.
+TESTING.md owns scoped checks and verified execution reuse; never copy a green status
+or equate a branch head with the installed/deployed producer. Use `npm run project:context -- --component <name>` for a bounded
 routing map; load `docs/STATUS.md` and dated evidence only when current claims
 matter.
 
