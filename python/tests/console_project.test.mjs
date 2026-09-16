@@ -959,6 +959,23 @@ test("evaluation sharing requires its own explicit action and valid verified rep
 });
 
 
+test("dataset union explains an insufficient selection without submitting a job", async () => {
+  const env = setup({view: "datasets", handler: (url) =>
+    url.includes("/datasets?") ? {items: [{artifact_id: id("a")}]} : emptyList()
+  });
+  const page = await env.render();
+  const merge = action(page, "preview-dataset-merge");
+  await merge.onclick();
+  assert.match(text(env.notice), /请选择至少两个决策数据集后再合并/);
+  assert.doesNotMatch(text(env.notice), /服务暂时不可用/);
+  const selected = field(page, `merge-${id("a")}`);
+  selected.checked = true;
+  selected.onchange();
+  await merge.onclick();
+  assert.match(text(env.notice), /请选择至少两个决策数据集后再合并/);
+  assert.equal(post(env.calls).length, 0);
+});
+
 test("dataset progress stays visible and selected parent union is exact", async () => {
   const rules = {schema:"stpd/decision-selection-v1",complete_only:false,wins_only:false,no_failures_only:false,filters:{},seed:0};
   const job = {id:"b".repeat(32),state:"completed",request:{name:"union",datasets:[id("a"),id("b")],rules,preview_id:null},progress:{phase:"completed",completed:2,total:2,elapsed_seconds:1.5},result:{selected:7,exact_duplicate_decisions:2,split_status:"grouped"}};

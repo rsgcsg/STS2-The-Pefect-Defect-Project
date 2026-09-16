@@ -220,6 +220,7 @@ window.SpireProject = (() => {
       request_unavailable: "暂时无法读取服务，请刷新重试。",
       absolute_game_directory_required: "请填写这台电脑上的游戏安装目录完整路径。",
       default_collection_fields_required: "请填写名称、录制说明和授权说明。",
+      minimum_two_decision_datasets_required: "请选择至少两个决策数据集后再合并。",
     };
     return (
       known[error?.message] ||
@@ -1138,7 +1139,7 @@ window.SpireProject = (() => {
       published.append(row);
     }
     published.append(command(ctx, "preview-dataset-merge", "合并选中数据集 · 先预览", async () => {
-      if (mergeSet.size < 2) throw new Error("请选择至少两个决策数据集");
+      if (mergeSet.size < 2) throw new Error("minimum_two_decision_datasets_required");
       await request(ctx, member("datasets"), {name: "合并决策数据集", datasets: [...mergeSet].sort(),
         rules: {schema: "stpd/decision-selection-v1", complete_only: false, wins_only: false,
           no_failures_only: false, filters: {}, seed: 0}, preview_id: null});
