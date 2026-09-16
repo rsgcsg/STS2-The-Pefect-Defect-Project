@@ -1,6 +1,6 @@
 # Hub operations — unified repository
 
-Current source: `rsgcsg/STS2-The-Pefect-Defect-Project`. Commands with relative
+Current source: `rsgcsg/STS2-The-Perfect-Defect-Project`. Commands with relative
 `deploy/` paths below run from `python/`. The installed host checkout is
 `/opt/stpd-deploy/source`, and deployment files are in its `python/deploy/hub/`.
 The durable `/etc/stpd`, `/srv/stpd`, domain, member/device identities and bucket

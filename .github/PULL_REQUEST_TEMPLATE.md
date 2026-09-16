@@ -1,6 +1,6 @@
 ## Change identity
 
-- Repository: `rsgcsg/STS2-The-Pefect-Defect-Project`
+- Repository: `rsgcsg/STS2-The-Perfect-Defect-Project`
 - Base branch / exact base SHA:
 - Head branch / latest head SHA:
 - Workstream / primary owner:

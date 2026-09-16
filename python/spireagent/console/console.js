@@ -888,7 +888,7 @@ function system(data) {
   );
   evidenceBody.append(link(
     "正式发布、支持范围与升级说明 ↗",
-    "https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project/releases",
+    "https://github.com/rsgcsg/STS2-The-Perfect-Defect-Project/releases",
     true,
   ));
   evidence.append(evidenceBody);

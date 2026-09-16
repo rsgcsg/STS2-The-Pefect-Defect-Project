@@ -155,7 +155,7 @@ def checkout_identity() -> dict[str, str]:
     ):
         raise PreflightError("compute_checkout_identity_mismatch")
     return {
-        "repository": "rsgcsg/STS2-The-Pefect-Defect-Project",
+        "repository": "rsgcsg/STS2-The-Perfect-Defect-Project",
         "source_revision": revision,
         "uv_lock_sha256": hashlib.sha256(lock).hexdigest(),
     }

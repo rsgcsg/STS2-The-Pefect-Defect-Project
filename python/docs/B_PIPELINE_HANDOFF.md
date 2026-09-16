@@ -39,7 +39,7 @@ research gates below remain explicit, with compute launch budget zero until auth
 
 ## Download and connect once
 
-1. Choose the reviewed release from [Project Releases](https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project/releases), or an
+1. Choose the reviewed release from [Project Releases](https://github.com/rsgcsg/STS2-The-Perfect-Defect-Project/releases), or an
    explicitly non-stable developer combination. Verify its
    published hashes and supported operating system. Obtain this project at the release's exact Git
    commit, the single qualified Platform Mod, and the entire fixed collection-tool directory.

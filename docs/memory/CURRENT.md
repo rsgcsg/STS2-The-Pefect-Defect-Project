@@ -1,6 +1,6 @@
 # Current project context
 
-Use rsgcsg/STS2-The-Pefect-Defect-Project for all new development.
+Use rsgcsg/STS2-The-Perfect-Defect-Project for all new development.
 Platform components, `python/spireagent` applications and `python/stpd` research
 share root governance, one local/cloud console and one Hub membership authority.
 

@@ -27,12 +27,13 @@ from urllib.parse import urlsplit
 
 from spireagent.json_boundary import BoundaryError, decode_json, digest, object_fields, text
 from spireagent.package_identity import PackageIdentityError, validate_installed_package
+from spireagent.source import REPOSITORY_URLS
 
 CONFIG_SCHEMA = "stpd/developer-project-v1"
 COMBINATION_SCHEMA = "stpd/developer-combination-v1"
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = ROOT / ".local" / "developer" / "project.json"
-PUBLIC_REPOSITORY = "https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project.git"
+PUBLIC_REPOSITORY = REPOSITORY_URLS[0]
 
 
 def endpoint(value: object, *, optional: bool = False) -> str:
@@ -95,7 +96,7 @@ def combination(root: Path = ROOT) -> dict[str, Any]:
         },
         "project.combination",
     )
-    if obj["schema"] != COMBINATION_SCHEMA or obj["platform_repository"] != PUBLIC_REPOSITORY:
+    if obj["schema"] != COMBINATION_SCHEMA or obj["platform_repository"] not in REPOSITORY_URLS:
         raise BoundaryError("project", "unsupported_combination")
     digest(obj["platform_source_revision"], "project.platform", length=40)
     digest(obj["evidence_source_revision"], "project.evidence", length=40)
@@ -315,7 +316,7 @@ def evidence_identity(expected: str) -> dict[str, Any]:
         direct = json.loads(distribution.read_text("direct_url.json") or "{}")
         actual = direct.get("vcs_info", {}).get("commit_id")
         matched = (
-            direct.get("url") == PUBLIC_REPOSITORY
+            direct.get("url") in REPOSITORY_URLS
             and actual == expected
             and direct.get("subdirectory") == "components/evidence"
         )
@@ -384,7 +385,7 @@ def dependency_checks(config: ProjectConfig) -> dict[str, Any]:
     pin = config.combination["evidence_source_revision"]
     checks["evidence_declared_pin"] = {
         "status": "PASS"
-        if any(f"{PUBLIC_REPOSITORY}@{pin}#" in dep for dep in deps)
+        if any(f"{url}@{pin}#" in dep for url in REPOSITORY_URLS for dep in deps)
         else "PIN_MISMATCH"
     }
     return checks

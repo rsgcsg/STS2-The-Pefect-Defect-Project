@@ -1,6 +1,6 @@
 # Project Development Workflow
 
-The single active repository is `rsgcsg/STS2-The-Pefect-Defect-Project`.
+The single active repository is `rsgcsg/STS2-The-Perfect-Defect-Project`.
 This is the one owner of branch, release and deployment coordination. Native installation,
 cloud commands and research admission remain in their focused guides; do not copy new
 versions of those procedures into campaigns or incident notes.

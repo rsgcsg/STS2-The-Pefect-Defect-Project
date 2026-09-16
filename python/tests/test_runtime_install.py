@@ -159,3 +159,38 @@ def test_offline_cli_archive_never_becomes_an_http_path(tmp_path, monkeypatch):
         local_model_cli.model_command(
             config, "install-runtime", runtime_archive=Path("/private/archive")
         )
+
+
+@pytest.mark.parametrize("spelling", ["Pefect", "Perfect"])
+def test_download_accepts_exact_rename_alias_and_still_checks_bytes(
+    tmp_path, monkeypatch, release, spelling
+):
+    from io import BytesIO
+
+    pin, connector, _, _ = release
+    pin["release_url"] = (
+        f"https://github.com/rsgcsg/STS2-The-{spelling}-Defect-Project/releases/download/v1/runtime.tgz"
+    )
+    monkeypatch.setattr(
+        runtime_install,
+        "build_opener",
+        lambda *args: SimpleNamespace(open=lambda *a, **k: BytesIO(b"wrong bytes")),
+    )
+    with pytest.raises(BoundaryError, match="runtime_archive_checksum_mismatch"):
+        runtime_install.install_runtime(tmp_path / "state", pin, connector)
+
+
+@pytest.mark.parametrize(
+    "repository",
+    ["other/STS2-The-Perfect-Defect-Project", "rsgcsg/STS2-The-Perfect-Defect-Project-extra"],
+)
+def test_download_rejects_unrelated_rename_lookalike(tmp_path, monkeypatch, release, repository):
+    pin, connector, _, _ = release
+    pin["release_url"] = f"https://github.com/{repository}/releases/download/v1/runtime.tgz"
+
+    def unexpected(*args):
+        raise AssertionError("must reject before network")
+
+    monkeypatch.setattr(runtime_install, "build_opener", unexpected)
+    with pytest.raises(BoundaryError, match="runtime_release_url_not_pinned"):
+        runtime_install.install_runtime(tmp_path / "state", pin, connector)
