@@ -123,8 +123,9 @@ BOM digest and private tool-source label were incorrect. Original bytes remain u
 
 The [Windows CollectionTool inventory repair](evidence/WINDOWS_COLLECTION_TOOL_INVENTORY_REPAIR_2026-09-16.md)
 aligns fixed-tool verification with the publisher's POSIX path order. It is source/test and
-local-tool evidence only: no new Human or upload PASS is claimed, and the official kit remains
-mismatched until it is republished and pinned to the repaired Evidence source.
+local-tool evidence only: no new Human or upload PASS is claimed. The refreshed rc11
+combines this fix with current rc10 behavior; existing released kits retain their original
+identities, while new consumers pin the combined source through BOM and the Python lock.
 
 ## External policy package candidate
 

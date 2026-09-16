@@ -20,6 +20,19 @@ creation reports unavailable privilege (WinError 1314); unknown-outbox checks
 remain independently exercised.
 
 This is source/test and local-tool evidence only. It does not establish a new
-Human or upload PASS. The official guide-provided kit remains mismatched to the
-repaired Evidence identity until it is republished and pinned; no kit or
-installed configuration was rewritten here.
+Human or upload PASS. Existing fixed kits and installed configurations retain their original identities;
+this source repair does not rewrite their manifests or transfer prior acceptance.
+
+## Integration refresh
+
+PR #9 merges `develop@defc501c5acb052b9ec439222243439390a755b5` normally,
+retaining the rc10 summary and authentication-recovery behavior. The combined
+Evidence is version `0.1.0-rc.11`, source
+`2490dae5366df27cff668feb5860224ae4900182`; BOM and Python consumer pins refer
+to that immutable source. The original repair source above remains historical.
+The 107-test Evidence suite passes on macOS, including symlink rejection and
+independent unknown-outbox checks. The Windows-order portable regression fails
+against the previous verifier and passes against the corrected implementation.
+The runtime-install fixture skips unavailable symlink creation only on Windows;
+other operating-system errors remain failures. Hosted latest-head Linux/Windows
+results belong to PR #9; they are not native installation or Human qualification.
