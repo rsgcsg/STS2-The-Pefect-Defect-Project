@@ -5,10 +5,10 @@ Platform components, `python/spireagent` applications and `python/stpd` research
 share root governance, one local/cloud console and one Hub membership authority.
 
 Workbench source is `fedbed097e30fb78bf0e86efff560fd8b1263c99`; Hub source is
-`c15542681aa0b58ed178f16cc9d7543a03ebe969`. Dataset selection has recording-date
+`3a4b8997d06011952a2248902c67f64f531dbcff`. Dataset selection has recording-date
 filters, whole-result selection, responsive navigation and direct accepted-project-data
 access. Runtime process provenance is merged without weakening game/artifact identity;
-batch workers have a separate bounded budget. See [selection evidence](../evidence/DATASET_SELECTION_2026-09-16.md).
+batch workers have a separate bounded budget, one-pass coverage and incremental hash/file processing. See [selection evidence](../evidence/DATASET_SELECTION_2026-09-16.md).
 PR17 and the release receipt own final integration, real batch and publication facts.
 New multi-runtime datasets require the corrected reader for rollback; the fedbed
 fallback retains it but can reproduce batch timeout. Native/tool bytes and original

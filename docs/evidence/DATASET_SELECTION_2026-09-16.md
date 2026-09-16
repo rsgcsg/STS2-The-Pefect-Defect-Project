@@ -39,10 +39,26 @@ first traversal, preserving source order and overlap handling. A regression reje
 second source read/resolve and compares the complete coverage output. Final access and
 content checks remain; neither selection reports nor logical IDs include this observer.
 
+A further one-pass retry reached selection completion (last progress 437.551s)
+but still exited with the same generic resource/process failure. Inspection identified
+another whole-batch allocation: logical hashing decoded every record into one list,
+then canonicalization copied the full tree. Hashing now emits the identical canonical
+bytes one record at a time. Publication writes bounded row groups to scratch files;
+loading fully verifies source bytes and compares every ordered row in batches.
+Physical Parquet bytes may change; logical ID, report, schema and row content do not.
+The 8MiB grouping target is not a hard memory ceiling for a single large record.
+
+Regressions compare the independent original hash formula, including Unicode/escapes,
+numeric values and the pinned legacy ID, and reject retaining decoded prior records.
+Multiple row groups and legacy single-group files load; valid-hash files with missing,
+extra, reordered, modified rows or extra columns fail reprojection. No resource bound
+was raised to compensate for these duplicate allocations.
+
 ## Exact source, tests and deployed observations
 
-Full root `npm run check` at `c15542681aa0b58ed178f16cc9d7543a03ebe969` passed:
-988 Python tests, 3 skipped, 21 subtests; 70 console/identity regressions, component,
+Full root `npm run check` at `a8c5971c2c856087ebff7ef92d0d3ff50940430f` passed
+(same application source as deployed `3a4b8997d06011952a2248902c67f64f531dbcff`):
+990 Python tests, 3 skipped, 21 subtests; 70 console/identity regressions, component,
 type, package and CPU E2E checks. Focused tests exercise unchanged golden legacy
 identity, nested union/reload/cache, genuine conflicts, missing grants, withdrawals,
 worker receipt rejection, no storage calls on HTTP task reads and concurrent logout.
@@ -55,11 +71,11 @@ was installed through managed prepare/initialize in a permanent independent chec
 Existing composition, profile, credentials, consent, native Tool and queue remain.
 Doctor and delivery preflight pass. Desktop launch points to the new source.
 
-Hub source `c15542681aa0b58ed178f16cc9d7543a03ebe969`, image
-`ghcr.io/rsgcsg/spireagent-hub@sha256:d7bb89868a05f4a4053026ade5dd3a992dbd70f23bcb21dec71274b83c571fff`,
+Hub source `3a4b8997d06011952a2248902c67f64f531dbcff`, image
+`ghcr.io/rsgcsg/spireagent-hub@sha256:74ab9ecc19efd3bb2ea7de08e20ec558bf552b27a5d94d18fd24ee3afdd9db8d`,
 lock `44b53f0184ef8ea612eb50550f35f81e32456ba93fb2cf80c336157d41778bd5`,
 uses the existing same-schema owner rollout. Exact plan
-`8aa6139c7947fce3ffd6dbc5bff232acf2c428a8c93cf6dbe83d8d06a1daf829`
+`d804dd122016f1469dff4fcc6377fd799fb07fae8db558629e51e931c9d9069e`
 verified producer, capacity, matching-image fresh backup and unchanged schema.
 The earlier attempt was correctly refused until a current-image backup existed;
 no check was bypassed. TLS/state mounts and zero-budget paused compute remain.
@@ -79,6 +95,10 @@ Immediate pre-batch-image backup
 was verified off-host with the then-current fedbed image. The immediate pre-one-pass
 backup `7742bcbc1cd99001a8d768ae22757d404934b252db9a5a185d4c13e71f6cff4a`
 matched the prior 3159 image; the rollout verified that receipt before applying c155.
+The final pre-streaming backup
+`36a0545a07862bb4f1a39cdcbc54d4fe4d4c5e1fc32ad1cde073f0b9f27c51a5`
+matched the c155 image and passed the final owner rollout check. Final post-deployment
+backup/restore and actual batch/build results are recorded in release attachments.
 
 ## Rollback and non-claims
 
