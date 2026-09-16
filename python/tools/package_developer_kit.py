@@ -65,14 +65,15 @@ uv run --locked python -m spireagent.workbench project collection-tool --config 
 uv run --locked python -m spireagent.workbench project open --config /ABS/project.json
 ```
 
-Open 录制与上传. Review the daily default and explicitly confirm Human origin, upload and
-project-member sharing; login never supplies consent. Prepare the local recording configuration.
-Close the game, enter its installation directory and bind the recording root. Launch the game,
-refresh the current connection check, then explicitly enable uploads. Optional topic activities
-are in advanced options. Opening a page or preparing files does not start recording or upload.
+Open 真人采集. Read the upload purpose and project-member access explanation, then select
+同意并开启采集 once; login never supplies consent. The saved consent is reused for the same
+purpose and scope. Choose 准备 / 继续检查 and follow the actual next step: provide the game
+directory, close the game for binding, then reopen it and continue checks. Routine collection
+uses one daily configuration, without publishing or joining an activity. Pause/resume automatic
+upload on this page; viewing a page never grants consent or starts model control.
 
-Record through the game Recorder, press Close and check this session's cloud receipt in
-采集记录. Setup status is saved; the receipt remains separate. After reboot, reopen the same
+Record through the game Recorder, press 结束录制 (Close) and check this session's cloud receipt in
+数据. Setup status is saved; the receipt remains separate. After reboot, reopen the same
 configuration. Keep the workbench running for uploads; closing a tab does not stop delivery.
 
 Daily consent v2 does not pin software, but an existing outbox retains its exact tool release.
