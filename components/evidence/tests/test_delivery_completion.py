@@ -81,6 +81,29 @@ class DeliveryCompletionTests(unittest.TestCase):
             result = receipt.to_dict()
         return result
 
+    def _require_symlink_support(self):
+        """Probe symlink support before mutating any durable test fixture."""
+        target = self.root / "symlink-probe-target"
+        link = self.root / "symlink-probe-link"
+        target.write_bytes(b"probe")
+        try:
+            link.symlink_to(target)
+        except (NotImplementedError, OSError) as error:
+            # Windows developer environments commonly deny symbolic-link
+            # creation without SeCreateSymbolicLinkPrivilege.  Skip only the
+            # symlink assertions; callers must clean up before doing so.
+            link.unlink(missing_ok=True)
+            target.unlink(missing_ok=True)
+            if os.name == "nt" and (
+                isinstance(error, NotImplementedError)
+                or getattr(error, "winerror", None) == 1314
+            ):
+                self.skipTest("symbolic-link creation privilege is unavailable")
+            raise
+        else:
+            link.unlink()
+            target.unlink()
+
     def _sql(self, query, parameters=()):
         with closing(sqlite3.connect(self.database)) as connection, connection:
             connection.execute(query, parameters)
@@ -232,8 +255,9 @@ class DeliveryCompletionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "archive_membership"):
             self._proof()
 
-    def test_symlinks_and_unknown_outbox_entries_block_before_following(self):
+    def test_symlinks_block_before_following(self):
         self._ready()
+        self._require_symlink_support()
         for path in (self.outbox.root / "worker.lock", self.database,
                      self.source / "recording-manifest.json", self.config.tool_directory,
                      self.source.parent):
@@ -247,6 +271,9 @@ class DeliveryCompletionTests(unittest.TestCase):
                     self._proof()
                 path.unlink()
                 saved.rename(path)
+
+    def test_unknown_outbox_entries_block(self):
+        self._ready()
         for name in ("partial", "bundles/unknown"):
             path = self.outbox.root / name
             path.mkdir()
