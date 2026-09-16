@@ -212,8 +212,9 @@ window.SpireProject = (() => {
       last_admin_required:
         "必须保留至少一位已激活的管理员。先让另一位管理员完成首次登录。",
       member_already_exists: "此邮箱已在成员列表中；请修改现有成员。",
-      collection_not_shared: "这份记录尚未授权项目共享，不能下载原始文件。",
-      source_sharing_not_established: "数据集引用的原始数据尚未建立共享授权。",
+      collection_not_shared: "这份记录已撤回项目访问，或尚未完成接收。请重新选择可用记录。",
+      source_sharing_not_established: "数据集包含已撤回项目访问的来源。请修改选择，保留当前可用的数据。",
+      dataset_not_available: "这个数据集已不在当前可用列表中，请回到数据集列表重新选择。",
       explicit_campaign_consent_required:
         "请分别确认真人来源、上传授权和项目成员共享。",
       owned_active_device_required:
@@ -1328,7 +1329,10 @@ window.SpireProject = (() => {
         await reload(ctx);
       }, {primary:true, disabled: !job.result?.selected}));
       if (!archived && job.state === "failed") row.append(command(ctx, `retry-dataset-${job.id}`, "重试此任务", async () => {
-        await request(ctx, member(`datasets/${job.id}/retry`), {}); await reload(ctx);
+        const created = await request(ctx, member(`datasets/${job.id}/retry`), {});
+        if (!live(ctx)) return;
+        if (hex(created.id,32)) drafts.set("dataset-task-id",created.id);
+        await reload(ctx);
       }));
       if (["completed", "failed"].includes(job.state)) row.append(command(ctx, `visibility-${job.id}`, archived ? "恢复到任务列表" : job.request.preview_id ? "移除任务记录" : "移除预览", () => visibility([job.id], !archived)));
       box.append(row);
@@ -1348,7 +1352,7 @@ window.SpireProject = (() => {
     if (!requested) {
       const chooser = panel(
         "选择要下载的数据",
-        "最多选择 100 份记录或产物。原始录制需有明确项目共享授权；产物仅包含你勾选的自身文件。",
+        "最多选择 100 份项目记录或产物。已验收录制可直接使用；产物仅包含你勾选的自身文件。",
       );
       const offset = offsets.get("export-collections") || 0;
       const listing = await request(

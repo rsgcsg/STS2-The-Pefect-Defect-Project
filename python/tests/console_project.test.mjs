@@ -1167,3 +1167,22 @@ test("a slow navigation does not disable returning to that tab", async () => {
   assert.equal(action(shell,"dataset-tab-create").disabled,false);
   await next; finish(); await navigating;
 });
+
+test("retry follows the new task instead of keeping the focused failed preview", async () => {
+  const nextId="e".repeat(32);
+  const failed={id:uploadId,state:"failed",error:"environment_identity_conflict",request:{name:"selection",uploads:[uploadId],rules:{},preview_id:null}};
+  const next={...failed,id:nextId,state:"pending",error:null};
+  const h=setup({view:"datasets",handler:(url,options)=> {
+    if(options.method==="POST") return {id:url.endsWith("/retry")?nextId:uploadId};
+    if(url.endsWith(`/datasets/${uploadId}`)) return failed;
+    if(url.endsWith(`/datasets/${nextId}`)) return next;
+    if(url.includes("collections?")) return {items:[{upload_id:uploadId,status:"verified"}],total:1};
+    return emptyList();
+  }});
+  await action(await h.render(),"dataset-tab-create").onclick(); let page=await h.render();
+  field(page,`source-${uploadId}`).checked=true;field(page,`source-${uploadId}`).onchange();
+  await action(page,"preview-dataset").onclick(); page=await h.render();
+  await action(page,`retry-dataset-${uploadId}`).onclick(); page=await h.render();
+  assert.ok(h.calls.some(c=>c.url.endsWith(`/datasets/${nextId}`)));
+  assert.doesNotMatch(text(page),/环境身份存在冲突/);
+});

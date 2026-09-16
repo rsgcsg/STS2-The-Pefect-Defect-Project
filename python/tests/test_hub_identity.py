@@ -472,6 +472,11 @@ def test_device_scope_filter_is_identical_for_browser_and_personal_reads(hub):
     ):
         result = request(app, path, query="device=one&limit=25&offset=0", **kwargs)[1]
         assert result["total"] == 1 and result["items"][0]["device_id"] == "one"
+        status, dated = request(
+            app, path, query="device=one&limit=25&offset=0&from=0&to=253402300799&selectable=true",
+            **kwargs,
+        )
+        assert status == 200 and dated["total"] == 0  # Pending uploads are not selectable.
         for query in ("device=elsewhere", "device=one&device=two", "device="):
             assert request(app, path, query=query, **kwargs)[0] == 403
         assert request(app, path, query="device=one&arbitrary=1", **kwargs)[0] == 400

@@ -22,3 +22,5 @@ Current records:
 [ADR-0007: fixed decision datasets and compatible versions](0007-fixed-decision-datasets.md)
 
 [ADR-0008: selected decision unions and bounded verification reuse](0008-selected-decision-unions.md)
+
+[ADR-0009: project data selection and runtime provenance](0009-project-dataset-selection.md)

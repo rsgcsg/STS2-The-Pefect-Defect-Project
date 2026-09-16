@@ -147,19 +147,21 @@ class LocalIdentity:
             if (isinstance(email, str) and len(email) <= 254
                     and re.fullmatch(r"[^\s@\x00-\x1f]+@[^\s@\x00-\x1f]+", email)):
                 result["previous_account_email"] = email
-            if session:
-                try:
-                    result.update(self.request("/v1/identity/me", token=session["session_token"]))
-                    result["status"] = "signed_in"
-                except BoundaryError as error:
-                    # Never present retained private pages as authenticated after a failed check.
-                    result.update(status="reconnect_required", error=error.code)
             flow = self.flow()
             if flow.get("expires_at", 0) > time.time():
                 result["flow"] = {
                     key: flow[key] for key in ("flow_id", "approval_url", "user_code", "expires_at")
                 }
-            return result
+        if session:
+            try:
+                observed = self.request("/v1/identity/me", token=session["session_token"])
+                with self.lock:
+                    if self.session().get("session_token") != session["session_token"]:
+                        raise BoundaryError("identity", "account_changed")
+                    result.update(observed, status="signed_in")
+            except BoundaryError as error:
+                result.update(status="reconnect_required", error=error.code)
+        return result
 
     def begin(self, name: object) -> dict[str, Any]:
         if not isinstance(name, str) or not 1 <= len(name.strip()) <= 80:
@@ -275,16 +277,21 @@ class LocalIdentity:
             path,
         ):
             raise BoundaryError("identity", "invalid_console_route")
-        values = parse_qs(query, strict_parsing=True, max_num_fields=4)
-        if (set(values) - {"limit", "offset", "device", "q"}
+        values = parse_qs(query, strict_parsing=True, max_num_fields=7)
+        if (set(values) - {"limit", "offset", "device", "q", "from", "to", "selectable"}
                 or ("q" in values and path != "datasets")
+                or (set(values) & {"from", "to", "selectable"} and path != "collections")
                 or any(len(v) != 1 for v in values.values())):
             raise BoundaryError("identity", "invalid_console_query")
         with self.lock:
             session = self.session()
             if not session:
                 raise BoundaryError("identity", "sign_in_required")
-            return self.request("/v1/identity/console/" + route, token=session["session_token"])
+        result = self.request("/v1/identity/console/" + route, token=session["session_token"])
+        with self.lock:
+            if self.session().get("session_token") != session["session_token"]:
+                raise BoundaryError("identity", "account_changed")
+        return result
 
     def replace_credential(self, source: Path) -> dict[str, Any]:
         """Explicit stopped-workbench recovery. Never change the logical device or campaign."""

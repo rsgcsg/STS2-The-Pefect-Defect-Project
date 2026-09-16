@@ -201,6 +201,9 @@ class UploadService:
             store,
             producer,
         )
+        from spireagent.hub.collections import CollectionAccess
+
+        CollectionAccess(self)  # Initialize the existing source-access owner before console reads.
 
     def intent(self, device: str, value: object) -> dict[str, Any]:
         fields = {"schema", "transfer_manifest", "archive_sha256", "archive_bytes"}

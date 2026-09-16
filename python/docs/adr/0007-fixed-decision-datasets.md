@@ -5,6 +5,8 @@ passed; see [closeout evidence](../evidence/DECISION_DATASETS_CLOSEOUT_2026-09-1
 The later [ADR-0008](0008-selected-decision-unions.md) extends selected dataset union and
 verification reuse, and supersedes this ADR's latest-100 profile display limit. Historical
 qualification does not transfer to those later changes.
+[ADR-0009](0009-project-dataset-selection.md) supersedes the second source-sharing grant
+for accepted project data and fixes process-restart provenance without changing native identity.
 
 ## Context
 

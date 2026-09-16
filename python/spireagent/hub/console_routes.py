@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from pathlib import Path
 from typing import Any
@@ -43,7 +44,7 @@ class ConsoleRoutes:
             "browser_auth": "cloudflare_access_application_jwt",
             "browser_access_configured": self.browser_enabled,
             "terminal_presence": "not_observed",
-            "raw_downloads": "explicit_project_sharing_grant_required",
+            "raw_downloads": "accepted_project_collections_available_to_members",
             "backup": {"availability": "not_authorized"},
             "external_alerting": "not_qualified",
             "whole_host_recovery": "not_qualified",
@@ -80,6 +81,30 @@ class ConsoleRoutes:
 
     def read(self, resource: str, query: str, principal: ConsolePrincipal) -> dict[str, Any]:
         search = ""
+        source_filters: dict[str, Any] = {}
+        if resource == "collections":
+            try:
+                pairs = parse_qsl(query, strict_parsing=True, keep_blank_values=True,
+                                  max_num_fields=6)
+                if len({key for key, _ in pairs}) != len(pairs):
+                    raise ValueError
+                for key, value in pairs:
+                    if key in {"from", "to"}:
+                        number = float(value)
+                        if not math.isfinite(number) or not 0 <= number <= 253402300799:
+                            raise ValueError
+                        source_filters["date_from" if key == "from" else "date_to"] = number
+                    elif key == "selectable":
+                        if value not in {"true", "false"}:
+                            raise ValueError
+                        source_filters["selectable"] = value == "true"
+                if ("date_from" in source_filters and "date_to" in source_filters
+                        and source_filters["date_from"] >= source_filters["date_to"]):
+                    raise ValueError
+                query = urlencode([(k, v) for k, v in pairs
+                                   if k not in {"from", "to", "selectable"}])
+            except ValueError:
+                raise BoundaryError("console", "invalid_collection_filter") from None
         if resource == "datasets":
             try:
                 pairs = parse_qsl(query, strict_parsing=True, keep_blank_values=True,
@@ -94,7 +119,8 @@ class ConsoleRoutes:
         limit, offset, status = pagination(query)
         index = self.service.console_index
         if resource == "collections":
-            return index.collections(principal, limit=limit, offset=offset, status=status)
+            return index.collections(principal, limit=limit, offset=offset, status=status,
+                                     **source_filters)
         if re.fullmatch(r"collections/[a-f0-9]{32}", resource):
             if query:
                 raise BoundaryError("console", "unexpected_query")

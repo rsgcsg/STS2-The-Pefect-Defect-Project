@@ -101,11 +101,59 @@ class DecisionJobs:
             raise BoundaryError("decision_job", "unsupported_dataset_schema")
         return parents
 
+    def _check_inputs(self, request: dict[str, Any]) -> None:
+        """Check current indexed access on HTTP; the worker verifies actual artifacts.
+
+        Reading a task must not fetch every selected archive manifest over the network.
+        The immutable source checks still run before and after background processing.
+        """
+        merging = "datasets" in request
+        selections = request["datasets" if merging else "uploads"]
+        if not isinstance(selections, list) or not 1 <= len(selections) <= 100:
+            raise BoundaryError("decision_job", "selection_limit")
+        for value in selections:
+            digest(value, "decision_job.selection", length=64 if merging else 32)
+        if len(set(selections)) != len(selections):
+            raise BoundaryError("decision_job", "duplicate_selection")
+        with self.service.operations.transaction() as db:
+            for value in selections:
+                if not merging:
+                    row = db.execute(
+                        "SELECT u.status,u.receipt,s.approved FROM uploads u "
+                        "LEFT JOIN collection_sharing s ON s.upload_id=u.id WHERE u.id=?",
+                        (value,),
+                    ).fetchone()
+                    if row is None or row["approved"] == 0:
+                        raise BoundaryError("sharing", "collection_not_shared")
+                    if row["status"] != "verified" or not row["receipt"]:
+                        raise BoundaryError("decision_job", "source_not_verified")
+                else:
+                    row = db.execute(
+                        "SELECT kind,summary FROM console_artifacts WHERE artifact_id=?", (value,)
+                    ).fetchone()
+                    if row is None or row["kind"] != "dataset":
+                        raise BoundaryError("decision_job", "dataset_not_available")
+                    if json.loads(row["summary"])["metadata"].get("schema") not in {
+                        "stpd/decision-dataset-v1", UNION_SCHEMA,
+                    }:
+                        raise BoundaryError("decision_job", "unsupported_dataset_schema")
+                    withdrawn = db.execute(
+                        "WITH RECURSIVE ancestors(id) AS (SELECT ? UNION SELECT parent "
+                        "FROM console_lineage JOIN ancestors ON child=id) "
+                        "SELECT 1 FROM uploads u JOIN collection_sharing s "
+                        "ON s.upload_id=u.id "
+                        "WHERE s.approved=0 "
+                        "AND json_extract(u.receipt,'$.evidence_id') IN ancestors "
+                        "LIMIT 1", (value,),
+                    ).fetchone()
+                    if withdrawn:
+                        raise BoundaryError("sharing", "source_sharing_not_established")
+
     def create(self, principal: ConsolePrincipal, body: object) -> dict[str, Any]:
         self.collections.require_member(principal)
         source_key = "datasets" if isinstance(body, dict) and "datasets" in body else "uploads"
         obj = object_fields(body, {source_key, "rules", "preview_id", "name"}, "decision_job")
-        self._inputs(obj)
+        self._check_inputs(obj)
         rules = SelectionRules.decode(obj["rules"])
         if not isinstance(obj["name"], str) or not 1 <= len(obj["name"]) <= 100:
             raise BoundaryError("decision_job", "invalid_name")
@@ -145,7 +193,7 @@ class DecisionJobs:
         ):
             raise BoundaryError("decision_job", "not_found")
         request = json.loads(row["request"])
-        self._inputs(request)
+        self._check_inputs(request)
         result = json.loads(row["result"]) if row["result"] else None
         if result and "runs" in result:
             result = {**result, "runs": [_run_summary(run) for run in result["runs"]]}
@@ -214,21 +262,22 @@ class DecisionJobs:
         self.collections.require_member(principal)
         with self.service.operations.transaction() as db:
             rows = db.execute(
-                "SELECT j.request,j.result FROM decision_jobs j JOIN collection_sharing s "
+                "SELECT j.request,j.result FROM decision_jobs j LEFT JOIN collection_sharing s "
                 "ON s.upload_id=json_extract(j.request,'$.uploads[0]') "
-                "WHERE j.owner='receiver' AND j.state='completed' AND s.approved=1 "
+                "WHERE j.owner='receiver' AND j.state='completed' AND COALESCE(s.approved,1)=1 "
                 "ORDER BY j.created DESC"
             ).fetchall()
             waiting = db.execute(
-                "SELECT count(*) FROM decision_jobs j JOIN collection_sharing s "
+                "SELECT count(*) FROM decision_jobs j LEFT JOIN collection_sharing s "
                 "ON s.upload_id=json_extract(j.request,'$.uploads[0]') "
-                "WHERE j.owner='receiver' AND j.state IN ('pending','running') AND s.approved=1"
+                "WHERE j.owner='receiver' AND j.state IN ('pending','running') "
+                "AND COALESCE(s.approved,1)=1"
             ).fetchone()[0]
             failures = db.execute(
                 "SELECT j.id,j.error,json_extract(j.request,'$.uploads[0]') AS upload_id "
-                "FROM decision_jobs j JOIN collection_sharing s "
+                "FROM decision_jobs j LEFT JOIN collection_sharing s "
                 "ON s.upload_id=json_extract(j.request,'$.uploads[0]') "
-                "WHERE j.owner='receiver' AND j.state='failed' AND s.approved=1 "
+                "WHERE j.owner='receiver' AND j.state='failed' AND COALESCE(s.approved,1)=1 "
                 "AND NOT EXISTS (SELECT 1 FROM decision_jobs newer WHERE newer.owner='receiver' "
                 "AND newer.state='completed' AND newer.updated>j.updated AND "
                 "json_extract(newer.request,'$.uploads[0]')="
@@ -236,8 +285,8 @@ class DecisionJobs:
                 "ORDER BY j.created DESC"
             ).fetchall()
             shared = db.execute(
-                "SELECT count(*) FROM uploads u JOIN collection_sharing s ON s.upload_id=u.id "
-                "WHERE u.status='verified' AND s.approved=1"
+                "SELECT count(*) FROM uploads u LEFT JOIN collection_sharing s ON s.upload_id=u.id "
+                "WHERE u.status='verified' AND COALESCE(s.approved,1)=1"
             ).fetchone()[0]
         games: dict[str, Any] = {}
         profiled = set()
@@ -285,8 +334,8 @@ class DecisionJobs:
             )
             # One bounded automatic profile per tick; never done by an HTTP reader.
             source = db.execute(
-                "SELECT u.id FROM uploads u JOIN collection_sharing s ON s.upload_id=u.id "
-                "WHERE u.status='verified' AND s.approved=1 AND NOT EXISTS "
+                "SELECT u.id FROM uploads u LEFT JOIN collection_sharing s ON s.upload_id=u.id "
+                "WHERE u.status='verified' AND COALESCE(s.approved,1)=1 AND NOT EXISTS "
                 "(SELECT 1 FROM decision_jobs j WHERE j.owner='receiver' AND "
                 "json_extract(j.request,'$.uploads[0]')=u.id AND "
                 "(json_extract(j.request,'$.profile_schema')='stpd/run-coverage-v1' OR "
