@@ -129,7 +129,12 @@ def test_successful_npm_with_wrong_content_is_not_promoted(tmp_path, monkeypatch
 def test_install_rejects_symlink_archive(tmp_path, release):
     pin, connector, archive, _ = release
     link = tmp_path / "linked.tgz"
-    link.symlink_to(archive)
+    try:
+        link.symlink_to(archive)
+    except (NotImplementedError, OSError) as error:
+        if isinstance(error, NotImplementedError) or getattr(error, "winerror", None) == 1314:
+            pytest.skip("symbolic-link creation privilege is unavailable")
+        raise
     with pytest.raises(BoundaryError, match="runtime_archive_missing_or_unsafe"):
         runtime_install.install_runtime(tmp_path / "state", pin, connector, archive=link)
 
