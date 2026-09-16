@@ -1097,9 +1097,10 @@ window.SpireProject = (() => {
       const title = el("div"); title.append(link(datasetName(item), route("datasets", item.artifact_id)), el("span", item.artifact_id.slice(0,12), "subtext mono"));
       const actions = el("div", null, "project-actions");
       actions.append(command(ctx, `download-dataset-${item.artifact_id}`, "下载", async () => {
+        const downloadPage = location.search;
         if (!item.payloads?.length) throw new Error("dataset_payload_inventory_missing");
         const result = await request(ctx, member("exports"), {schema:"stpd/project-export-request-v1", collections:[], artifacts:[{artifact_id:item.artifact_id, roles:item.payloads.map(p => p.role)}]});
-        if (!live(ctx)) return;
+        if (!live(ctx) || location.search !== downloadPage) return;
         if (!hex(result.export_id)) throw new Error("invalid_export_identity");
         exportId = result.export_id;
         if (window.SpireProject.navigate) window.SpireProject.navigate("downloads", exportId);

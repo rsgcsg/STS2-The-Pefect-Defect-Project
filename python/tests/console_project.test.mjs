@@ -1040,7 +1040,7 @@ test("returning from a dataset detail opens the library after preview browsing",
   assert.equal(action(await h.render(), "dataset-tab-library").attributes["aria-current"], "page");
 });
 
-for (const change of ["account", "page"]) test(`delayed dataset download ignores changed ${change}`, async () => {
+for (const change of ["account", "page", "detail"]) test(`delayed dataset download ignores changed ${change}`, async () => {
   let resolve;
   const waiting = new Promise(done => { resolve = done; });
   const item = {artifact_id:id("a"),metadata:{},payloads:[{role:"records"}]};
@@ -1049,8 +1049,8 @@ for (const change of ["account", "page"]) test(`delayed dataset download ignores
   h.ui.navigate = (...args) => navigations.push(args);
   const pending = action(await h.render(), `download-dataset-${id("a")}`).onclick();
   if (change === "account") h.account(owner("member", "another"));
-  else h.navigate("statistics");
-  await h.render();
+  else h.navigate(change === "detail" ? "datasets" : "statistics", change === "detail" ? "&id=" + id("a") : "");
+  if (change !== "detail") await h.render();
   resolve({export_id:id("b")});
   await pending;
   assert.deepEqual(navigations, []);
