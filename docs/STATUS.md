@@ -1,5 +1,30 @@
 # Current Status
 
+## Unified task-flow candidate — integration in progress
+
+The current task branch implements one daily collection flow across the in-game UI,
+local Workbench and shared Hub views. It replaces repeated collection checkboxes with
+one explicit consent action, composes existing preparation owners, and persists upload
+pause without replacing existing enrollments, APIs or queues. Local model preparation,
+Recorder-to-model handoff and independently authorized Agent-report sharing are separate
+from Human collection. Selected decision unions and bounded verification reuse retain
+original data, exclusions and authorization checks.
+
+This is a source candidate, **not a deployed or released combination**. Integration checks,
+exact native build/install/load, the affected Human journey and cloud qualification must
+be recorded separately before promotion. Current model reports do not measure native game
+outcome or autonomous complete-run performance; S1 still requires CUDA. Synthetic dataset
+profiling does not establish production transfer time or throughput. Final artifact impact
+comes from the final diff and component identity checks, not this summary.
+
+See [the member task flow](../python/docs/UNIFIED_TASK_FLOW.zh-CN.md),
+[collection orchestration](../python/docs/COLLECTION_FLOW.md),
+[model tasks and sharing](../python/docs/LOCAL_MODEL_TASK_FLOW.md), and
+[selected-decision unions](../python/docs/adr/0008-selected-decision-unions.md).
+The prior qualified combinations below keep their exact identities and evidence.
+
+## Previously qualified operating combinations
+
 The [operating-flow acceptance](evidence/OPERATING_FLOW_2026-09-16.md) qualifies
 the managed Workbench installation and same-schema Hub rollout: 60 new Human
 decisions proved/canonical, zero real failures, automatic Close/upload and exact
@@ -71,8 +96,8 @@ closeout](evidence/PR6_SUCCESSOR_OWNER_READY_SOURCE_CLOSEOUT_2026-09-01.md)
 
 ## Collection delivery engineering
 
-Current Evidence 0.1.0-rc.7 includes opt-in fixed-tool closed-session delivery and persistent
-HTTP receipt recovery. See [ADR 0008](adr/0008-release-bound-closed-session-delivery.md)
+The historical Evidence 0.1.0-rc.7 delivery baseline includes opt-in fixed-tool
+closed-session delivery and persistent HTTP receipt recovery. See [ADR 0008](adr/0008-release-bound-closed-session-delivery.md)
 and [delivery operation](../components/evidence/DELIVERY.md). Native gameplay
 source and the PR25 Human artifact are unchanged. Real cloud deployment and a
 fresh Close-to-cloud Human delivery journey are not established by portable tests.

@@ -9,7 +9,9 @@ classes are defined in [Engineering Governance](ENGINEERING_GOVERNANCE.md).
 
 | Document | Responsibility |
 |---|---|
-| [Default project workflow](B_PIPELINE_HANDOFF.md) | approved download/install, account/device, collection/cloud views, upgrades and incidents |
+| [Unified task flow (中文)](UNIFIED_TASK_FLOW.zh-CN.md) | candidate user journeys across game, local and cloud; permissions and truthful readiness |
+| [Full member and Agent handoff](../../docs/NEW_MEMBER_HANDOFF.zh-CN.md) | installation, engineering and operational onboarding; root governance links |
+| [Default project workflow](B_PIPELINE_HANDOFF.md) | existing download/install, account/device, upgrades and incidents; exact release controls |
 | [New Engineer Guide](NEW_ENGINEER_GUIDE.md) | first checkout and ownership orientation |
 | [Status](STATUS.md) | implemented/measured state and non-claims |
 | [Project System](PROJECT_SYSTEM.md) | context/check/closeout and bounded memory |
@@ -69,6 +71,15 @@ pins retain their exact identities; they are not private cross-component imports
 - [Human and external-input handoff](PREFULLRUN_HUMAN_HANDOFF.md)
 
 ## Default project workflow and cloud B implementation
+
+- [Unified task flow (中文)](UNIFIED_TASK_FLOW.zh-CN.md): the current candidate's user-facing
+  route; implementation and deployment/Human qualification are explicitly separate.
+- [Collection preparation and persistent upload pause](COLLECTION_FLOW.md): one consent
+  action composing existing configuration, native and queue owners.
+- [Local model tasks and explicit shared reports](LOCAL_MODEL_TASK_FLOW.md): supported
+  preparation, native handoff, background finalization and separately authorized Agent sharing.
+- [Selected decision unions](adr/0008-selected-decision-unions.md): exact selected rows,
+  bounded verification reuse, durable task observations and qualification limits.
 
 - [Shared local/cloud project console](PROJECT_CONSOLE.md)
 - [ADR-0005: original console authority and authentication](adr/0005-local-cloud-console.md)
