@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.request import Request
@@ -132,7 +133,9 @@ def test_install_rejects_symlink_archive(tmp_path, release):
     try:
         link.symlink_to(archive)
     except (NotImplementedError, OSError) as error:
-        if isinstance(error, NotImplementedError) or getattr(error, "winerror", None) == 1314:
+        if os.name == "nt" and (
+            isinstance(error, NotImplementedError) or getattr(error, "winerror", None) == 1314
+        ):
             pytest.skip("symbolic-link creation privilege is unavailable")
         raise
     with pytest.raises(BoundaryError, match="runtime_archive_missing_or_unsafe"):
