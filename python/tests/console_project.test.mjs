@@ -157,7 +157,7 @@ function setup({
     get reloads() {
       return reloads;
     },
-    render: () => ui.render(view, identity),
+    render: (mount) => ui.render(view, identity, mount),
     scope: (value) => {
       selectedScope = value;
       generation++;
@@ -982,7 +982,8 @@ test("dataset progress stays visible and selected parent union is exact", async 
   const rules = {schema:"stpd/decision-selection-v1",complete_only:false,wins_only:false,no_failures_only:false,filters:{},seed:0};
   const job = {id:"b".repeat(32),state:"completed",request:{name:"union",datasets:[id("a"),id("b")],rules,preview_id:null},progress:{phase:"completed",completed:2,total:2,elapsed_seconds:1.5},result:{selected:7,exact_duplicate_decisions:2,split_status:"grouped"}};
   const env = setup({view:"datasets",handler:(url, options) => {
-    if (options.method === "POST") return {id:"c".repeat(32),state:"pending"};
+    if (options.method === "POST") return {id:job.id,state:"pending"};
+    if (url === `/api/member/datasets/${job.id}`) return job;
     if (url.startsWith("/api/member/datasets?")) return {items:[job]};
     if (url.includes("/datasets?")) return {items:[{artifact_id:id("a"),metadata:{schema:"stpd/decision-dataset-v1"}},{artifact_id:id("b"),metadata:{schema:"stpd/decision-dataset-v1"}}]};
     return emptyList();
@@ -1072,4 +1073,86 @@ test("dataset without file inventory does not silently export only a manifest", 
   await action(await h.render(), `download-dataset-${id("a")}`).onclick();
   assert.equal(post(h.calls).length, 0);
   assert.match(text(h.notice), /尚未提供文件清单/);
+});
+
+
+test("dataset date range uses local inclusive days and select-all reaches beyond current page", async () => {
+  const ids = Array.from({length:30},(_,i)=>i.toString(16).padStart(32,"0"));
+  const h = setup({view:"datasets", handler:url => {
+    if (!url.includes("collections?")) return emptyList();
+    const query = new URL(url,"https://example.test").searchParams;
+    return {items:ids.slice(0,Number(query.get("limit"))).map(upload_id=>({upload_id,status:"verified"})),total:30,next_offset:query.get("limit")==="25"?25:null};
+  }});
+  await action(await h.render(),"dataset-tab-create").onclick();
+  let page = await h.render();
+  field(page,"source-from").value="2026-09-15"; field(page,"source-from").oninput();
+  field(page,"source-to").value="2026-09-16"; field(page,"source-to").oninput();
+  await action(page,"filter-dataset-sources").onclick(); page=await h.render();
+  await action(page,"select-all-dataset-sources").onclick();
+  assert.match(text(page),/已选择 30 份/);
+  const q = new URL(h.calls.at(-1).url,"https://example.test").searchParams;
+  assert.equal(q.get("selectable"),"true"); assert.equal(q.get("limit"),"100");
+  assert.equal(Number(q.get("from")),new Date(2026,8,15).getTime()/1000);
+  assert.equal(Number(q.get("to")),new Date(2026,8,17).getTime()/1000);
+  await action(page,"dataset-tab-library").onclick();
+  await action(await h.render(),"dataset-tab-create").onclick(); page=await h.render();
+  assert.equal(field(page,"source-to").value,"2026-09-16");
+  assert.match(text(page),/已选择 30 份/);
+  await action(page,"clear-dataset-selection").onclick(); assert.match(text(page),/已选择 0 份/);
+  await action(page,"preview-dataset").onclick();
+  assert.equal(post(h.calls).length,0); assert.match(text(h.notice),/先选择至少一份/);
+});
+
+test("over-limit select-all leaves existing selection unchanged and invalid dates make no request", async () => {
+  const h = setup({view:"datasets",handler:url => url.includes("collections?") ? {items:[{upload_id:uploadId,status:"verified"}],total:101,next_offset:100} : emptyList()});
+  await action(await h.render(),"dataset-tab-create").onclick(); const page=await h.render();
+  field(page,`source-${uploadId}`).checked=true; field(page,`source-${uploadId}`).onchange();
+  await action(page,"select-all-dataset-sources").onclick();
+  assert.match(text(h.notice),/最多选择 100/); assert.match(text(page),/已选择 1 份/);
+  field(page,"source-from").value="2026-09-17"; field(page,"source-from").oninput();
+  field(page,"source-to").value="2026-09-16"; field(page,"source-to").oninput();
+  const before=h.calls.length; await action(page,"filter-dataset-sources").onclick();
+  assert.equal(h.calls.length,before); assert.match(text(h.notice),/结束日期不能早于/);
+});
+
+test("dataset shell selects a new tab before delayed data arrives and ignores older responses", async () => {
+  let finish; const pending=new Promise(resolve=>{finish=resolve;});
+  const h=setup({view:"datasets",handler:url=>url.includes("/datasets?") && !url.includes("/member/") ? pending : emptyList()});
+  let shell; const old=h.render(value=>{shell=value;});
+  assert.equal(action(shell,"dataset-tab-library").attributes["aria-current"],"page");
+  assert.match(text(shell),/正在读取/);
+  await action(shell,"dataset-tab-archived").onclick();
+  let currentShell; const current=h.render(value=>{currentShell=value;});
+  assert.equal(action(currentShell,"dataset-tab-archived").attributes["aria-current"],"page");
+  await current; finish({items:[{artifact_id:id("c"),display_name:"old private result"}],total:1}); await old;
+  assert.doesNotMatch(text(shell),/old private result/);
+  assert.match(text(currentShell),/没有已移除/);
+});
+
+test("late select-all does not undo an explicit clear or changed date range", async () => {
+  for(const change of ["clear","date"]) {
+    let finish; const pending=new Promise(resolve=>{finish=resolve;});
+    const h=setup({view:"datasets",handler:url=>url.includes("limit=100")?pending:emptyList()});
+    await action(await h.render(),"dataset-tab-create").onclick(); const page=await h.render();
+    const selecting=action(page,"select-all-dataset-sources").onclick();
+    if(change==="clear") await action(page,"clear-dataset-selection").onclick();
+    else {field(page,"source-from").value="2026-09-16";field(page,"source-from").oninput();}
+    finish({items:[{upload_id:uploadId,status:"verified"}],total:1,next_offset:null}); await selecting;
+    assert.match(text(page),/已选择 0 份/);
+  }
+});
+
+test("new preview follows its exact task and failed choices can be edited", async () => {
+  const rules={complete_only:false,wins_only:false,filters:{character:["defect"]}};
+  const job={id:uploadId,state:"failed",error:"environment_identity_conflict",request:{name:"My recording selection",uploads:[uploadId],rules,preview_id:null}};
+  const h=setup({view:"datasets",handler:(url,options)=> options.method==="POST"?{id:uploadId}:url.endsWith(`/datasets/${uploadId}`)?job:url.includes("collections?")?{items:[{upload_id:uploadId,status:"verified"}],total:1}:emptyList()});
+  await action(await h.render(),"dataset-tab-create").onclick(); let page=await h.render();
+  field(page,`source-${uploadId}`).checked=true;field(page,`source-${uploadId}`).onchange();
+  await action(page,"preview-dataset").onclick(); page=await h.render();
+  assert.match(text(page),/环境身份存在冲突/);
+  assert.ok(h.calls.some(c=>c.url.endsWith(`/datasets/${uploadId}`)));
+  await action(page,`edit-dataset-${uploadId}`).onclick(); page=await h.render();
+  assert.equal(field(page,"dataset-name").value,"My recording selection");
+  assert.equal(field(page,`source-${uploadId}`).checked,true);
+  assert.equal(field(page,"character").value,"defect");
 });

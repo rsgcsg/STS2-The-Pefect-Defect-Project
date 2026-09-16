@@ -195,7 +195,7 @@ window.SpireProject = (() => {
     }
   };
   const scope = () => window.SpireIdentity?.context?.() || "";
-  const live = (ctx) => current?.key === ctx.key && scope() === ctx.scope;
+  const live = (ctx) => current === ctx && scope() === ctx.scope && location.search === ctx.search;
   const signedIn = (ctx) =>
     Boolean(ctx.identity?.principal) &&
     (!local || ctx.identity.status === "signed_in");
@@ -232,6 +232,10 @@ window.SpireProject = (() => {
       request_unavailable: "暂时无法读取服务，请刷新重试。",
       absolute_game_directory_required: "请填写这台电脑上的游戏安装目录完整路径。",
       default_collection_fields_required: "请填写名称、录制说明和授权说明。",
+      dataset_sources_required: "请先选择至少一份录制。",
+      dataset_selection_limit: "一次最多选择 100 份录制。请缩小日期范围，或清空已有选择后再全选。",
+      invalid_source_dates: "请填写有效日期，结束日期不能早于开始日期。",
+      environment_identity_conflict: "所选录制的环境身份存在冲突。请修改选择；同一失败任务直接重试不会改变来源。",
       dataset_payload_inventory_missing: "此数据集尚未提供文件清单，请打开详情核对后下载。",
       minimum_two_decision_datasets_required: "请选择至少两个决策数据集后再合并。",
     };
@@ -277,7 +281,8 @@ window.SpireProject = (() => {
     if (response.status === 401 || response.status === 403)
       throw new Error("authentication_required");
     const flowDiagnostic = !mutation && path === member("collection-flow") && value?.schema === "stpd/local-collection-flow-v1";
-    if (!response.ok || (value?.error && !flowDiagnostic))
+    const taskDiagnostic = !mutation && hex(value?.id,32) && path === member(`datasets/${value.id}`) && value.state === "failed";
+    if (!response.ok || (value?.error && !flowDiagnostic && !taskDiagnostic))
       throw new Error(value?.error || "request_unavailable");
     if (!value || typeof value !== "object" || Array.isArray(value))
       throw new Error("request_unavailable");
@@ -1061,19 +1066,26 @@ window.SpireProject = (() => {
     nav.setAttribute("aria-label", "数据集工作区");
     for (const [key, label] of [["library", "已生成的数据集"], ["create", "新建数据集"], ["previews", "预览与任务"], ["archived", "已移除"]]) {
       const button = command(ctx, `dataset-tab-${key}`, label, async () => {
-        drafts.set("dataset-tab", key); await reload(ctx);
+        drafts.set("dataset-tab", key); drafts.delete("dataset-task-id"); await reload(ctx);
       }, {primary: datasetTab() === key});
       button.setAttribute("aria-current", datasetTab() === key ? "page" : "false");
       nav.append(button);
     }
     return nav;
   }
-  async function decisionDatasets(ctx) {
+  async function decisionDatasets(ctx, mount) {
     const box = el("div", null, "project-page dataset-workspace");
-    box.append(datasetTabs(ctx));
-    if (datasetTab() === "create") box.append(await datasetCreate(ctx));
-    else if (["previews", "archived"].includes(datasetTab())) box.append(await datasetTasks(ctx));
-    else box.append(await datasetLibrary(ctx));
+    const tab = datasetTab();
+    const nav = datasetTabs(ctx);
+    box.append(nav, panel("正在读取…", "可以继续切换工作区；录制选择会保留。"));
+    if (mount) mount(box);
+    try {
+      const content = tab === "create" ? await datasetCreate(ctx) :
+        ["previews", "archived"].includes(tab) ? await datasetTasks(ctx) : await datasetLibrary(ctx);
+      if (live(ctx) && tab === datasetTab()) box.replaceChildren(nav, content);
+    } catch (error) {
+      if (live(ctx) && tab === datasetTab()) box.replaceChildren(nav, panel("暂未读取到内容", failure(error)));
+    }
     return box;
   }
   async function datasetLibrary(ctx) {
@@ -1123,9 +1135,11 @@ window.SpireProject = (() => {
     merge.append(el("p", "勾选列表中的两个或更多可靠决策数据集。只合并已选中的决策，去重后重新按真实局分组；原版本保留。", "muted"));
     merge.append(command(ctx, "preview-dataset-merge", "预览合并结果", async () => {
       if (mergeSet.size < 2) throw new Error("minimum_two_decision_datasets_required");
-      await request(ctx, member("datasets"), {name: "合并决策数据集", datasets: [...mergeSet].sort(),
+      const created = await request(ctx, member("datasets"), {name: "合并决策数据集", datasets: [...mergeSet].sort(),
         rules: {schema: "stpd/decision-selection-v1", complete_only: false, wins_only: false,
           no_failures_only: false, filters: {}, seed: 0}, preview_id: null});
+      if (!live(ctx)) return;
+      if (hex(created.id,32)) drafts.set("dataset-task-id",created.id);
       drafts.set("dataset-tab", "previews"); await reload(ctx);
     }));
     box.append(merge);
@@ -1138,6 +1152,33 @@ window.SpireProject = (() => {
     box.append(form);
     const draft = drafts.get("decision-dataset") || {name: "人类决策数据集", uploads: [], complete: false, wins: false, filters: {}};
     const name = input(form, "数据集名称", "dataset-name", draft.name);
+    const dates = el("div", null, "project-form");
+    dates.dataset.projectEditor = "dataset-dates";
+    const from = input(dates, "录制开始日期（本地时间）", "source-from", draft.sourceFrom || "", "date");
+    const to = input(dates, "录制结束日期（包含当天）", "source-to", draft.sourceTo || "", "date");
+    const saveDates = () => { draft.sourceFrom = from.value; draft.sourceTo = to.value; drafts.set("decision-dataset", draft); };
+    from.oninput = saveDates; to.oninput = saveDates;
+    from.onchange = saveDates; to.onchange = saveDates;
+    function sourceQuery(limit, offset) {
+      const query = new URLSearchParams({limit: String(limit), offset: String(offset), selectable: "true"});
+      function day(value, exclusive) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error("invalid_source_dates");
+        const [y,m,d] = value.split("-").map(Number), date = new Date(y,m-1,d);
+        if (date.getFullYear() !== y || date.getMonth() !== m-1 || date.getDate() !== d) throw new Error("invalid_source_dates");
+        if (exclusive) date.setDate(date.getDate() + 1);
+        return date.getTime() / 1000;
+      }
+      if (draft.sourceFrom) query.set("from", day(draft.sourceFrom, false));
+      if (draft.sourceTo) query.set("to", day(draft.sourceTo, true));
+      if (query.has("from") && query.has("to") && Number(query.get("from")) >= Number(query.get("to"))) throw new Error("invalid_source_dates");
+      return query.toString();
+    }
+    dates.append(command(ctx, "filter-dataset-sources", "按日期筛选", async () => {
+      saveDates(); sourceQuery(25,0); offsets.set("dataset-sources",0); await reload(ctx);
+    }), command(ctx, "clear-dataset-dates", "不限日期", async () => {
+      from.value = ""; to.value = ""; saveDates(); offsets.set("dataset-sources",0); await reload(ctx);
+    }));
+    box.append(el("h3", "选择录制来源"), dates);
     const advanced = el("details");
     advanced.append(el("summary", "筛选条件（默认保留所有合格决策）"));
     advanced.dataset.preserve = "decision-dataset-filters";
@@ -1163,22 +1204,47 @@ window.SpireProject = (() => {
     }
     for (const field of [name, complete, wins, noFailures, ...Object.values(filterFields)]) field.onchange = save;
     for (const field of [name, ...Object.values(filterFields)]) field.oninput = save;
-    const listing = await request(ctx, project(`collections?limit=25&offset=${offsets.get("dataset-sources") || 0}`));
+    const listing = await request(ctx, project(`collections?${sourceQuery(25, offsets.get("dataset-sources") || 0)}`));
     const selection = new Set(draft.uploads);
     const sourceRows = [];
-    const selectedCount = el("p", `已选择 ${selection.size} 份录制`, "project-selection");
-    box.append(el("h3", "选择录制来源"), selectedCount);
+    const selectedCount = el("p", `已选择 ${selection.size} 份录制（跨日期和分页保留，最多 100 份）`, "project-selection");
+    box.append(selectedCount);
+    const sourceChoices = [];
+    let selectionEpoch = 0;
+    function selectionChanged() {
+      selectionEpoch++;
+      draft.uploads = [...selection].sort(); save();
+      selectedCount.textContent = `已选择 ${selection.size} 份录制（跨日期和分页保留，最多 100 份）`;
+      for (const [id, choice] of sourceChoices) choice.checked = selection.has(id);
+    }
+    box.append(command(ctx, "select-all-dataset-sources", "全选符合日期的录制", async () => {
+      const query = sourceQuery(100, 0), epoch = selectionEpoch;
+      const matching = await request(ctx, project(`collections?${query}`));
+      if (!live(ctx) || query !== sourceQuery(100,0) || epoch !== selectionEpoch) return;
+      const next = new Set([...selection, ...(matching.items || []).filter(item => item.status === "verified" && item.dataset_selectable !== false).map(item => item.upload_id || item.id)]);
+      if (matching.total > 100 || matching.next_offset != null || next.size > 100) throw new Error("dataset_selection_limit");
+      for (const id of next) if (hex(id,32)) selection.add(id);
+      selectionChanged();
+    }), command(ctx, "clear-dataset-selection", "清空全部选择", async () => {
+      selection.clear(); selectionChanged();
+    }));
+    box.append(el("p", `当前日期范围共 ${count(listing.total)} 份可用录制；只读取列表，不会启动数据集任务。`, "muted"));
+    const previewActions = el("div", null, "project-actions");
+    box.append(previewActions);
     for (const item of listing.items || []) {
       const id = item.upload_id || item.id;
       if (!hex(id, 32)) continue;
       const choiceCell = el("div");
       const choice = input(choiceCell, "选择", `source-${id}`, selection.has(id), "checkbox");
-      choice.disabled = item.status !== "verified";
+      choice.disabled = item.status !== "verified" || item.dataset_selectable === false;
       choice.onchange = () => {
+        if (choice.checked && selection.size >= 100 && !selection.has(id)) {
+          choice.checked = false; note(ctx, failure({message:"dataset_selection_limit"}), "error"); return;
+        }
         if (choice.checked) selection.add(id); else selection.delete(id);
-        draft.uploads = [...selection].sort(); save();
-        selectedCount.textContent = `已选择 ${selection.size} 份录制`;
+        selectionChanged();
       };
+      sourceChoices.push([id, choice]);
       sourceRows.push([choiceCell, when(item.summary?.created_at || item.created_at),
         count(item.summary?.counts?.canonical), count(item.summary?.assigned_run_count), show(item.status),
         link((item.summary?.session_id || id).slice(0, 28), route("collections", id))]);
@@ -1186,11 +1252,14 @@ window.SpireProject = (() => {
     if (sourceRows.length) box.append(table(["选择", "录制时间", "已录入决策", "局 / 片段数", "状态", "记录详情"], sourceRows));
     else box.append(empty("没有可选择的录制", "先完成录制 Close 和上传，再回到这里选择来源。"));
     box.append(pager(ctx, "dataset-sources", listing));
-    box.append(command(ctx, "preview-dataset", "预览选定记录", async () => {
+    previewActions.append(command(ctx, "preview-dataset", "下一步：预览选定记录", async () => {
       save();
-      await request(ctx, member("datasets"), {name: draft.name, uploads: draft.uploads,
+      if (!draft.uploads.length) throw new Error("dataset_sources_required");
+      const created = await request(ctx, member("datasets"), {name: draft.name, uploads: draft.uploads,
         rules: {schema: "stpd/decision-selection-v1", complete_only: draft.complete,
           wins_only: draft.wins, no_failures_only: draft.noFailures, filters: draft.filters, seed: 0}, preview_id: null});
+      if (!live(ctx)) return;
+      if (hex(created.id,32)) drafts.set("dataset-task-id", created.id);
       drafts.set("dataset-tab", "previews");
       await reload(ctx);
     }, {primary: true}));
@@ -1200,11 +1269,18 @@ window.SpireProject = (() => {
   async function datasetTasks(ctx) {
     const archived = datasetTab() === "archived";
     const key = archived ? "dataset-archived" : "dataset-tasks";
-    const jobs = await request(ctx, member(`datasets${archived ? "/archived" : ""}?limit=25&offset=${offsets.get(key) || 0}`));
+    const focused = !archived && drafts.get("dataset-task-id");
+    const jobs = focused ? {items: [await request(ctx, member(`datasets/${focused}`))],total:1} :
+      await request(ctx, member(`datasets${archived ? "/archived" : ""}?limit=25&offset=${offsets.get(key) || 0}`));
     const box = panel(archived ? "已移除的预览与任务" : "预览与任务", archived ? "可以恢复到任务列表。原始录制、固定数据集和失败记录始终保留。" : "预览成功后，确认生成才会进入数据集列表。处理中可离开页面，回来查看同一任务。");
+    if (focused) box.append(command(ctx, "show-all-dataset-tasks", "查看所有预览与任务", async () => {
+      drafts.delete("dataset-task-id"); await reload(ctx);
+    }));
     const disposable = (jobs.items || []).filter(j => j.state === "completed" && !j.request.preview_id);
     async function visibility(ids, value) {
-      await request(ctx, member("datasets/visibility"), {ids, archived:value}); await reload(ctx);
+      await request(ctx, member("datasets/visibility"), {ids, archived:value});
+      if (!live(ctx)) return;
+      drafts.delete("dataset-task-id"); await reload(ctx);
     }
     if (!archived && disposable.length) box.append(command(ctx, "remove-finished-previews", "移除本页已完成预览", async () => {
       await visibility(disposable.map(j => j.id), true);
@@ -1215,7 +1291,13 @@ window.SpireProject = (() => {
         const phases = {checking_access:"核对权限", reading_sources:"读取来源", verifying_sources:"校验并整理", loading_selected_datasets:"读取已选数据", union_selected_decisions:"合并与去重", publishing_dataset:"保存固定数据集"};
         row.append(el("p", `${phases[job.progress.phase] || show(job.progress.phase)} · ${count(job.progress.completed)} / ${count(job.progress.total)} 个来源 · ${Number(job.progress.elapsed_seconds || 0).toFixed(1)} 秒`));
       }
-      if (job.error) row.append(el("p", `原因：${job.error}`, "banner error"));
+      if (job.error) row.append(el("p", failure({message:job.error}), "banner error"));
+      if (!archived && job.request.uploads) row.append(command(ctx, `edit-dataset-${job.id}`, "修改录制选择", async () => {
+        const rules = job.request.rules || {};
+        drafts.set("decision-dataset", {name:job.request.name, uploads:[...job.request.uploads],
+          complete:!!rules.complete_only, wins:!!rules.wins_only, noFailures:!!rules.no_failures_only, filters:rules.filters || {}});
+        drafts.delete("dataset-task-id"); drafts.set("dataset-tab","create"); await reload(ctx);
+      }));
       if (job.result) {
         row.append(fields([["保留决策", job.result.selected ?? job.result.records], ["训练分组", splitLabel(job.result.split_status)], ["去除重复", job.result.exact_duplicate_decisions ?? "见详情"]]));
         if (job.result.artifact_id) row.append(link("打开已生成的数据集", route("datasets", job.result.artifact_id)));
@@ -1236,7 +1318,9 @@ window.SpireProject = (() => {
         report.append(technical(job.result, "精确身份与完整报告")); row.append(report);
       }
       if (!archived && job.state === "completed" && !job.request.preview_id) row.append(command(ctx, `build-${job.id}`, "确认生成数据集", async () => {
-        await request(ctx, member("datasets"), {name:job.request.name, ...(job.request.datasets ? {datasets:job.request.datasets} : {uploads:job.request.uploads}), rules:job.request.rules, preview_id:job.id});
+        const created = await request(ctx, member("datasets"), {name:job.request.name, ...(job.request.datasets ? {datasets:job.request.datasets} : {uploads:job.request.uploads}), rules:job.request.rules, preview_id:job.id});
+        if (!live(ctx)) return;
+        if (hex(created.id,32)) drafts.set("dataset-task-id",created.id);
         await reload(ctx);
       }, {primary:true, disabled: !job.result?.selected}));
       if (!archived && job.state === "failed") row.append(command(ctx, `retry-dataset-${job.id}`, "重试此任务", async () => {
@@ -2093,7 +2177,8 @@ window.SpireProject = (() => {
       drafts.set("dataset-tab", "library");
       if (window.SpireProject.navigate) window.SpireProject.navigate("datasets");
     },
-    async render(view, identity) {
+    datasetContext: () => `${datasetTab()}:${drafts.get("dataset-task-id") || ""}`,
+    async render(view, identity, mount) {
       if (!supported.has(view)) throw new Error("unsupported_project_view");
       const nextAccount = `${identity?.principal?.subject || "anonymous"}:${identity?.principal?.role || ""}:${identity?.status || ""}`;
       if (account !== nextAccount) {
@@ -2109,6 +2194,7 @@ window.SpireProject = (() => {
         account,
         key: `${account}:${view}:${location.search}`,
         identity,
+        search: location.search,
         scope: scope(),
       };
       current = ctx;
@@ -2117,7 +2203,7 @@ window.SpireProject = (() => {
         return await {
           members: admin,
           statistics,
-          datasets: decisionDatasets,
+          datasets: ctx => decisionDatasets(ctx, mount),
           games: gamesPage,
           downloads: exportsPage,
           research,
