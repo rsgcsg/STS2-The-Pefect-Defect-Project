@@ -397,3 +397,57 @@ def test_failed_profile_does_not_reclassify_owner_receipt(tmp_path: Path) -> Non
     assert stats["collection_profiles"]["records"] is None
     assert stats["collection_profiles"]["profiles_missing"] == 1
     assert stats["metrics"]["real_failures"]["value"] is None
+
+
+def test_large_dataset_export_checks_each_manifest_once_per_request(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from collections import Counter
+
+    owner = service(tmp_path)
+    exports = ExportService(owner)
+    inputs = [
+        received(owner, str(i).encode(), number=i + 1, content_id=f"{i + 1:064x}")
+        for i in range(20)
+    ]
+    payload = owner.store.put_payload("records", io.BytesIO(b"exact dataset bytes"))
+    dataset = Manifest("dataset", owner.producer, payloads=(payload,), parents=tuple(
+        Parent(f"source_{i}", source.artifact_id) for i, (_, source) in enumerate(inputs)
+    ))
+    owner.store.publish(dataset)
+    calls = Counter()
+    original = owner.store.get_manifest
+
+    def counted(identity):
+        calls[identity] += 1
+        assert calls[identity] == 1, "repeated lineage read within one export request"
+        return original(identity)
+
+    monkeypatch.setattr(owner.store, "get_manifest", counted)
+    selected = exports.create(MEMBER, request(artifacts=[{
+        "artifact_id": dataset.artifact_id, "roles": ["records"],
+    }]))
+    assert len(calls) == 21
+    calls.clear()
+    assert exports.read(MEMBER, selected["export_id"]) == selected
+    assert len(calls) == 21
+    calls.clear()
+    item = next(f for f in selected["files"] if f["role"] == "records")
+    _, content = exports.payload(MEMBER, selected["export_id"], item["file_id"])
+    assert b"".join(content) == b"exact dataset bytes"
+    assert len(calls) == 21
+    # No authorization result survives a request; a later withdrawal takes effect
+    # even though the immutable inventory already exists.
+    exports.collections.set_collection_access(
+        inputs[-1][0], approved=False, evidence_ref="e" * 64, actor="owner",
+    )
+    for operation in [
+        lambda: exports.read(MEMBER, selected["export_id"]),
+        lambda: exports.payload(MEMBER, selected["export_id"], item["file_id"]),
+        lambda: exports.create(MEMBER, request(artifacts=[{
+            "artifact_id": dataset.artifact_id, "roles": ["records"],
+        }])),
+    ]:
+        calls.clear()
+        with pytest.raises(BoundaryError, match="source_sharing_not_established"):
+            operation()

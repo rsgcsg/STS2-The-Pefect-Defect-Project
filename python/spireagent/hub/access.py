@@ -69,7 +69,8 @@ def require_artifact_access(
     project_member: bool = False,
     payload_role: str | None = None,
     store: ArtifactStore | None = None,
-) -> None:
+) -> tuple[Manifest, ...]:
+    """Authorize once and return the exact checked closure for the request owner."""
     allowed = PROJECT_KINDS if project_member else RESULT_KINDS
     if manifest.kind not in allowed:
         raise BoundaryError("hub", "unauthorized")
@@ -80,3 +81,4 @@ def require_artifact_access(
         raise BoundaryError("hub", "unauthorized")
     if payload_role is not None:
         manifest.payload(payload_role)
+    return nodes
