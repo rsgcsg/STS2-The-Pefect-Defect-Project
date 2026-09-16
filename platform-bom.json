@@ -27,9 +27,9 @@
       "component_source_digest_sha256": "35a534d6b60b46f375acd7ba005d93c72dd543493f190c517847d5c89a376b9f"
     },
     "evidence": {
-      "source_revision": "c2d365529685b1d7b46869a9043b72d96e819f9c",
-      "component_tree_revision": "37c1e5fdf0216141f93c2d1e4afbf971f474e9c9",
-      "component_source_digest_sha256": "04f333517cc59991f33617641821ea2e4dd2fc7e569f038bc0fd35cabf510bc3",
+      "source_revision": "48903212adff7700a333701d2e4e4a03938a9f30",
+      "component_tree_revision": "edb6e61dda43f0990e92d8b7a59e034b1d8c49a1",
+      "component_source_digest_sha256": "ca9fdfb37b0a288d479e7f437e3251bf0a3ceaa41ec41af1e50dfbd86b84ca06",
       "version": "0.1.0-rc.9"
     },
     "policy_runtime": {

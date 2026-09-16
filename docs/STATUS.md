@@ -92,6 +92,11 @@ unchanged; the service/account and portable delivery evidence do not widen the n
 For distribution identity use the [explicit packaging metadata correction](evidence/B_WORKFLOW_PACKAGING_IDENTITY_CORRECTION_2026-09-13.md); the older baseline
 BOM digest and private tool-source label were incorrect. Original bytes remain unchanged.
 
+The [Windows CollectionTool inventory repair](evidence/WINDOWS_COLLECTION_TOOL_INVENTORY_REPAIR_2026-09-16.md)
+aligns fixed-tool verification with the publisher's POSIX path order. It is source/test and
+local-tool evidence only: no new Human or upload PASS is claimed, and the official kit remains
+mismatched until it is republished and pinned to the repaired Evidence source.
+
 ## External policy package candidate
 
 Policy Runtime and Platform Workbench `0.1.0-rc.3` add a standalone locked
