@@ -190,7 +190,9 @@ def build_training_input(
             "and entry_point"
         )
     if consumer["repository"] not in {
-        "rsgcsg/STS2-The-Perfect-Defect", "rsgcsg/STS2-The-Pefect-Defect-Project"
+        "rsgcsg/STS2-The-Perfect-Defect",
+        "rsgcsg/STS2-The-Pefect-Defect-Project",
+        "rsgcsg/STS2-The-Perfect-Defect-Project",
     }:
         raise TrainingHandoffError("training input has an unexpected consumer repository")
     for name in ("source_revision", "uv_lock_sha256"):

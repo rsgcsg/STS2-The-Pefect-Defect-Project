@@ -23,7 +23,7 @@ from sts2_platform_evidence.collection_tool import CollectionTool
 
 from spireagent.json_boundary import BoundaryError, decode_json, digest
 
-REPOSITORY = "https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project.git"
+REPOSITORY = "https://github.com/rsgcsg/STS2-The-Perfect-Defect-Project.git"
 LIMIT = 256 * 1024 * 1024
 TOOL_BIN = "components/annotator/src/STS2HumanAnnotator.Tool/bin/Release/net9.0/"
 STAGING = {

@@ -12,7 +12,7 @@ RUN test -n "$STPD_SOURCE_REVISION" && \
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir "uv==$UV_VERSION"
-RUN git clone https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project.git /opt/stpd
+RUN git clone https://github.com/rsgcsg/STS2-The-Perfect-Defect-Project.git /opt/stpd
 WORKDIR /opt/stpd/python
 # The clone layer can predate a new approved commit when Docker reuses its cache.
 RUN git fetch origin "$STPD_SOURCE_REVISION" && \
@@ -23,7 +23,7 @@ RUN git fetch origin "$STPD_SOURCE_REVISION" && \
       *) echo "Unknown image profile" >&2; exit 1 ;; \
     esac
 ENV STPD_IMAGE_PROFILE=$STPD_IMAGE_PROFILE
-LABEL org.opencontainers.image.source="https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project" \
+LABEL org.opencontainers.image.source="https://github.com/rsgcsg/STS2-The-Perfect-Defect-Project" \
       org.opencontainers.image.revision=$STPD_SOURCE_REVISION \
       org.spireagent.image-profile=$STPD_IMAGE_PROFILE
 ENV PYTHONDONTWRITEBYTECODE=1

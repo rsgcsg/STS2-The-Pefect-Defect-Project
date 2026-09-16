@@ -25,7 +25,6 @@ from spireagent.artifact_contracts import Manifest, Parent, Payload
 from spireagent.json_boundary import BoundaryError
 from spireagent.workbench.__main__ import main
 from spireagent.workbench.developer import (
-    PUBLIC_REPOSITORY,
     ROOT,
     ProjectConfig,
     combination,
@@ -101,8 +100,8 @@ def test_public_dependency_identity_rejects_sibling_install(monkeypatch):
     assert evidence_identity("1" * 40)["status"] == "PIN_MISMATCH"
 
 
-@pytest.fixture
-def installed_evidence(tmp_path, monkeypatch):
+@pytest.fixture(params=["Pefect", "Perfect"])
+def installed_evidence(tmp_path, monkeypatch, request):
     """A complete wheel-style identity without executing its package initializer."""
     site = tmp_path / "site-packages"
     package = site / "sts2_platform_evidence"
@@ -115,7 +114,7 @@ def installed_evidence(tmp_path, monkeypatch):
     (metadata / "direct_url.json").write_text(
         json.dumps(
             {
-                "url": PUBLIC_REPOSITORY,
+                "url": f"https://github.com/rsgcsg/STS2-The-{request.param}-Defect-Project.git",
                 "vcs_info": {"commit_id": "1" * 40},
                 "subdirectory": "components/evidence",
             }
@@ -689,3 +688,27 @@ def test_invalid_owner_config_does_not_invent_endpoint_mismatch(project, tmp_pat
     report = doctor(config)
     assert report["status"] == "BLOCKED"
     assert report["checks"]["delivery_hub"]["status"] == "NOT_CHECKED"
+
+
+@pytest.mark.parametrize("spelling", ["Pefect", "Perfect"])
+def test_repository_rename_preserves_combination_identity(tmp_path, spelling):
+    value = combination()
+    value["platform_repository"] = (
+        f"https://github.com/rsgcsg/STS2-The-{spelling}-Defect-Project.git"
+    )
+    path = tmp_path / "configs/developer/combination-v1.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps(value))
+    assert combination(tmp_path) == value
+    schema = json.loads((ROOT / "schemas/developer-combination-v1.schema.json").read_bytes())
+    Draft202012Validator(schema).validate(value)
+
+
+def test_repository_rename_does_not_accept_unrelated_repository(tmp_path):
+    value = combination()
+    value["platform_repository"] = "https://github.com/other/STS2-The-Perfect-Defect-Project.git"
+    path = tmp_path / "configs/developer/combination-v1.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps(value))
+    with pytest.raises(BoundaryError):
+        combination(tmp_path)

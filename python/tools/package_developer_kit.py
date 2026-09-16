@@ -33,7 +33,7 @@ supported systems, actual qualification gates and rollback before installing.
 
 Install Git, Python 3.11 with uv, Node 20+ and the collection tool's declared .NET runtime.
 Node and .NET must stay on PATH: the fixed tool uses them for native setup and packaging.
-Clone https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project.git and check out the exact
+Clone https://github.com/rsgcsg/STS2-The-Perfect-Defect-Project.git and check out the exact
 stpd_source_revision from combination.json. Model weights are not needed for collection.
 Initial Mod installation uses the same repository at the release commit. Enter python/
 and follow docs/DEVELOPER_KIT_INSTALL.md. Its install_developer_kit.py entrypoint prepares

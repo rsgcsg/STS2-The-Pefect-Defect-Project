@@ -55,8 +55,8 @@ class Refresh:
     env: dict[str, str]
 
 
-@pytest.fixture
-def refresh(tmp_path: Path) -> Refresh:
+@pytest.fixture(params=["Pefect", "Perfect"])
+def refresh(tmp_path: Path, request) -> Refresh:
     assert shutil.which("uv"), "the repository's supported uv bootstrap is required"
     env = {**os.environ, "UV_PYTHON": sys.executable, "UV_PYTHON_DOWNLOADS": "never"}
     origin_repo = tmp_path / "origin"
@@ -86,9 +86,17 @@ def refresh(tmp_path: Path) -> Refresh:
     old_head, old_lock = version("1.0")
     clone = tmp_path / "cached-clone"
     _run(tmp_path, "git", "clone", str(origin_repo), str(clone))
-    repository = "https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project.git"
+    repository = f"https://github.com/rsgcsg/STS2-The-{request.param}-Defect-Project.git"
     _run(clone, "git", "remote", "set-url", "origin", repository)
-    _run(clone, "git", "config", "url." + str(origin_repo) + ".insteadOf", repository)
+    for spelling in ("Pefect", "Perfect"):
+        _run(
+            clone,
+            "git",
+            "config",
+            "--add",
+            "url." + str(origin_repo) + ".insteadOf",
+            f"https://github.com/rsgcsg/STS2-The-{spelling}-Defect-Project.git",
+        )
     clone = clone / "python"
     _run(clone, "uv", "sync", "--locked", "--all-extras", "--offline", env=env)
     new_head, new_lock = version("2.0")

@@ -6,7 +6,7 @@
 
 ## 1. 你接手的是什么
 
-唯一开发仓库：<https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project>。仓库名的 `Pefect` 是实际拼写，不要自行改成 `Perfect`。
+唯一开发仓库：<https://github.com/rsgcsg/STS2-The-Perfect-Defect-Project>。旧地址中的 `Pefect` 已更正为 `Perfect`。旧安装与历史产物仍可保留原始来源，不需要重新注册或重装。
 
 云端入口：<https://hub.2-fire-2.com/app/>。已有 Hub、TLS、对象存储和备份；新成员接入现有服务，不另建一套云。
 
@@ -42,7 +42,7 @@
 
 ### 已经验证到哪里
 
-本页基线发布为 [project/2026-09-15](https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project/releases/tag/project/2026-09-15)：
+本页基线发布为 [project/2026-09-15](https://github.com/rsgcsg/STS2-The-Perfect-Defect-Project/releases/tag/project/2026-09-15)：
 
 - 已验收运行代码：`45ef463e3c13cd82db55601c122a292c37aaae2e`；集成 main/develop SHA 另见发布附件 `integration-receipt.json`。
 - 本次 macOS 真人录制 580 条 accepted，580 条 proved/canonical，81 条子选择器正确关联；0 真实失败、0 unresolved。72 条 diagnostic 保留。
@@ -112,8 +112,8 @@ gh auth login --hostname github.com --git-protocol https --web
 gh auth setup-git
 gh auth status
 
-gh repo clone rsgcsg/STS2-The-Pefect-Defect-Project
-cd STS2-The-Pefect-Defect-Project
+gh repo clone rsgcsg/STS2-The-Perfect-Defect-Project
+cd STS2-The-Perfect-Defect-Project
 git fetch origin --prune
 git switch develop
 git pull --ff-only origin develop
@@ -140,7 +140,7 @@ npm run check
 
 ### 4.1 取得正式发布并准备固定目录
 
-保留开发 clone 用于分支和 PR。从[正式发布页](https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project/releases/latest)取得 developer kit、SHA256SUMS、验收和集成回执。阅读适用 OS/游戏及更新说明。软件来源、实际运行和 main 的提交可以不同，以这份明确组合为准。
+保留开发 clone 用于分支和 PR。从[正式发布页](https://github.com/rsgcsg/STS2-The-Perfect-Defect-Project/releases/latest)取得 developer kit、SHA256SUMS、验收和集成回执。阅读适用 OS/游戏及更新说明。软件来源、实际运行和 main 的提交可以不同，以这份明确组合为准。
 
 按 [developer kit 安装指南](../python/docs/DEVELOPER_KIT_INSTALL.md)执行默认的 `plan → prepare → initialize`。输入是发布 ZIP、独立发布的一个 SHA256、永久 releases 目录，以及本机私有 project.json 路径。工具自动读取组件清单、取得精确源码、放置已发布二进制并安装锁定的根 Node、工作台 SDK 和 Python 环境。
 
@@ -236,7 +236,7 @@ git status --short --branch
 git remote -v
 git fetch origin --prune
 git rev-parse origin/develop
-gh pr list --repo rsgcsg/STS2-The-Pefect-Defect-Project
+gh pr list --repo rsgcsg/STS2-The-Perfect-Defect-Project
 git worktree add -b fix/collector/describe-problem ../SpireAgent-fix origin/develop
 cd ../SpireAgent-fix
 git rev-parse HEAD
@@ -326,7 +326,7 @@ Hub 成员身份不授权生产维护。接手运维时，负责人另外交接�
 | 云服务异常/磁盘满 | System、health、blocks/inodes、容器和备份；运维 | 无差别删数据/卷、无备份重建 |
 | SSH timeout / KVM login | 按 OPERATIONS 区分网络、主机身份、认证和救援 | 公开 SSH 日志/私钥、把邮箱 OTP 当 Unix 密码 |
 
-在[新仓库 Issues](https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project/issues)报告或更新同一根因的现有问题。当前并不承诺所有故障都会自动通知或自动建 issue；要核对采集质量和运维事件两边。公开记录只放脱敏摘要，原始人类数据和凭据留在授权私有存储。
+在[新仓库 Issues](https://github.com/rsgcsg/STS2-The-Perfect-Defect-Project/issues)报告或更新同一根因的现有问题。当前并不承诺所有故障都会自动通知或自动建 issue；要核对采集质量和运维事件两边。公开记录只放脱敏摘要，原始人类数据和凭据留在授权私有存储。
 
 可复制的问题报告：
 
@@ -353,7 +353,7 @@ session / run / decision / receipt / dataset / job ID（按相关性）：
 复制下面的说明，补充具体任务和已授权范围，不包含秘密：
 
 ```text
-唯一仓库：rsgcsg/STS2-The-Pefect-Defect-Project。
+唯一仓库：rsgcsg/STS2-The-Perfect-Defect-Project。
 我的任务：<具体目标>；非目标：<不做什么>。
 已有 GitHub / Hub 权限：<实际具备的权限>。
 允许的本地修改、部署、云操作和预算：<具体范围；没有就写没有>。

@@ -58,14 +58,22 @@ def _consumer() -> dict[str, str]:
 def _validate_manifest(manifest: dict[str, object]) -> None:
     root = Path(__file__).parents[1]
     schema = json.loads(
-        (root / "schemas" / "training-input-manifest-v1.schema.json").read_text(
-            encoding="utf-8"
-        )
+        (root / "schemas" / "training-input-manifest-v1.schema.json").read_text(encoding="utf-8")
     )
     Draft202012Validator(schema).validate(manifest)
 
 
-def test_training_input_stages_only_missing_objects_and_never_authorizes(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "repository",
+    [
+        "rsgcsg/STS2-The-Perfect-Defect",
+        "rsgcsg/STS2-The-Pefect-Defect-Project",
+        "rsgcsg/STS2-The-Perfect-Defect-Project",
+    ],
+)
+def test_training_input_stages_only_missing_objects_and_never_authorizes(
+    tmp_path: Path, repository: str
+) -> None:
     source = tmp_path / "source"
     receiver = tmp_path / "receiver"
     manifest = build_training_input(
@@ -75,7 +83,7 @@ def test_training_input_stages_only_missing_objects_and_never_authorizes(tmp_pat
         serializer_version="stpd-model-serialization-v1",
         input_profile="stpd-combat-v0-standard",
         qwen_identity=_qwen(),
-        consumer_identity=_consumer(),
+        consumer_identity={**_consumer(), "repository": repository},
     )
     training_input_id = manifest["training_input_id"]
     _validate_manifest(manifest)
