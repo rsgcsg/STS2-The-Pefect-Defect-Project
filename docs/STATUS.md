@@ -2,15 +2,16 @@
 
 ## Dataset library — application update deployed
 
-Workbench uses source `bf17e6927dcb1f3645c1baa6cac673ce9e4d2c61`; Hub uses
-`dd934ececa51bda16257013bce1deb57ef4416e6` with compact game/preview/task summaries.
-The [application acceptance](evidence/DATASET_LIBRARY_2026-09-16.md) records the
-searchable generated library, removable/restorable previews, native boundary versus
-strict sequence display, exact kit/image, member download and isolated backup restore.
-Windows PR #9 is normally integrated with Evidence rc.11; final release refs/CI are
-owned by PR #12 and its integration receipt. Native/tool bytes and prior Human
-claims are retained. The generated 814-decision dataset is downloadable but lacks
-enough independent run components for train/dev/test splitting.
+Workbench source is `fedbed097e30fb78bf0e86efff560fd8b1263c99`; Hub source is
+`3159ca2079bad2fcc369eaa2451f63420822062e`. Dataset selection has recording-date
+filters, whole-result selection, responsive navigation and direct accepted-project-data
+access. Runtime process provenance is merged without weakening game/artifact identity;
+batch workers have a separate bounded budget. See [selection evidence](evidence/DATASET_SELECTION_2026-09-16.md).
+PR17 and the release receipt own final integration, real batch and publication facts.
+New multi-runtime datasets require the corrected reader for rollback; the fedbed
+fallback retains it but can reproduce batch timeout. Native/tool bytes and original
+Human evidence remain. Windows PR9 is integrated through Evidence rc.11; defeat is
+a native terminal, separate from strict research sequence conditions.
 
 ## Previously accepted unified task flow
 

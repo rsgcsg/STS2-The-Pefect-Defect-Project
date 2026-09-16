@@ -42,7 +42,9 @@ otherwise identical environment metadata across process restarts and records sor
 Batch dataset workers have an explicit 900-second wall and 600-second CPU budget,
 separate from the single-upload 150/120-second limits. The 1.5 GiB address-space,
 256 MiB aggregate source and 100-source bounds remain. Deadline or shutdown still
-reaps the process and cleans scratch; no automatic retry is introduced.
+reaps the process and cleans scratch; no automatic retry is introduced. The single
+verification worker is shared with uploads: a long dataset can defer the next upload
+verification until the batch exits (up to its wall budget); HTTP remains responsive.
 
 Single-process reports remain byte-identical so existing dataset logical IDs and reprojection
 continue to work. Original source archives and per-decision execution identity are unchanged.
