@@ -28,18 +28,24 @@ must first be stopped/recovered before preparing a different one.
 Before `shadow`, `one_step` or `auto`, Workbench reads exact Runtime status and
 uses the game Mod's fixed loopback task bridge at `127.0.0.1:15528`:
 
-1. GET `/api/player-environment/capabilities` from the exact Connector endpoint
-   saved when launching this Runtime, then GET `/v1/tasks/status`. Their
-   `runtime_instance_id` values must agree. An already observed Runtime
-   environment must also match. A newly loaded Human Runtime has a null
-   environment: these two read-only identities establish the initial binding
-   without a gameplay tick or temporary Auto mode.
-2. If recording is not ready for a model, POST `/v1/tasks/prepare-model` once,
-   carrying observed `runtime_instance_id`, `recording_session_id` and a new
+1. Read the exact Runtime status, then GET its `/v2/environment`. Require the
+   exact `sts2.policy-runtime/environment-1` response with this immutable `run_id`,
+   the Runtime owner's fresh Connector `runtime_instance_id`, and a safe integer
+   `recovery_epoch`. Capture this epoch **before** any native preparation. A 404
+   reports `runtime_upgrade_required_for_model_control`; there is no legacy
+   Auto/Shadow/One-Step fallback. Human/Stop remain available for exact old sessions.
+2. Read capabilities from the Connector endpoint persisted when this Runtime was
+   launched. Its instance must match the Runtime environment observation. A
+   non-null cached Runtime environment must also agree. Existing `NativeTasks`
+   compares that endpoint with the game Mod's task bridge before closing anything.
+3. If recording is not ready for a model, POST `/v1/tasks/prepare-model` once,
+   carrying the observed `runtime_instance_id`, `recording_session_id` and a new
    UUID `command_id`. The native Recorder owner closes the actual recording.
-3. Continue only with `ready_for_model=true` and consistent `ready`/`closed`
-   lifecycle. Read Connector capabilities again to reject a replaced game, then
-   recheck Runtime identity before changing its mode.
+4. Continue only with `ready_for_model=true` and consistent `ready`/`closed`
+   lifecycle. Recheck the game and Runtime identity, then send the existing exact
+   Runtime run ID plus `X-STS2-Game-Instance-ID` and `X-STS2-Recovery-Epoch` on
+   every model mode and tick mutation. One-Step mode and its later tick use the
+   **same original epoch**; preparation or a late response never refreshes it.
 
 Bridge schema is `sts2.platform/task-status-1`. Pending/failed Close does not
 acquire control. A lost POST response is unknown and is never automatically
@@ -55,10 +61,23 @@ loaded afresh before model control is available. A missing/malformed endpoint,
 unsupported identity contract, mismatched game instance or unavailable Connector
 blocks model control without retrying Close or changing mode.
 
-Human/Stop immediately invalidate earlier control intents. Runtime mutations are
-serialized; recovery waits behind an already submitted mutation and is then the
-final command. An old Close or mode response cannot subsequently send Auto or
-Tick after control was returned. Stop during preparation cancels a late load.
+Human/Stop immediately invalidate earlier local control intents. Runtime mutations
+are serialized in Workbench; recovery waits behind an already submitted local
+mutation and is then the final local command. The Runtime owner additionally
+advances a shared recovery epoch when either Workbench or the in-game UI requests
+Human/Stop. A different caller's recovery therefore rejects delayed model entry
+or a follow-up tick even though Workbench's own generation did not change.
+Stop during local preparation cancels a late load.
+
+`RuntimeControlBinding` accepts only the typed game identity and safe epoch; it
+cannot override the separate immutable Runtime run header. The Runtime validates
+these facts against its own Connector and recovery state before effects. Human
+and Stop require neither game nor epoch headers, so missing native preparation
+cannot prevent recovery. Known structured owner precondition rejections are
+reported as failed non-dispatch; malformed responses and lost POST responses
+remain unknown. Neither is automatically retried. After an explicit new start
+request, a new environment observation may be obtained. Closing the page or a
+background status GET does not create another model intent.
 
 ## Finalization without a page request
 
@@ -142,7 +161,9 @@ router retains authentication and browser Origin/CSRF, then delegates publicatio
 Never put mutations into GET or page rendering.
 
 Focused regressions cover actual verifier bytes, exact native Close binding,
-pending/unknown transitions, Human recovery, background finalization, missing
+pending/unknown transitions, two-client recovery during native preparation or after
+One-Step mode, strict shared-epoch headers, old-runtime model-entry rejection with
+Human/Stop retained, background finalization, missing
 model prerequisites, explicit sharing, member/device revocation including during
 verification, invalid bytes/paths/limits, account changes, double clicks, lost
 responses and idempotent manual recovery. Portable synthetic tests do not replace

@@ -19,6 +19,7 @@ import sys
 import threading
 from collections import Counter
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 from urllib.error import HTTPError, URLError
@@ -57,6 +58,41 @@ def _loopback(url: str) -> str:
 
 
 
+@dataclass(frozen=True)
+class RuntimeControlBinding:
+    """One Runtime-owned recovery observation, never refreshed inside an intent."""
+
+    runtime_instance_id: str
+    recovery_epoch: int
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.runtime_instance_id, str)
+            or not 1 <= len(self.runtime_instance_id) <= 256
+            or any(not 33 <= ord(char) <= 126 for char in self.runtime_instance_id)
+            or type(self.recovery_epoch) is not int
+            or not 0 <= self.recovery_epoch <= 9007199254740991
+        ):
+            raise BoundaryError("local_model", "invalid_runtime_control_binding")
+
+    @classmethod
+    def from_environment(cls, value: object, expected_run: str) -> RuntimeControlBinding:
+        if (
+            not isinstance(value, dict)
+            or set(value) != {"schema", "run_id", "runtime_instance_id", "recovery_epoch"}
+            or value.get("schema") != "sts2.policy-runtime/environment-1"
+            or value.get("run_id") != expected_run
+        ):
+            raise BoundaryError("local_model", "runtime_environment_unavailable_or_identity_drift")
+        return cls(value["runtime_instance_id"], value["recovery_epoch"])
+
+    def headers(self) -> dict[str, str]:
+        return {
+            "X-STS2-Game-Instance-ID": self.runtime_instance_id,
+            "X-STS2-Recovery-Epoch": str(self.recovery_epoch),
+        }
+
+
 class RuntimeClient:
     """Bounded loopback transport. A lost POST response is always uncertain."""
 
@@ -65,18 +101,32 @@ class RuntimeClient:
         self.startup = startup
         self.opener = build_opener(ProxyHandler({}), NoRedirect())
 
-    def request(self, route: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
-        if route not in {"/status", "/mode", "/tick", "/stop"}:
+    def request(
+        self, route: str, body: dict[str, Any] | None = None,
+        *, binding: RuntimeControlBinding | None = None,
+    ) -> dict[str, Any]:
+        if (
+            route not in {"/status", "/environment", "/mode", "/tick", "/stop"}
+            or (route == "/environment" and body is not None)
+            or (binding is not None and (body is None or route not in {"/mode", "/tick"}))
+        ):
             raise BoundaryError("local_model", "invalid_runtime_route")
         headers = {"Accept": "application/json", "Content-Type": "application/json"}
         if body is not None:
             # The endpoint can be reused by a different Runtime process between
             # observation and dispatch. The server must reject before any effect.
             headers["X-STS2-Policy-Run-ID"] = self.startup["run_id"]
+            if binding is not None:
+                headers.update(binding.headers())
         request = Request(
-            self.address + ("/v2" if body is not None else "") + route,
+            self.address + ("/v2" if body is not None or route == "/environment" else "") + route,
             data=canonical_json(body).encode() if body is not None else None,
             headers=headers,
+        )
+        fallback = (
+            "runtime_command_unknown" if body is not None else
+            "runtime_environment_unavailable_or_identity_drift" if route == "/environment" else
+            "runtime_status_unavailable_or_identity_drift"
         )
         try:
             with self.opener.open(request, timeout=45 if body is not None else 2) as response:
@@ -84,19 +134,47 @@ class RuntimeClient:
             if len(raw) > JSON_LIMIT:
                 raise ValueError
             value = decode_json(raw)
+            if route == "/environment":
+                RuntimeControlBinding.from_environment(value, self.startup["run_id"])
+                return cast(dict[str, Any], value)
             expected = "sts2.policy-runtime/http-2" + ("/tick-1" if route == "/tick" else "")
             if not isinstance(value, dict) or value.get("schema") != expected:
                 raise ValueError
-            status = value.get("status")
-            self.validate_status(status)
+            self.validate_status(value.get("status"))
             return value
-        except (HTTPError, URLError, OSError, ValueError, TypeError, BoundaryError):
-            raise BoundaryError(
-                "local_model",
-                "runtime_command_unknown"
-                if body is not None
-                else "runtime_status_unavailable_or_identity_drift",
-            ) from None
+        except HTTPError as error:
+            if route == "/environment" and error.code == 404:
+                raise BoundaryError(
+                    "local_model", "runtime_upgrade_required_for_model_control"
+                ) from None
+            # Only known owner precondition rejections establish non-dispatch.
+            # An unstructured response or any transport failure remains unknown.
+            rejection_code = None
+            try:
+                raw = error.read(JSON_LIMIT + 1)
+                if len(raw) > JSON_LIMIT:
+                    raise ValueError
+                rejected = decode_json(raw)
+                code = rejected.get("error") if isinstance(rejected, dict) else None
+                allowed = {
+                    409: {"runtime_game_mismatch", "runtime_recovery_epoch_mismatch"},
+                    428: {
+                        "runtime_game_precondition_required",
+                        "runtime_recovery_precondition_required",
+                    },
+                    503: {"runtime_environment_unavailable"},
+                }
+                if (
+                    isinstance(rejected, dict) and set(rejected) == {"schema", "error"}
+                    and rejected["schema"] == "sts2.policy-runtime/http-2"
+                    and isinstance(code, str) and code in allowed.get(error.code, set())
+                ):
+                    rejection_code = code
+            except (OSError, ValueError, TypeError):
+                pass
+            raise BoundaryError("local_model", rejection_code or fallback) from None
+        except (URLError, OSError, ValueError, TypeError, BoundaryError):
+            raise BoundaryError("local_model", fallback) from None
 
     def validate_status(self, status: object) -> None:
         if not isinstance(status, dict):
@@ -410,6 +488,12 @@ class LocalModelService:
                                 "runtime_connector_binding_required",
                                 "connector_identity_unavailable",
                                 "recording_close_pending_or_failed",
+                                "runtime_upgrade_required_for_model_control",
+                                "runtime_environment_unavailable_or_identity_drift",
+                                "runtime_environment_unavailable", "runtime_game_mismatch",
+                                "runtime_recovery_epoch_mismatch",
+                                "runtime_game_precondition_required",
+                                "runtime_recovery_precondition_required",
                             }
                             self.state.update(
                                 status="command_unknown"
@@ -507,13 +591,19 @@ class LocalModelService:
                 raise BoundaryError("local_model", "command_superseded")
 
     def _send_control(
-        self, client: RuntimeClient, route: str, body: dict[str, Any], intent: int
+        self, client: RuntimeClient, route: str, body: dict[str, Any], intent: int,
+        binding: RuntimeControlBinding | None = None,
     ) -> dict[str, Any]:
         # Recovery invalidates old intents immediately, then queues behind any
         # submitted effect. This guarantees the final command returns control.
         with self.control_send_lock:
             self._require_intent(intent)
-            value = client.request(route, body)
+            if binding is None and (route == "/tick" or (
+                route == "/mode" and body.get("mode") != "human"
+            )):
+                raise BoundaryError("local_model", "runtime_recovery_precondition_required")
+            value = (client.request(route, body, binding=binding)
+                     if binding is not None else client.request(route, body))
             self._require_intent(intent)
             return value
 
@@ -684,19 +774,36 @@ class LocalModelService:
             # Observe exact instance before every mutation; never address a new
             # process that reused the same port after our owned process exited.
             observation = client.request("/status")["status"]
+            binding = None
             if action in {"shadow", "one_step", "auto"}:
                 self._require_intent(intent)
-                native = self.native_tasks.prepare_model(observation, connector_endpoint)
-                # The native Close request cannot authorize a replacement Runtime.
+                bound_endpoint = NativeTasks.bound_connector(connector_endpoint)
+                binding = RuntimeControlBinding.from_environment(
+                    client.request("/environment"), observation["run_id"]
+                )
+                # Capture the shared Runtime epoch before native preparation.
+                # A recovery from either UI invalidates this exact observation;
+                # never refresh its epoch to make a stale intent eligible again.
+                instance = self.native_tasks.connector_instance(bound_endpoint)
+                if instance != binding.runtime_instance_id:
+                    raise BoundaryError("local_model", "runtime_game_mismatch")
+                NativeTasks.confirm_runtime(observation, binding.runtime_instance_id)
+                self._require_intent(intent)
+                native = self.native_tasks.prepare_model(observation, bound_endpoint)
+                if native["runtime_instance_id"] != binding.runtime_instance_id:
+                    raise BoundaryError("local_model", "runtime_game_mismatch")
+                # Native Close cannot authorize a replacement Runtime or game.
                 latest = client.request("/status")["status"]
-                NativeTasks.confirm_runtime(latest, native["runtime_instance_id"])
+                NativeTasks.confirm_runtime(latest, binding.runtime_instance_id)
             if action == "stop":
                 runtime = self._send_control(client, "/stop", {}, intent)["status"]
             else:
-                runtime = self._send_control(client, "/mode", {"mode": action}, intent)["status"]
+                runtime = self._send_control(
+                    client, "/mode", {"mode": action}, intent, binding
+                )["status"]
                 if action == "one_step":
                     runtime = self._send_control(
-                        client, "/tick", {"max_ticks": 1}, intent
+                        client, "/tick", {"max_ticks": 1}, intent, binding
                     )["status"]
             with self.lock:
                 self._require_intent(intent)

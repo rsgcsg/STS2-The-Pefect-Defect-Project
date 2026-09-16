@@ -13,7 +13,11 @@ from spireagent.artifact_contracts import Manifest, Producer
 from spireagent.json_boundary import BoundaryError, FrozenObject
 from spireagent.workbench import local_models
 from spireagent.workbench.developer import ProjectConfig, combination
-from spireagent.workbench.local_models import LocalModelService, RuntimeClient
+from spireagent.workbench.local_models import (
+    LocalModelService,
+    RuntimeClient,
+    RuntimeControlBinding,
+)
 from stpd.canonical import canonical_json
 from stpd.policy import installation
 
@@ -22,6 +26,8 @@ from stpd.policy import installation
 def service(tmp_path, monkeypatch):
     config = ProjectConfig(tmp_path, "", "", None, combination())
     result = LocalModelService(config)
+    result.state["connector_endpoint"] = "http://127.0.0.1:19191"
+    monkeypatch.setattr(result.native_tasks, "connector_instance", lambda _: "game-1")
     # Synthetic native acceptance isolates the Runtime transport tests. The actual
     # bridge and fail-closed handoff have their own wire-level regression suite.
     monkeypatch.setattr(
@@ -70,11 +76,22 @@ def status():
     }
 
 
+def environment(epoch=0, instance="game-1"):
+    return {
+        "schema": "sts2.policy-runtime/environment-1",
+        "run_id": startup()["run_id"],
+        "runtime_instance_id": instance,
+        "recovery_epoch": epoch,
+    }
+
+
 @pytest.fixture
 def runtime_http(request):
     legacy = getattr(request, "param", "current") == "legacy"
     state = status()
     requests = []
+    headers = []
+    control = {"epoch": 0, "instance": "game-1", "environment_available": True, "ticks": 0}
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_):
@@ -82,11 +99,19 @@ def runtime_http(request):
 
         def do_GET(self):
             requests.append((self.path, None))
+            if self.path == "/v2/environment":
+                if legacy or not control["environment_available"]:
+                    self.reject(404, "not_found")
+                    return
+                self.respond({**environment(control["epoch"], control["instance"]),
+                              "run_id": state["run_id"]})
+                return
             self.respond()
 
         def do_POST(self):
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             requests.append((self.path, body))
+            headers.append((self.path, body, dict(self.headers)))
             prefix = "" if legacy else "/v2"
             if self.path not in {prefix + route for route in ("/mode", "/tick", "/stop")}:
                 self.send_response(404)
@@ -99,15 +124,36 @@ def runtime_http(request):
                 self.end_headers()
                 return
             route = self.path.removeprefix(prefix) if prefix else self.path
+            recovering = route == "/stop" or (route == "/mode" and body.get("mode") == "human")
+            if recovering:
+                control["epoch"] += 1
+            elif not legacy:
+                if self.headers.get("X-STS2-Game-Instance-ID") != control["instance"]:
+                    self.reject(409, "runtime_game_mismatch")
+                    return
+                if self.headers.get("X-STS2-Recovery-Epoch") != str(control["epoch"]):
+                    self.reject(409, "runtime_recovery_epoch_mismatch")
+                    return
             if route == "/mode":
                 state["mode"] = body["mode"]
             if route == "/tick":
+                control["ticks"] += 1
                 state["mode"] = "human"
             if route == "/stop":
                 state["lifecycle"] = "stopped"
+            if route == "/mode" and body.get("mode") == "one_step" and control.get("mode_entered"):
+                control["mode_entered"].set()
+                assert control["release_mode_response"].wait(timeout=3)
             self.respond()
 
-        def respond(self):
+        def reject(self, code, error):
+            raw = json.dumps({"schema": "sts2.policy-runtime/http-2", "error": error}).encode()
+            self.send_response(code)
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def respond(self, override=None):
             value = {
                 "schema": "sts2.policy-runtime/http-1" if legacy else "sts2.policy-runtime/http-2",
                 "status": state,
@@ -115,7 +161,7 @@ def runtime_http(request):
             if self.path in {"/tick", "/v2/tick"}:
                 value["schema"] += "/tick-1"
                 value["results"] = []
-            raw = json.dumps(value).encode()
+            raw = json.dumps(override if override is not None else value).encode()
             self.send_response(200)
             self.send_header("Content-Length", str(len(raw)))
             self.end_headers()
@@ -125,7 +171,10 @@ def runtime_http(request):
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        yield RuntimeClient(f"http://127.0.0.1:{server.server_port}", startup()), state, requests
+        client = RuntimeClient(f"http://127.0.0.1:{server.server_port}", startup())
+        client.fixture_control = control
+        client.fixture_headers = headers
+        yield client, state, requests
     finally:
         server.shutdown()
         server.server_close()
@@ -344,11 +393,11 @@ def test_lost_tick_response_is_unknown_and_never_retried(service):
     class LostResponse:
         calls = []
 
-        def request(self, route, body=None):
+        def request(self, route, body=None, *, binding=None):
             self.calls.append((route, body))
             if route == "/tick":
                 raise BoundaryError("local_model", "runtime_command_unknown")
-            return {"status": status()}
+            return environment() if route == "/environment" else {"status": status()}
 
     client = LostResponse()
     service.client = client
@@ -367,12 +416,12 @@ def test_human_handoff_can_be_requested_while_tick_pending(service):
     calls = []
 
     class BlockingRuntime:
-        def request(self, route, body=None):
+        def request(self, route, body=None, *, binding=None):
             calls.append((route, body))
             if route == "/tick":
                 started.set()
                 assert release.wait(timeout=3)
-            return {"status": status()}
+            return environment() if route == "/environment" else {"status": status()}
 
     service.client = BlockingRuntime()
     service.state.update(status="loaded", loaded=True)
@@ -626,7 +675,7 @@ def test_finalization_is_background_and_verifies_exact_bytes_not_page_read(servi
     calls = []
 
     class Finalized:
-        def request(self, route, body=None):
+        def request(self, route, body=None, *, binding=None):
             calls.append((route, body))
             return {"status": {**status(), "lifecycle": "stopped"}}
 
@@ -674,9 +723,9 @@ def test_human_cancels_old_intent_while_native_close_is_pending(service, monkeyp
     calls = []
 
     class Runtime:
-        def request(self, route, body=None):
+        def request(self, route, body=None, *, binding=None):
             calls.append((route, body))
-            return {"status": status()}
+            return environment() if route == "/environment" else {"status": status()}
 
     def native_close(_, connector_endpoint):
         entered.set()
@@ -703,12 +752,12 @@ def test_human_during_step_mode_response_prevents_late_tick(service):
     calls = []
 
     class Runtime:
-        def request(self, route, body=None):
+        def request(self, route, body=None, *, binding=None):
             calls.append((route, body))
             if body == {"mode": "one_step"}:
                 entered.set()
                 assert release.wait(timeout=3)
-            return {"status": status()}
+            return environment() if route == "/environment" else {"status": status()}
 
     service.client = Runtime()
     service.state.update(status="loaded", loaded=True)
@@ -743,3 +792,193 @@ def test_stop_while_loading_cancels_late_start_without_waiting_for_readiness(ser
     for thread in service.threads:
         thread.join(timeout=2)
     assert calls == [] and service.state["status"] == "stopped"
+
+
+def test_environment_observation_and_control_headers_bind_one_runtime_owner(service, runtime_http):
+    client, _, requests = runtime_http
+    client.fixture_control["epoch"] = 17
+    observed = client.request("/environment")
+    assert observed == environment(17)
+    service.client = client
+    service.state.update(status="loaded", loaded=True)
+    service.command("one_step")
+    assert finished(service)["operation"]["status"] == "completed"
+    writes = client.fixture_headers
+    assert [path for path, _, _ in writes] == ["/v2/mode", "/v2/tick"]
+    for _, _, headers in writes:
+        normalized = {key.lower(): value for key, value in headers.items()}
+        assert normalized["x-sts2-policy-run-id"] == startup()["run_id"]
+        assert normalized["x-sts2-game-instance-id"] == "game-1"
+        assert normalized["x-sts2-recovery-epoch"] == "17"
+    assert all(path != "/environment" for path, _ in requests)
+
+
+@pytest.mark.parametrize("epoch", [-1, True, 1.5, "1", None, 9007199254740992])
+def test_control_binding_rejects_non_decimal_or_unsafe_epochs(epoch):
+    with pytest.raises(BoundaryError, match="invalid_runtime_control_binding"):
+        RuntimeControlBinding.from_environment(environment(epoch), startup()["run_id"])
+
+
+@pytest.mark.parametrize("identity", ["", "game\r\nInjected: yes", "has space", "x" * 257, None])
+def test_control_binding_cannot_inject_arbitrary_http_headers(identity):
+    with pytest.raises(BoundaryError, match="invalid_runtime_control_binding"):
+        RuntimeControlBinding(identity, 0)
+
+
+def test_environment_binding_is_exact_shape_and_run():
+    for value in [
+        {**environment(), "run_id": "another-runtime"},
+        {**environment(), "unexpected": True},
+        {**environment(), "schema": "future-unrecognized"},
+        {key: value for key, value in environment().items() if key != "recovery_epoch"},
+    ]:
+        with pytest.raises(BoundaryError, match="identity_drift"):
+            RuntimeControlBinding.from_environment(value, startup()["run_id"])
+
+
+@pytest.mark.parametrize("action", ["shadow", "one_step", "auto"])
+def test_old_runtime_requires_upgrade_before_native_close_but_recovery_still_works(
+    service, runtime_http, monkeypatch, action,
+):
+    client, runtime, requests = runtime_http
+    client.fixture_control["environment_available"] = False
+    closed = []
+    monkeypatch.setattr(service.native_tasks, "prepare_model", lambda *args: closed.append(args))
+    service.client = client
+    service.state.update(status="loaded", loaded=True)
+    service.command(action)
+    report = finished(service)
+    assert report["error_code"] == "runtime_upgrade_required_for_model_control"
+    assert report["operation"]["status"] == "failed" and report["loaded"] is True
+    assert closed == [] and not any(body is not None for _, body in requests)
+    service.command("human")
+    assert finished(service)["operation"]["status"] == "completed"
+    monkeypatch.setattr(service, "_evaluation_handoff", lambda: None)
+    service.command("stop")
+    assert finished(service)["status"] == "stopped"
+    assert runtime["lifecycle"] == "stopped"
+    for _, _, headers in client.fixture_headers:
+        assert not any(key.lower() == "x-sts2-recovery-epoch" for key in headers)
+
+
+def test_runtime_actual_connector_must_match_saved_endpoint_before_native_close(
+    service, runtime_http, monkeypatch,
+):
+    client, _, requests = runtime_http
+    client.fixture_control["instance"] = "other-game"
+    closed = []
+    monkeypatch.setattr(service.native_tasks, "prepare_model", lambda *args: closed.append(args))
+    service.client = client
+    service.state.update(status="loaded", loaded=True)
+    service.command("auto")
+    assert finished(service)["error_code"] == "runtime_game_mismatch"
+    assert closed == [] and not any(body is not None for _, body in requests)
+
+
+@pytest.mark.parametrize("action", ["auto", "shadow", "one_step"])
+@pytest.mark.parametrize("recovery", ["human", "stop"])
+def test_other_ui_recovery_during_native_prepare_rejects_late_model_mode(
+    service, runtime_http, monkeypatch, action, recovery,
+):
+    client, runtime, requests = runtime_http
+    entered, release = threading.Event(), threading.Event()
+
+    def prepare(_status, endpoint):
+        assert endpoint == "http://127.0.0.1:19191"
+        entered.set()
+        assert release.wait(timeout=3)
+        return {"runtime_instance_id": "game-1", "ready_for_model": True}
+
+    monkeypatch.setattr(service.native_tasks, "prepare_model", prepare)
+    service.client = client
+    service.state.update(status="loaded", loaded=True)
+    service.command(action)
+    assert entered.wait(timeout=2)
+    # Independent in-game UI client: no call into service.command or its local
+    # generation. The shared Runtime owner alone invalidates the stale intent.
+    other_ui = RuntimeClient(client.address, startup())
+    if recovery == "human":
+        other_ui.request("/mode", {"mode": "human"})
+    else:
+        other_ui.request("/stop", {})
+    release.set()
+    result = finished(service)
+    assert result["error_code"] == "runtime_recovery_epoch_mismatch"
+    assert result["operation"]["status"] == "failed"
+    assert runtime["mode"] == "human" and client.fixture_control["ticks"] == 0
+    assert sum(body == {"mode": action} for _, body in requests) == 1
+    attempted = next(
+        headers for _, body, headers in client.fixture_headers if body == {"mode": action}
+    )
+    assert {key.lower(): value for key, value in attempted.items()}["x-sts2-recovery-epoch"] == "0"
+    assert client.fixture_control["epoch"] == 1  # the old intent did not refresh and retry
+
+
+@pytest.mark.parametrize("recovery", ["human", "stop"])
+def test_other_ui_recovery_after_one_step_mode_rejects_late_tick(
+    service, runtime_http, recovery,
+):
+    client, runtime, requests = runtime_http
+    entered, release = threading.Event(), threading.Event()
+    client.fixture_control.update(mode_entered=entered, release_mode_response=release)
+    service.client = client
+    service.state.update(status="loaded", loaded=True)
+    service.command("one_step")
+    assert entered.wait(timeout=2)
+    other_ui = RuntimeClient(client.address, startup())
+    if recovery == "human":
+        other_ui.request("/mode", {"mode": "human"})
+    else:
+        other_ui.request("/stop", {})
+    release.set()
+    result = finished(service)
+    assert result["error_code"] == "runtime_recovery_epoch_mismatch"
+    assert result["operation"]["status"] == "failed"
+    assert client.fixture_control["ticks"] == 0
+    assert sum(path == "/v2/tick" for path, _ in requests) == 1
+    assert runtime["lifecycle"] == ("stopped" if recovery == "stop" else "running")
+    if recovery == "human":
+        assert runtime["mode"] == "human"
+
+
+def test_mutation_dispatch_never_omits_shared_binding_for_model_commands(service, runtime_http):
+    client, _, requests = runtime_http
+    for route, body in [("/mode", {"mode": "auto"}), ("/tick", {"max_ticks": 1})]:
+        with pytest.raises(BoundaryError, match="runtime_recovery_precondition_required"):
+            service._send_control(client, route, body, service.intent_generation)
+    assert requests == []
+
+
+@pytest.mark.parametrize(
+    "http_code,payload,expected", [
+        (409, {"schema": "sts2.policy-runtime/http-2", "error": "runtime_game_mismatch"},
+         "runtime_game_mismatch"),
+        (409, {"schema": "sts2.policy-runtime/http-2", "error": "runtime_recovery_epoch_mismatch"},
+         "runtime_recovery_epoch_mismatch"),
+        (503, {"schema": "sts2.policy-runtime/http-2", "error": "runtime_environment_unavailable"},
+         "runtime_environment_unavailable"),
+        (409, {"schema": "other", "error": "runtime_recovery_epoch_mismatch"},
+         "runtime_command_unknown"),
+        (409, {"schema": "sts2.policy-runtime/http-2", "error": "runtime_recovery_epoch_mismatch",
+               "unrecognized": True}, "runtime_command_unknown"),
+        (409, {"schema": "sts2.policy-runtime/http-2", "error": "runtime_run_mismatch"},
+         "runtime_command_unknown"),
+    ],
+)
+def test_only_recognized_owner_precondition_rejection_is_known_not_dispatched(
+    monkeypatch, http_code, payload, expected,
+):
+    from urllib.error import HTTPError
+
+    client = RuntimeClient("http://127.0.0.1:15527", startup())
+    calls = []
+
+    def reject(request, **_):
+        calls.append(request)
+        raise HTTPError(request.full_url, http_code, "rejected", {},
+                        io.BytesIO(json.dumps(payload).encode()))
+
+    monkeypatch.setattr(client.opener, "open", reject)
+    with pytest.raises(BoundaryError, match=expected):
+        client.request("/mode", {"mode": "auto"}, binding=RuntimeControlBinding("game-1", 0))
+    assert len(calls) == 1
