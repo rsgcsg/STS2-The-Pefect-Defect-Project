@@ -5,7 +5,7 @@ Platform components, `python/spireagent` applications and `python/stpd` research
 share root governance, one local/cloud console and one Hub membership authority.
 
 Workbench source is `fedbed097e30fb78bf0e86efff560fd8b1263c99`; Hub source is
-`3159ca2079bad2fcc369eaa2451f63420822062e`. Dataset selection has recording-date
+`c15542681aa0b58ed178f16cc9d7543a03ebe969`. Dataset selection has recording-date
 filters, whole-result selection, responsive navigation and direct accepted-project-data
 access. Runtime process provenance is merged without weakening game/artifact identity;
 batch workers have a separate bounded budget. See [selection evidence](../evidence/DATASET_SELECTION_2026-09-16.md).

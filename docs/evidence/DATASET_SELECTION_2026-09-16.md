@@ -31,10 +31,18 @@ Dataset workers now have separate 900s wall / 600s CPU budgets; upload 150/120s,
 1.5GiB address space, 256MiB aggregate source bytes and 100-source cap remain.
 No automatic retry or unbounded worker is introduced.
 
+A subsequent twenty-source attempt verified all sources but exited with a resource/process
+failure after its last progress at 432.327s; the exact OS cause was not established.
+Code review found that coverage re-read and decoded every archive after preview had
+already verified it. Coverage now consumes those same verified projections during the
+first traversal, preserving source order and overlap handling. A regression rejects any
+second source read/resolve and compares the complete coverage output. Final access and
+content checks remain; neither selection reports nor logical IDs include this observer.
+
 ## Exact source, tests and deployed observations
 
-Full root `npm run check` at `3159ca2079bad2fcc369eaa2451f63420822062e` passed:
-987 Python tests, 3 skipped, 21 subtests; 70 console/identity regressions, component,
+Full root `npm run check` at `c15542681aa0b58ed178f16cc9d7543a03ebe969` passed:
+988 Python tests, 3 skipped, 21 subtests; 70 console/identity regressions, component,
 type, package and CPU E2E checks. Focused tests exercise unchanged golden legacy
 identity, nested union/reload/cache, genuine conflicts, missing grants, withdrawals,
 worker receipt rejection, no storage calls on HTTP task reads and concurrent logout.
@@ -47,11 +55,11 @@ was installed through managed prepare/initialize in a permanent independent chec
 Existing composition, profile, credentials, consent, native Tool and queue remain.
 Doctor and delivery preflight pass. Desktop launch points to the new source.
 
-Hub source `3159ca2079bad2fcc369eaa2451f63420822062e`, image
-`ghcr.io/rsgcsg/spireagent-hub@sha256:6c030c2b55a446aa378e94d7f8965988bc391896075399d71a7afba650b2ecc3`,
+Hub source `c15542681aa0b58ed178f16cc9d7543a03ebe969`, image
+`ghcr.io/rsgcsg/spireagent-hub@sha256:d7bb89868a05f4a4053026ade5dd3a992dbd70f23bcb21dec71274b83c571fff`,
 lock `44b53f0184ef8ea612eb50550f35f81e32456ba93fb2cf80c336157d41778bd5`,
 uses the existing same-schema owner rollout. Exact plan
-`2016343ca38286741dcc8b21e9958d9ee40296193d1a00e5fcf513ffb3899a19`
+`8aa6139c7947fce3ffd6dbc5bff232acf2c428a8c93cf6dbe83d8d06a1daf829`
 verified producer, capacity, matching-image fresh backup and unchanged schema.
 The earlier attempt was correctly refused until a current-image backup existed;
 no check was bypassed. TLS/state mounts and zero-budget paused compute remain.
@@ -68,7 +76,9 @@ passed isolated paused restore, SHA256
 `006b7f1296485fbae1d183c02235e410fe0eef3349d5273f9928d7f1a064b714`.
 Immediate pre-batch-image backup
 `fb6bd559eacb0c8f2176ce1b27bd528b37ac68620f3edb91ea6c4e6f3b516b24`
-was verified off-host with the then-current fedbed image.
+was verified off-host with the then-current fedbed image. The immediate pre-one-pass
+backup `7742bcbc1cd99001a8d768ae22757d404934b252db9a5a185d4c13e71f6cff4a`
+matched the prior 3159 image; the rollout verified that receipt before applying c155.
 
 ## Rollback and non-claims
 
