@@ -10,6 +10,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../PlatformLiveActionFeed.cs" Link="PlatformLiveActionFeed.cs" />
+    <Compile Include="../PlatformPolicyCommands.cs" Link="PlatformPolicyCommands.cs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
