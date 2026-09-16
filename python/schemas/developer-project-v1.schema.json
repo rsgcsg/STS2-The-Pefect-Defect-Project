@@ -33,7 +33,8 @@
         "platform_repository": {
           "enum": [
             "https://github.com/rsgcsg/STS2-AI-PLATFORM.git",
-            "https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project.git"
+            "https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project.git",
+            "https://github.com/rsgcsg/STS2-The-Perfect-Defect-Project.git"
           ]
         },
         "platform_source_revision": {

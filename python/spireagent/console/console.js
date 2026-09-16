@@ -863,7 +863,10 @@ function system(data) {
     capacity = storage.capacity || {};
   evidenceBody.append(
     facts([
-      ["Source", identity.source_revision],
+      [local ? "本机工作台来源" : "Hub 来源", identity.source_revision],
+      ...(local ? [["Hub 来源", data.cloud?.producer?.source_revision]] : []),
+      ["更新规则", "来源不同不等于不兼容；按实际接口和所需功能决定更新"],
+      ["推荐版本", "查看正式发布说明；不会随 main 自动安装"],
       ["依赖锁", identity.uv_lock_sha256],
       ["查询时间", date(data.observed_at)],
       ["计算预算", number(compute.budget_units)],
@@ -883,6 +886,11 @@ function system(data) {
       ],
     ]),
   );
+  evidenceBody.append(link(
+    "正式发布、支持范围与升级说明 ↗",
+    "https://github.com/rsgcsg/STS2-The-Perfect-Defect-Project/releases",
+    true,
+  ));
   evidence.append(evidenceBody);
   grid.append(evidence);
   fragment.append(grid);

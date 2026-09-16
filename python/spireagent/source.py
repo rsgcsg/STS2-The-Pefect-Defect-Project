@@ -9,7 +9,10 @@ from pathlib import Path
 from .artifact_contracts import Producer
 from .json_boundary import BoundaryError
 
-REPOSITORY = "rsgcsg/STS2-The-Pefect-Defect-Project"
+REPOSITORY = "rsgcsg/STS2-The-Perfect-Defect-Project"
+# Exact rename alias, not a wildcard or a rewrite of historical producer facts.
+REPOSITORY_ALIASES = (REPOSITORY, "rsgcsg/STS2-The-Pefect-Defect-Project")
+REPOSITORY_URLS = tuple(f"https://github.com/{name}.git" for name in REPOSITORY_ALIASES)
 
 
 def source_identity(root: Path, *, require_clean: bool = True) -> Producer:

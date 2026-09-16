@@ -70,7 +70,7 @@ maximum of risk, claim strength, blast radius, uncertainty, and irreversibility.
 
 | Class | Typical scope | Minimum additional confidence |
 | --- | --- | --- |
-| `G0` | docs, governance, portable repository tooling | focused/project checks, root portable check, closeout, diff check |
+| `G0` | docs, governance, portable repository tooling | selected check plan (editorial only may use docs gate), closeout, diff check |
 | `G1` | portable implementation within one owner | regression, owning component suite, root portable check |
 | `G2` | public contract or cross-component behavior | `G1` plus contract/conformance and consumer compatibility |
 | `G3` | game-native C#, Harmony, Native Foundation seam | relevant `G2`, exact-game check, clean exact build, artifact identity |
@@ -360,7 +360,7 @@ people.
 
 Before recommending merge, confirm exact repo/base/latest head and overlap,
 change class and owning fact, no duplicate authority or hidden retry/backfill,
-faithful regression and lowest affected suite, root/latest-head remote gate,
+faithful regression and lowest affected suite, selected root/latest-head remote gate,
 higher evidence only when required, contract/pin/identity/docs/ADR/Skill impact,
 rollback, non-claims, and provenance-correct merge method.
 
@@ -384,3 +384,29 @@ candidate/version/SHA/artifact/license, maintenance/security/supply chain, same
 conformance result, Platform seams removed, adapter/config/runtime/performance
 cost, fallback/rollback, and verdict (`ADOPT`, `PARTIAL`, `OPTIONAL`,
 `REFERENCE_ONLY`, or `REJECT`).
+
+## Small-team delivery principles
+
+Ordinary work completes at reviewed develop integration, unless the task explicitly
+includes publication or deployment. Main is the formal publication source, not the
+running-service pointer. Batch compatible changes for an intentional release; keep
+unchanged artifacts and accepted installations pinned. Do not rebuild the system
+for an unrelated source or documentation edit.
+
+Use one existing authority per fact: game/native semantics, Connector contracts,
+Annotator evidence, Hub membership/operations, STPD research admission, immutable
+release composition and actual deployment receipts. A shared repository does not
+merge those responsibilities. Prefer existing owner APIs over a parallel ledger,
+compatibility registry, retry tracker or another service.
+
+Choose tests by risk and dependency, not line count. Behavioral bug fixes need the
+lowest-cost regression that fails on the original bug. Public changes need producer,
+consumer and error-path coverage; ordinary prose corrections need existing document
+checks, not new tests mirroring prose. Alter expectations only when the intended
+contract changes, explain why and retain archival consumers. Failed evidence stays
+failed; classify environment failures separately from assertions.
+
+The check planner is conservative automation, not permission to skip native,
+Human, security, research or release requirements. Changes to its own logic,
+contracts or governance take the full route. REVIEW the dependency effect when
+shared console, locks, identity or packaging changes. Unknown impact means full.

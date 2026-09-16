@@ -2,11 +2,11 @@
 
 适用对象：已收到 GitHub 邀请、已加入 Hub，希望参与采集、数据、模型、工程和运维的新成员，以及受其委托的 Agent。
 
-这是一份入门与任务路由指南，不建立第二套治理、部署或数据契约。操作前以当前仓库规范、代码和 exact runtime evidence 为准。发布日期快照为 2026-09-15；后续版本应重新核对，不把本页的旧 SHA 当永久安装要求。
+这是一份入门与任务路由指南，不建立第二套治理、部署或数据契约。操作前以当前仓库规范、代码和 exact runtime evidence 为准。本指南按 2026-09-16 的运行方案整理；安装时选择正式发布页的已验收组合，不把历史证据的 SHA 当永久安装要求。
 
 ## 1. 你接手的是什么
 
-唯一开发仓库：<https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project>。仓库名的 `Pefect` 是实际拼写，不要自行改成 `Perfect`。
+唯一开发仓库：<https://github.com/rsgcsg/STS2-The-Perfect-Defect-Project>。旧地址中的 `Pefect` 已更正为 `Perfect`。旧安装与历史产物仍可保留原始来源，不需要重新注册或重装。
 
 云端入口：<https://hub.2-fire-2.com/app/>。已有 Hub、TLS、对象存储和备份；新成员接入现有服务，不另建一套云。
 
@@ -42,7 +42,7 @@
 
 ### 已经验证到哪里
 
-本页基线发布为 [project/2026-09-15](https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project/releases/tag/project/2026-09-15)：
+本页基线发布为 [project/2026-09-15](https://github.com/rsgcsg/STS2-The-Perfect-Defect-Project/releases/tag/project/2026-09-15)：
 
 - 已验收运行代码：`45ef463e3c13cd82db55601c122a292c37aaae2e`；集成 main/develop SHA 另见发布附件 `integration-receipt.json`。
 - 本次 macOS 真人录制 580 条 accepted，580 条 proved/canonical，81 条子选择器正确关联；0 真实失败、0 unresolved。72 条 diagnostic 保留。
@@ -51,6 +51,8 @@
 - 没有因此宣称所有角色/版本/稀有路径都已验证，也没有模型质量或 GPU 训练资格。当前 compute budget 为 0；没有新的预算授权时不启动 GPU 或收费任务。
 
 详见 [迁移与默认流程](MONOREPO_MIGRATION.md) 和 [真人证据](evidence/MONOREPO_HUMAN_GATE_2026-09-15.md)。历史证据不改名、不补写成新版本证据。
+
+最新运行方案另见 [方案二验收](evidence/OPERATING_FLOW_2026-09-16.md)。上面的迁移数字是历史证据，不要求新成员安装该旧发布。
 
 ### 今后每天遵守的简单约定
 
@@ -110,8 +112,8 @@ gh auth login --hostname github.com --git-protocol https --web
 gh auth setup-git
 gh auth status
 
-gh repo clone rsgcsg/STS2-The-Pefect-Defect-Project
-cd STS2-The-Pefect-Defect-Project
+gh repo clone rsgcsg/STS2-The-Perfect-Defect-Project
+cd STS2-The-Perfect-Defect-Project
 git fetch origin --prune
 git switch develop
 git pull --ff-only origin develop
@@ -136,51 +138,23 @@ npm run check
 
 ## 4. 首次安装采集器：固定运行目录，不动开发目录
 
-### 4.1 取得已验收发布与独立运行 checkout
+### 4.1 取得正式发布并准备固定目录
 
-保留开发 clone 用于分支和 PR。另建一个长期存在的运行 worktree，例如在开发 clone 根目录执行：
+保留开发 clone 用于分支和 PR。从[正式发布页](https://github.com/rsgcsg/STS2-The-Perfect-Defect-Project/releases/latest)取得 developer kit、SHA256SUMS、验收和集成回执。阅读适用 OS/游戏及更新说明。软件来源、实际运行和 main 的提交可以不同，以这份明确组合为准。
 
-```bash
-git fetch origin --tags
-git worktree add --detach ../SpireAgent-runtime project/2026-09-15
-git -C ../SpireAgent-runtime rev-parse HEAD
-```
+按 [developer kit 安装指南](../python/docs/DEVELOPER_KIT_INSTALL.md)执行默认的 `plan → prepare → initialize`。输入是发布 ZIP、独立发布的一个 SHA256、永久 releases 目录，以及本机私有 project.json 路径。工具自动读取组件清单、取得精确源码、放置已发布二进制并安装锁定的根 Node、工作台 SDK 和 Python 环境。
 
-本页基线应输出 `45ef463e3c13cd82db55601c122a292c37aaae2e`。将来换发布时使用那个发布的确切 ref，先读升级说明；不是让新电脑永远停在本页版本。
+运行目录是工具返回的 `releases/ZIP_SHA/source`，不是开发 clone；它是独立 clone，不依赖开发 worktree 的可写分支。后续不在其中开发、不切换 HEAD，不移动或删除仍被配置/队列引用的目录。不要只复制 DLL、别人的凭据或私人 `.local`。
 
-运行 worktree 不用于开发，不 `git pull`，不删除/移动，也不在游戏或上传过程中切换提交。Git worktree 依赖原 clone 的 `.git`；保留这两个目录。不要浅克隆或只用 Source ZIP 代替需要 Git 身份的运行 checkout。
+旧发布没有该入口时，安装指南保留手工 staging 恢复路径；这不是新成员的默认操作。当前仍需要 Git/Node/uv/.NET 和本机游戏，不宣称下载 ZIP 后无需环境就能运行。
 
-从正式发布下载完整 developer kit、`SHA256SUMS`、`candidate-evidence.json`、`human-qualification.json` 和 `integration-receipt.json`，校验发布来源与哈希后再解压。基线 ZIP 为 `SpireAgent-45ef463-developer-kit.zip`：
+### 4.2 安装已发布的游戏 Mod 并核对加载
 
-```text
-SHA256 14b33ceab0dfe637f53bac1f6e50a05f660fb59dd7cdd382ba0fa16adf572aa7
-Tool ID 9a293774b0ac4664bd0cb78dedb2ea09e5185b7c653724811c4c7c0b073e0633
-```
+游戏和旧工作台完全退出后，使用安装指南中的 `deploy --directory ... --game-directory ...`。入口核对真实游戏/依赖字节，调用现有原生安装 owner 并保留回滚；不重编 Mod。首次安装按同一指南在固定 source 目录执行 cold launch 和 verify-loaded，分别保存安装与加载结果。
 
-整个 kit 放在稳定目录。不要只拷贝一个 DLL，不下载别人的游戏文件，也不要使用某个工程师私人的 `.local` 或 project.json。
+macOS 游戏目录指包含 SlayTheSpire2.app 的目录；具体受支持 tuple 来自发布说明。标签一致还不够，身份或兼容性拒绝不能靠改 manifest 消除。第一次可能需要本人在游戏界面启用 Mods 和 STS2_PLATFORM，然后退出并重新核对加载。
 
-### 4.2 部署游戏 Mod：这是首次安装中需要工程协助的一段
-
-必须完整执行运行 checkout 中的 [developer kit 安装程序说明](../python/docs/DEVELOPER_KIT_INSTALL.md)，它拥有文件 staging 表和身份校验步骤。本页不复制另一套安装脚本。
-
-顺序为：退出游戏与旧工作台 → 核对发布/game/Mod/tool 身份 → 按 staging 表放置发布二进制 → 核对 tracked 工作区仍干净 → 设置真实 `STS2_GAME_DIR` → 执行 owner lifecycle。
-
-macOS 的 `STS2_GAME_DIR` 指包含 `SlayTheSpire2.app` 的游戏目录，不是 `.app` 本身。基线实际验证游戏为 v0.111.0 / `41cef1ea`；标签一致还不够，必须按安装说明核对程序集 SHA/MVID 及依赖。遇到兼容性拒绝时保留错误，不改 manifest 让它强行匹配。
-
-在固定运行 checkout 根目录，分别执行并保存结果：
-
-```bash
-npm ci
-npm run game-mod:doctor
-npm run game-mod:deploy
-npm run game-mod:doctor
-npm run game-mod:launch
-npm run game-mod:verify-loaded
-```
-
-前置 staging/身份校验未完成不能直接执行 deploy。这里安装已发布字节，**不要运行 build 命令覆盖 kit 二进制**。`launch` 只启动程序，不代表可以让 Agent 开始替你玩游戏。
-
-第一次可能需要本人在 STS2 界面启用 Mods 和 `STS2_PLATFORM`，然后完全退出、重新启动并检查加载。不要关闭其他用户需要的 Mod 或修改未知配置来消除错误。
+Workbench-only 更新如果没有改变 native/tool 字节及所需契约，不重复部署 Mod。保留旧 tool 和队列；需要改变 tool 时按已有 collection-upgrade prepare/activate 流程，不能覆盖 pending 数据。`launch` 只启动游戏，不授权 Agent 替人操作。
 
 ### 4.3 打开工作台、登录、登记本机
 
@@ -198,15 +172,7 @@ npm run workbench -- --config /ABS/PRIVATE/project.json --hub-url https://hub.2-
 
 ### 4.4 登记固定工具和启用录制
 
-在固定运行 checkout 的 `python/` 目录，用同一私有配置执行：
-
-```bash
-uv run --locked python -m spireagent.workbench project stop --config /ABS/PRIVATE/project.json
-uv run --locked python -m spireagent.workbench project collection-tool --config /ABS/PRIVATE/project.json --tool-directory /ABS/KIT/collection-tool --tool-release-id 9a293774b0ac4664bd0cb78dedb2ea09e5185b7c653724811c4c7c0b073e0633
-uv run --locked python -m spireagent.workbench project open --config /ABS/PRIVATE/project.json
-```
-
-关闭网页标签不等于停止工作台；登记要求服务停止。`tool-directory` 指整个固定工具目录。其他发布必须换成其独立批准的 Tool ID，不从报错中随便复制一个值去覆盖身份。
+先停止工作台，然后按安装指南的 `register --directory ... --config ...` 登记整个固定工具；入口读取 kit 内的 Tool ID 并调用既有登记 owner，不用再手抄 ID。之后重开同一个 project.json。已有相同工具的升级保留原登记；不同工具不能用替换参数跳过队列升级流程。
 
 工作台 **录制与上传** 页面按顺序完成：
 
@@ -270,7 +236,7 @@ git status --short --branch
 git remote -v
 git fetch origin --prune
 git rev-parse origin/develop
-gh pr list --repo rsgcsg/STS2-The-Pefect-Defect-Project
+gh pr list --repo rsgcsg/STS2-The-Perfect-Defect-Project
 git worktree add -b fix/collector/describe-problem ../SpireAgent-fix origin/develop
 cd ../SpireAgent-fix
 git rev-parse HEAD
@@ -313,7 +279,7 @@ PR 正文依根 [PR 模板](../.github/PULL_REQUEST_TEMPLATE.md) 写：exact bas
 
 | 改动 | 还需要什么 |
 |---|---|
-| 文档/纯 portable 工具（G0） | project/root gate、closeout、diff；不伪造 runtime 验收 |
+| 普通说明文档 / portable 工具 | 按 check:plan 路由；仅受支持的 editorial 修改走轻检查，工具源码仍走全套；closeout、diff 保留 |
 | 实现/跨层契约（G1/G2） | faithful regression、组件、consumer/contract 和 root gate |
 | 游戏原生源码（G3） | exact-game、干净构建和身份；不能把公开 CI 当原生验证 |
 | 安装/运行生命周期（G4） | 安装、cold-load、verify-loaded、回滚准备 |
@@ -360,7 +326,7 @@ Hub 成员身份不授权生产维护。接手运维时，负责人另外交接�
 | 云服务异常/磁盘满 | System、health、blocks/inodes、容器和备份；运维 | 无差别删数据/卷、无备份重建 |
 | SSH timeout / KVM login | 按 OPERATIONS 区分网络、主机身份、认证和救援 | 公开 SSH 日志/私钥、把邮箱 OTP 当 Unix 密码 |
 
-在[新仓库 Issues](https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project/issues)报告或更新同一根因的现有问题。当前并不承诺所有故障都会自动通知或自动建 issue；要核对采集质量和运维事件两边。公开记录只放脱敏摘要，原始人类数据和凭据留在授权私有存储。
+在[新仓库 Issues](https://github.com/rsgcsg/STS2-The-Perfect-Defect-Project/issues)报告或更新同一根因的现有问题。当前并不承诺所有故障都会自动通知或自动建 issue；要核对采集质量和运维事件两边。公开记录只放脱敏摘要，原始人类数据和凭据留在授权私有存储。
 
 可复制的问题报告：
 
@@ -387,7 +353,7 @@ session / run / decision / receipt / dataset / job ID（按相关性）：
 复制下面的说明，补充具体任务和已授权范围，不包含秘密：
 
 ```text
-唯一仓库：rsgcsg/STS2-The-Pefect-Defect-Project。
+唯一仓库：rsgcsg/STS2-The-Perfect-Defect-Project。
 我的任务：<具体目标>；非目标：<不做什么>。
 已有 GitHub / Hub 权限：<实际具备的权限>。
 允许的本地修改、部署、云操作和预算：<具体范围；没有就写没有>。
@@ -421,8 +387,22 @@ session / run / decision / receipt / dataset / job ID（按相关性）：
 - [ ] 若接管生产，另有个人受限访问、备份/恢复与回滚交接；没有则明确尚未接管。
 - [ ] 知道去哪里报故障，能提交脱敏且可追溯的问题，清楚哪些必须由真人完成。
 
-本轮仅更新指南/规范，不要求重建 Mod、重启 Hub、升级已在工作的采集器或重复真人测试。以后是否需要这些步骤，由实际改动和声明的风险决定。
+仅修改指南/规范时，不要求重建 Mod、重启 Hub、升级已在工作的采集器或重复真人测试。是否需要这些步骤，由实际改动和声明的风险决定。
 
 后续维护本指南时也走新 PR。保持它作为入口和解释；安装细节由 developer-kit 文档、生产操作由 runbook、研究准入由 STPD 契约拥有，不继续复制出第二套实现。
 
 **当前仓库源码、治理和 exact runtime evidence 始终高于本交付说明。**
+
+## 日常开发和发布的简化规则
+
+- 普通工作：从最新 develop 开独立分支，修复、相关回归、按影响检查、PR、合 develop；除非任务要求上线，到这里就完成。
+- 正式交付：负责人选一批可发布改动，经 release PR 合 main；发布清单指定实际产物。main 有文档更新，不代表全员重装。
+- 检查入口：`npm run check:plan -- --base origin/develop --run`。普通说明文档可走 Node 轻检查；源码、契约、治理、未知影响仍走全套。原生/Human 等更高证据要求另外保留。
+- 安装入口：按[开发者包安装指南](../python/docs/DEVELOPER_KIT_INSTALL.md)使用已批准 ZIP 与其一个校验值，工具准备固定目录、锁定环境和已发布二进制；不再手抄全部组件 hash。
+- 本地工作台“系统”页区分本机和 Hub 来源，链接正式发布说明。不同 SHA 不自动阻止连接；未知格式、过期观测和真实错误必须显示。
+- 云端普通更新：按 [RUNBOOK](../python/deploy/hub/RUNBOOK.md) 的 rollout 计划/应用入口，只更新受影响 Hub；数据库或配置变化走明确迁移流程。
+- 不改旧记录、不清 pending 队列、不共享私人凭据；所有 bug、架构或跨组件修复仍开新分支和 PR。问题报告附原始 session/upload/job ID、来源、时间、期望与实际、脱敏错误，不贴 Token。
+
+规范分别由 DEVELOPMENT_WORKFLOW、TESTING、VERSIONING 和 owning RUNBOOK 维护；
+本指南是入口，不再复制另一套发布命令或版本表。普通成员不需要 SSH 管服务器，
+工程师也不需要为每次提交维护一次生产部署。

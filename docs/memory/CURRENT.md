@@ -1,10 +1,18 @@
 # Current project context
 
-Use rsgcsg/STS2-The-Pefect-Defect-Project for all new development.
+Use rsgcsg/STS2-The-Perfect-Defect-Project for all new development.
 Platform components, `python/spireagent` applications and `python/stpd` research
 share root governance, one local/cloud console and one Hub membership authority.
 
-The deployed release is sealed at `45ef463e3c13cd82db55601c122a292c37aaae2e`.
+The current qualified operating combination uses Workbench source
+`6fcd735e4618c29967528e9d3457d898d2e8283d` and Hub source
+`25777cbce106ec9d64ceeef9e55b889abdbc3d3a`, reusing the existing qualified
+Mod/tool bytes. [Operating acceptance](../evidence/OPERATING_FLOW_2026-09-16.md)
+records the actual installation, cold load, Human Close/upload, compatibility,
+backup/restore and rollback. Follow its PR and GitHub Releases for formal
+integration/publication; branch HEAD is not a deployment pointer.
+
+The preceding monorepo release was sealed at `45ef463e3c13cd82db55601c122a292c37aaae2e`.
 [Acceptance](../MONOREPO_MIGRATION.md) links source, kit, OCI, rollback and
 [Human evidence](../evidence/MONOREPO_HUMAN_GATE_2026-09-15.md): 580 accepted,
 580 proved/canonical, 81 nested decisions, zero real failures; automatic Close
@@ -15,7 +23,8 @@ not silently change that deployed producer. Historical evidence is unchanged.
 pinned deployments and maintenance. A documentation merge does not update running clients.
 [Member/Agent handoff](../NEW_MEMBER_HANDOFF.zh-CN.md) is the entry for new people.
 
-Root `npm run check` covers both systems. Work from current origin/develop by PR;
+Root `npm run check` covers both systems; `npm run check:plan -- --base origin/develop --run`
+selects the permitted editorial fast path or the full suite. Work from current origin/develop by PR;
 main/develop are the only long-lived branches. Resolve live merge refs and CI
 from GitHub. Keep existing credentials, raw data, old tools and outboxes private.
 Compute budget remains zero. No GPU-worker, scientific or model-quality claim.

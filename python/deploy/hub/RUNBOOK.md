@@ -1,6 +1,6 @@
 # Hub operations — unified repository
 
-Current source: `rsgcsg/STS2-The-Pefect-Defect-Project`. Commands with relative
+Current source: `rsgcsg/STS2-The-Perfect-Defect-Project`. Commands with relative
 `deploy/` paths below run from `python/`. The installed host checkout is
 `/opt/stpd-deploy/source`, and deployment files are in its `python/deploy/hub/`.
 The durable `/etc/stpd`, `/srv/stpd`, domain, member/device identities and bucket
@@ -673,3 +673,37 @@ Record parent digest and recipe with the resulting digest. Rerun latest-head sou
 checks and independently verify fresh-container source/lock/assets and the actual installed
 dependency inventory (including the Evidence direct-source revision), public service,
 R2 and backup/restore. Parent qualification never qualifies changed source automatically.
+
+## Routine same-schema Hub-only rollout
+
+Use `rollout.py` from the reviewed deployment checkout. This entrypoint composes
+existing preflight/capacity/backup/Compose owners; it is not another scheduler.
+Only the Hub image may differ between the private current and candidate deployment
+env files. Budget stays zero, state/TLS/secrets paths stay fixed, and the image must
+already exist locally. Review/pull/build under the capacity procedure above first.
+Schema, TLS, secret/configuration changes retain the explicit runbook procedures.
+
+```bash
+sudo python3 deploy/hub/rollout.py plan --current /etc/stpd/deployment.env --candidate /etc/stpd/deployment-candidate.env --source EXACT_CANDIDATE_SOURCE --lock EXACT_CANDIDATE_LOCK
+sudo python3 deploy/hub/rollout.py apply --current /etc/stpd/deployment.env --candidate /etc/stpd/deployment-candidate.env --source EXACT_CANDIDATE_SOURCE --lock EXACT_CANDIDATE_LOCK --plan-sha256 REVIEWED_PLAN_HASH
+```
+
+The plan pins public config, Compose/Caddy bytes, old/new image and expected
+producer. Apply rechecks under a host lock, validates current configuration,
+fresh verified off-host backup, capacity and candidate database schema in an
+isolated no-network/no-state container. It updates only Hub with no dependency
+restart or implicit image pull. Health and actual image/producer must agree before
+advancing the current config. Repeating an already-applied candidate is a read-only
+identity check. Keep `/var/lib/stpd-maintenance/rollouts` private; it retains old
+config and durable applying/success/attention receipts. Never run concurrent manual
+Compose changes or a different rollout receipt directory to evade serialization.
+
+This automation does not claim business-path, external TLS, R2 or Human gates.
+Perform the checks affected by the release. A recent verified backup can serve an
+ordinary same-schema update; changes to persistence/recovery require the stronger
+isolated restore procedure. Keep one known compatible rollback image/config.
+On an interrupted/failed application inspect the retained receipt and actual image
+first; the current config may still describe the predecessor. Use the explicit
+recovery procedure, preserving new data and revocations. Do not automatically
+restore yesterday's database to undo a UI problem. An in-progress receipt is not
+success, and re-running a stale plan is refused.
