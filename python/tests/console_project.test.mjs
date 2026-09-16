@@ -1156,3 +1156,14 @@ test("new preview follows its exact task and failed choices can be edited", asyn
   assert.equal(field(page,`source-${uploadId}`).checked,true);
   assert.equal(field(page,"character").value,"defect");
 });
+
+
+test("a slow navigation does not disable returning to that tab", async () => {
+  let finish; const waiting=new Promise(resolve=>{finish=resolve;});
+  const h=setup({view:"datasets"}); const initial=await h.render();
+  h.ui.reload=()=>waiting;
+  const navigating=action(initial,"dataset-tab-create").onclick();
+  let shell; const next=h.render(value=>{shell=value;});
+  assert.equal(action(shell,"dataset-tab-create").disabled,false);
+  await next; finish(); await navigating;
+});

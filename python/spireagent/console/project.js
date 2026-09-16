@@ -1065,9 +1065,13 @@ window.SpireProject = (() => {
     const nav = el("nav", null, "dataset-tabs");
     nav.setAttribute("aria-label", "数据集工作区");
     for (const [key, label] of [["library", "已生成的数据集"], ["create", "新建数据集"], ["previews", "预览与任务"], ["archived", "已移除"]]) {
-      const button = command(ctx, `dataset-tab-${key}`, label, async () => {
+      const button = el("button", label, `button${datasetTab() === key ? " primary" : ""}`);
+      button.type = "button";
+      button.dataset.action = `dataset-tab-${key}`;
+      button.onclick = async () => {
+        if (!live(ctx)) return;
         drafts.set("dataset-tab", key); drafts.delete("dataset-task-id"); await reload(ctx);
-      }, {primary: datasetTab() === key});
+      };
       button.setAttribute("aria-current", datasetTab() === key ? "page" : "false");
       nav.append(button);
     }
