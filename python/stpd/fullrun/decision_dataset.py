@@ -9,9 +9,10 @@ from __future__ import annotations
 import json
 import tempfile
 from collections import Counter, defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from spireagent.json_boundary import BoundaryError, FrozenObject, object_fields, unsigned
 
@@ -19,6 +20,9 @@ from ..canonical import semantic_hash
 from .contracts import ResearchTransitionV2, SourceProjection
 from .data import split_whole_runs
 from .platform_bundle3 import PlatformBundle3SourceAdapter, _extract
+
+if TYPE_CHECKING:
+    from .decision_cache import VerifiedSourceCache
 
 SCHEMA = "stpd/decision-dataset-v1"
 RULE_SCHEMA = "stpd/decision-selection-v1"
@@ -240,18 +244,30 @@ def _versions(source: bytes) -> dict[str, Any]:
 
 
 def select_decisions(
-    sources: tuple[bytes, ...], rules: SelectionRules | None = None
+    sources: tuple[bytes, ...], rules: SelectionRules | None = None,
+    *, cache: VerifiedSourceCache | None = None,
+    on_source: Callable[[int, int], None] | None = None,
 ) -> DecisionDataset:
-    """Reverify original bytes; callers cannot submit trusted-looking projections."""
+    """Verify original bytes or reuse a private owner-bound verification of identical bytes."""
     if not 1 <= len(sources) <= 100:
         raise BoundaryError("decision_dataset", "source_selection_limit")
-    projections = [PlatformBundle3SourceAdapter().project(source) for source in sources]
+    projections: list[SourceProjection] = []
     versions: dict[str, Any] = {}
     for source in sources:
-        for key, value in _versions(source).items():
+        if on_source:
+            on_source(len(projections), len(sources))
+        if cache is None:
+            projection = PlatformBundle3SourceAdapter().project(source)
+            environments = _versions(source)
+        else:
+            projection, environments = cache.resolve(source)
+        projections.append(projection)
+        for key, value in environments.items():
             if key in versions and versions[key] != value:
                 raise BoundaryError("decision_dataset", "environment_identity_conflict")
             versions[key] = value
+    if on_source:
+        on_source(len(projections), len(sources))
     return _select(projections, rules or SelectionRules(), versions)
 
 

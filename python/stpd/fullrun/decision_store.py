@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import io
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from spireagent.artifact_contracts import Manifest, Parent, Producer
 from spireagent.json_boundary import BoundaryError, FrozenObject, decode_json, json_bytes
@@ -10,15 +12,25 @@ from spireagent.storage.store import ArtifactStore
 
 from ..canonical import canonical_json
 from .decision_dataset import SCHEMA, DecisionDataset, SelectionRules, select_decisions
+from .decision_union import UNION_SCHEMA, union_decisions
 from .platform_bundle3 import MAX_BYTES
 
+if TYPE_CHECKING:
+    from .decision_cache import VerifiedSourceCache
 
-def _sources(store: ArtifactStore, sources: tuple[Manifest, ...]) -> tuple[bytes, ...]:
+Progress = Callable[[str, int, int], None]
+
+
+def _sources(
+    store: ArtifactStore, sources: tuple[Manifest, ...], progress: Progress | None = None,
+) -> tuple[bytes, ...]:
     if not 1 <= len(sources) <= 100:
         raise BoundaryError("decision_dataset", "source_selection_limit")
-    result = []
+    result: list[bytes] = []
     total = 0
     for source in sources:
+        if progress:
+            progress("reading_sources", len(result), len(sources))
         info = source.parameters.value()
         if (
             source.kind != "evidence"
@@ -35,9 +47,19 @@ def _sources(store: ArtifactStore, sources: tuple[Manifest, ...]) -> tuple[bytes
 
 
 def preview(
-    store: ArtifactStore, sources: tuple[Manifest, ...], rules: SelectionRules
+    store: ArtifactStore, sources: tuple[Manifest, ...], rules: SelectionRules,
+    *, cache: VerifiedSourceCache | None = None, progress: Progress | None = None,
 ) -> DecisionDataset:
-    dataset = select_decisions(_sources(store, sources), rules)
+    raw = _sources(store, sources, progress)
+    if progress:
+        progress("verifying_sources", 0, len(sources))
+    dataset = select_decisions(
+        raw, rules, cache=cache,
+        on_source=(lambda completed, total: progress("verifying_sources", completed, total))
+        if progress else None,
+    )
+    if progress:
+        progress("verifying_sources", len(sources), len(sources))
     contracts = dataset.report.value()["source_contracts"]
     for source in sources:
         if (
@@ -54,15 +76,57 @@ def publish(
     rules: SelectionRules,
     producer: Producer,
     expected_preview: str,
+    *, cache: VerifiedSourceCache | None = None, progress: Progress | None = None,
+) -> Manifest:
+    dataset = preview(store, sources, rules, cache=cache, progress=progress)
+    return _publish(store, sources, rules, producer, expected_preview, dataset, SCHEMA, progress)
+
+
+def preview_union(
+    store: ArtifactStore, parents: tuple[Manifest, ...], rules: SelectionRules,
+    *, cache: VerifiedSourceCache | None = None, progress: Progress | None = None,
+) -> DecisionDataset:
+    if not 1 <= len(parents) <= 100 or len({p.artifact_id for p in parents}) != len(parents):
+        raise BoundaryError("decision_union", "invalid_parents")
+    memo: dict[str, tuple[Manifest, DecisionDataset]] = {}
+    source_budget: dict[str, int] = {}
+    loaded: list[tuple[str, DecisionDataset]] = []
+    for parent in sorted(parents, key=lambda p: p.artifact_id):
+        if progress:
+            progress("loading_selected_datasets", len(loaded), len(parents))
+        # Reserve the new union node/depth so a successful preview cannot publish an
+        # artifact that its own loader would reject solely because of graph bounds.
+        result = _load(store, parent.artifact_id, cache, memo, set(), 1, source_budget, 1)
+        loaded.append((result[0].artifact_id, result[1]))
+    if progress:
+        progress("union_selected_decisions", len(loaded), len(parents))
+    return union_decisions(tuple(loaded), rules)
+
+
+def publish_union(
+    store: ArtifactStore, parents: tuple[Manifest, ...], rules: SelectionRules,
+    producer: Producer, expected_preview: str,
+    *, cache: VerifiedSourceCache | None = None, progress: Progress | None = None,
+) -> Manifest:
+    dataset = preview_union(store, parents, rules, cache=cache, progress=progress)
+    return _publish(store, parents, rules, producer, expected_preview,
+                    dataset, UNION_SCHEMA, progress)
+
+
+def _publish(
+    store: ArtifactStore, sources: tuple[Manifest, ...], rules: SelectionRules,
+    producer: Producer, expected_preview: str, dataset: DecisionDataset,
+    schema_id: str, progress: Progress | None,
 ) -> Manifest:
     import pyarrow as pa
     import pyarrow.parquet as pq
 
-    dataset = preview(store, sources, rules)
     if dataset.logical_id != expected_preview:
         raise BoundaryError("decision_dataset", "preview_changed")
     if not dataset.records:
         raise BoundaryError("decision_dataset", "empty_selection")
+    if progress:
+        progress("publishing_dataset", 0, 1)
     splits = dataset.report.value()["splits"]
     rows = [
         {
@@ -94,11 +158,12 @@ def publish(
     manifest = Manifest(
         "dataset",
         producer,
-        parents=tuple(Parent("source_" + key, key) for key in sorted(unique)),
+        parents=tuple(Parent(("dataset_" if schema_id == UNION_SCHEMA else "source_") + key, key)
+                      for key in sorted(unique)),
         payloads=(records, report),
         parameters=FrozenObject.of(
             {
-                "schema": SCHEMA,
+                "schema": schema_id,
                 "logical_id": dataset.logical_id,
                 "rules": rules.to_dict(),
                 "records": len(dataset.records),
@@ -111,15 +176,48 @@ def publish(
     return manifest
 
 
-def load(store: ArtifactStore, artifact_id: str) -> tuple[Manifest, DecisionDataset]:
+def load(
+    store: ArtifactStore, artifact_id: str, *, cache: VerifiedSourceCache | None = None,
+) -> tuple[Manifest, DecisionDataset]:
+    return _load(store, artifact_id, cache, {}, set(), 0, {}, 0)
+
+
+def _load(
+    store: ArtifactStore, artifact_id: str, cache: VerifiedSourceCache | None,
+    memo: dict[str, tuple[Manifest, DecisionDataset]], visiting: set[str], depth: int,
+    source_budget: dict[str, int],
+    reserved_nodes: int,
+) -> tuple[Manifest, DecisionDataset]:
     import pyarrow.parquet as pq
 
+    if artifact_id in memo:
+        return memo[artifact_id]
+    if artifact_id in visiting or depth > 8 or len(memo) + len(visiting) + reserved_nodes >= 256:
+        raise BoundaryError("decision_dataset", "dataset_lineage_limit")
+    visiting.add(artifact_id)
     manifest = store.get_manifest(artifact_id)
     info = manifest.parameters.value()
-    if manifest.kind != "dataset" or info.get("schema") != SCHEMA:
+    if manifest.kind != "dataset" or info.get("schema") not in {SCHEMA, UNION_SCHEMA}:
         raise BoundaryError("decision_dataset", "unsupported_dataset_schema")
-    sources = tuple(store.get_manifest(parent.artifact_id) for parent in manifest.parents)
-    dataset = preview(store, sources, SelectionRules.decode(info["rules"]))
+    if info["schema"] == UNION_SCHEMA:
+        prefix = "dataset_"
+        parents = tuple(
+            (parent.artifact_id, _load(store, parent.artifact_id, cache, memo,
+                                      visiting, depth + 1, source_budget, reserved_nodes)[1])
+            for parent in manifest.parents
+        )
+        dataset = union_decisions(parents, SelectionRules.decode(info["rules"]))
+    else:
+        prefix = "source_"
+        sources = tuple(store.get_manifest(parent.artifact_id) for parent in manifest.parents)
+        for source in sources:
+            payload = source.payload("archive")
+            source_budget[payload.sha256] = payload.size
+        if len(source_budget) > 100 or sum(source_budget.values()) > MAX_BYTES:
+            raise BoundaryError("decision_dataset", "union_source_size_limit")
+        dataset = preview(store, sources, SelectionRules.decode(info["rules"]), cache=cache)
+    if any(p.role != prefix + p.artifact_id for p in manifest.parents):
+        raise BoundaryError("decision_dataset", "parent_inventory_mismatch")
     if info.get("logical_id") != dataset.logical_id or info.get("records") != len(dataset.records):
         raise BoundaryError("decision_dataset", "dataset_reprojection_mismatch")
     if sum(p.size for p in manifest.payloads) > MAX_BYTES:
@@ -140,4 +238,6 @@ def load(store: ArtifactStore, artifact_id: str) -> tuple[Manifest, DecisionData
     ]
     if table.to_pylist() != expected:
         raise BoundaryError("decision_dataset", "records_reprojection_mismatch")
+    visiting.remove(artifact_id)
+    memo[artifact_id] = (manifest, dataset)
     return manifest, dataset
