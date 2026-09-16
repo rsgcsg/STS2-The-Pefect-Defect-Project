@@ -62,3 +62,23 @@ security fix, not because a branch moved. Removal of a supported interface needs
 reason, affected consumers and migration window. Stopping old executable support
 never authorizes deleting archival data readers. Ordinary dependency maintenance
 is batched; urgent security or data-integrity issues are handled promptly.
+
+## Repository spelling correction (2026-09-16)
+
+The same GitHub repository was renamed from `rsgcsg/STS2-The-Pefect-Defect-Project`
+to `rsgcsg/STS2-The-Perfect-Defect-Project` (repository ID 1371044812 unchanged).
+Current clone/download links and newly built producer identities use the corrected name.
+Readers accept only these two exact names where the project repository is constrained;
+they preserve the original value, source SHA, lock and content hashes. No arbitrary GitHub
+repository becomes trusted. The archived predecessor remains separately identified.
+
+Historical import/retained-release records, dated evidence, approved combinations and
+locked package URLs keep their original values. Their GitHub redirects and exact asset
+hashes must remain usable. Do not regenerate locks, native BOMs, old releases, datasets or
+model provenance just to remove the old spelling. Never reuse the old GitHub name.
+
+Existing installations, queues, runtime directories, OCI digests, cloud domain and accounts
+remain unchanged. Only Git remote configuration is updated on managed clones; new clones
+may use the corrected directory name. Do not move a live checkout to match the remote name.
+A repository rename alone does not require a new executable release, game restart or Human
+canary. Future source builds use the corrected origin and the normal affected release gates.

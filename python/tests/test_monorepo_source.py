@@ -28,7 +28,7 @@ def test_nested_checkout_identity_and_lock_tampering(tmp_path: Path, monkeypatch
         subprocess.run(["git", *args], cwd=tmp_path, check=True, capture_output=True)
     monkeypatch.setattr(source, "__file__", str(module))
     identity = source.source_identity(project)
-    assert identity.repository == "rsgcsg/STS2-The-Pefect-Defect-Project"
+    assert identity.repository == "rsgcsg/STS2-The-Perfect-Defect-Project"
     assert identity.uv_lock_sha256 == hashlib.sha256(b"fixture lock\n").hexdigest()
     with pytest.raises(BoundaryError, match="executing_package_checkout_mismatch"):
         source.source_identity(tmp_path)
@@ -39,9 +39,17 @@ def test_nested_checkout_identity_and_lock_tampering(tmp_path: Path, monkeypatch
         source.source_identity(project, require_clean=False)
 
 
-def test_historical_producer_identity_is_not_rewritten() -> None:
+@pytest.mark.parametrize(
+    "repository",
+    [
+        "rsgcsg/STS2-The-Perfect-Defect",
+        "rsgcsg/STS2-The-Pefect-Defect-Project",
+        "rsgcsg/STS2-The-Perfect-Defect-Project",
+    ],
+)
+def test_historical_producer_identity_is_not_rewritten(repository: str) -> None:
     original = {
-        "repository": "rsgcsg/STS2-The-Perfect-Defect",
+        "repository": repository,
         "source_revision": "a" * 40,
         "uv_lock_sha256": "b" * 64,
     }

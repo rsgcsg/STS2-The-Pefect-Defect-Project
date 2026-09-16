@@ -44,7 +44,7 @@ def _consumer_identity(entry_point: str) -> dict[str, str]:
         ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
     ).strip()
     return {
-        "repository": "rsgcsg/STS2-The-Pefect-Defect-Project",
+        "repository": "rsgcsg/STS2-The-Perfect-Defect-Project",
         "source_revision": revision,
         "uv_lock_sha256": _sha256(ROOT / "uv.lock"),
         "entry_point": entry_point,

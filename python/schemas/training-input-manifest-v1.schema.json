@@ -34,7 +34,7 @@
       "additionalProperties": false,
       "required": ["repository", "source_revision", "uv_lock_sha256", "entry_point"],
       "properties": {
-        "repository": {"const": "rsgcsg/STS2-The-Perfect-Defect"},
+        "repository": {"enum": ["rsgcsg/STS2-The-Perfect-Defect", "rsgcsg/STS2-The-Pefect-Defect-Project", "rsgcsg/STS2-The-Perfect-Defect-Project"]},
         "source_revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
         "uv_lock_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "entry_point": {"type": "string", "minLength": 1}

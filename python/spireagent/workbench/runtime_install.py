@@ -21,11 +21,14 @@ from spireagent.package_identity import (
     file_sha256,
     validate_installed_package,
 )
+from spireagent.source import REPOSITORY_ALIASES
 
 RUNTIME_PACKAGE = "@rsgcsg/sts2-policy-runtime"
 CONNECTOR_PACKAGE = "@rsgcsg/sts2-connector-client"
 ARCHIVE_LIMIT = 32 * 1024 * 1024
-RELEASE_PREFIX = "https://github.com/rsgcsg/STS2-The-Pefect-Defect-Project/releases/download/"
+RELEASE_PREFIXES = tuple(
+    f"https://github.com/{name}/releases/download/" for name in REPOSITORY_ALIASES
+)
 
 
 class ReleaseRedirect(HTTPRedirectHandler):
@@ -130,7 +133,7 @@ def _install_runtime(
             shutil.copyfile(archive, payload)
         else:
             url = pin.get("release_url")
-            if not isinstance(url, str) or not url.startswith(RELEASE_PREFIX):
+            if not isinstance(url, str) or not url.startswith(RELEASE_PREFIXES):
                 raise BoundaryError("local_model", "runtime_release_url_not_pinned")
             request = Request(url, headers={"Accept": "application/octet-stream"})
             size = 0
