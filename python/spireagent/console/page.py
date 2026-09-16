@@ -81,7 +81,8 @@ def render_shell(mode: str, api_base: str, cloud_url: str = "") -> str:
 <script src="{assets}/console.js" defer></script></head>
 <body data-mode="{mode}" data-api="{api_base}" data-cloud-url="{cloud}">
 <a class="skip-link" href="#main">跳到内容</a>
-<aside class="sidebar"><a class="brand" href="?view={"campaigns" if mode == "local" else "collections"}"><span class="brand-mark">S</span>
+<aside class="sidebar"><a class="brand" href="?view={"campaigns" if mode == "local" else "collections"}">
+<span class="brand-mark">S</span>
 <span>SpireAgent<small>项目控制台</small></span></a>
 <div class="workspace-label">{label}</div><nav aria-label="主导航">{nav}</nav>
 <nav class="secondary-nav" aria-label="管理与设置">{secondary}</nav>

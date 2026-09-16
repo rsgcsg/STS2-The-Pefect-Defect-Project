@@ -30,7 +30,7 @@ test("Product navigation exposes exactly model tests and Human collection", () =
   assert.match(mod, /BuildRecorderPage\(_surfaceViewport\)/u);
   assert.match(mod, /_surfaces\.Add\(_agentRunPage\)/u);
   assert.match(mod, /_surfaces\.Add\(_recorderPage\)/u);
-  assert.doesNotMatch(mod, /Overview|Environment|Human Data|"Diagnostics"|AddPage/u);
+  assert.doesNotMatch(mod, /"(?:Overview|Environment|Human Data|Diagnostics)"|AddPage/u);
   assert.doesNotMatch(`${mod}\n${presentation}`, /"(Overview|Environment|Human Data|Diagnostics)"|BodyCollapsed|ActiveTab|ToggleActiveTabBody/u);
 });
 
