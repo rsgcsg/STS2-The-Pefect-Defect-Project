@@ -50,6 +50,8 @@ ledger.
 
 - [ADR-0008: Release-bound closed-session delivery](0008-release-bound-closed-session-delivery.md)
 
+- [ADR-0009: Scoped checks and verified integration receipts](0009-scoped-checks-and-integration-receipts.md)
+
 ## New ADR template
 
 ```markdown

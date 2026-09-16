@@ -4,10 +4,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { eligibleEvent, findReceipt } from "./check-receipt.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 // Explicit editorial surfaces only. Governance, contracts, component docs and
-// unknown paths intentionally retain the complete suite in this first rollout.
+// unknown paths retain the complete suite. Python owners have a separate full consumer gate.
 const editorial = new Set([
   "README.md", "CONTRIBUTING.md", "docs/NEW_MEMBER_HANDOFF.zh-CN.md",
   "docs/NEW_ENGINEER_GUIDE.md", "docs/DOCUMENT_MAP.md", "docs/STATUS.md",
@@ -17,6 +18,16 @@ export function classifyChanges(entries) {
   if (!entries.length) return { scope: "full", reason: "empty_or_unknown_diff" };
   if (entries.every(({ status, file }) => status === "M" && editorial.has(file))) {
     return { scope: "docs", reason: "modified_editorial_allowlist_only" };
+  }
+  const pythonOwner = ({file, status}) => ["M", "A", "D"].includes(status) &&
+    /^python\/(spireagent|stpd|tests)\//.test(file) && !/(^|\/)AGENTS\.md$/.test(file);
+  // Reports accompany a Python fix; they do not introduce another executable owner.
+  // Standalone evidence/governance edits still use full, as do evidence deletions.
+  const companion = ({file, status}) =>
+    (status === "M" && (editorial.has(file) || ["docs/memory/CURRENT.md", "python/docs/PROJECT_CONSOLE.md"].includes(file))) ||
+    (["A", "M"].includes(status) && /^docs\/evidence\/[^/]+\.md$/.test(file));
+  if (entries.some(pythonOwner) && entries.every(entry => pythonOwner(entry) || companion(entry))) {
+    return { scope: "python", reason: "python_owners_and_installed_platform_consumers" };
   }
   return { scope: "full", reason: "source_contract_governance_or_unknown_change" };
 }
@@ -52,26 +63,72 @@ export function makePlan({ base, head = "HEAD", forceFull = false, cwd = root } 
 export function aggregatePassed(scope, results) {
   if (results.plan !== "success") return false;
   if (scope === "docs") return results.docs === "success" && results.linux === "skipped" && results.windows === "skipped";
-  if (scope === "full") return results.docs === "skipped" && results.linux === "success" && results.windows === "success";
+  if (scope === "reuse") return results.docs === "success" && results.linux === "skipped" && results.windows === "skipped";
+  if (["full", "python"].includes(scope)) return results.docs === "skipped" && results.linux === "success" && results.windows === "success";
   return false;
 }
 
+export function scopeCommands(scope) {
+  if (scope === "docs") return ["check:docs"];
+  if (scope === "reuse") return ["check:repository"];
+  if (scope === "python") return ["check:python-scope"];
+  if (scope === "full") return ["check"];
+  throw new Error("unknown_check_scope");
+}
+function execute(scope) {
+  for (const command of scopeCommands(scope)) {
+    const result = spawnSync(process.platform === "win32" ? "npm.cmd" : "npm", ["run", command],
+      {cwd: root, stdio: "inherit", shell: process.platform === "win32"});
+    if (result.status !== 0) { process.exitCode = result.status ?? 1; return; }
+  }
+}
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
   if (args[0] === "aggregate") {
     const e = process.env;
-    if (!aggregatePassed(e.CHECK_SCOPE, { plan: e.PLAN_RESULT, docs: e.DOCS_RESULT, linux: e.LINUX_RESULT, windows: e.WINDOWS_RESULT })) process.exitCode = 1;
+    const results = {plan: e.PLAN_RESULT, docs: e.DOCS_RESULT, linux: e.LINUX_RESULT, windows: e.WINDOWS_RESULT};
+    if (!aggregatePassed(e.CHECK_SCOPE, results)) process.exitCode = 1;
+    else {
+      const git = (...args) => execFileSync("git", args, {cwd: root, encoding: "utf8"}).trim();
+      if (e.GITHUB_STEP_SUMMARY) fs.appendFileSync(e.GITHUB_STEP_SUMMARY,
+        `Passed scope: **${e.CHECK_SCOPE}**. Current checkout ${git("rev-parse", "HEAD")}. ${e.CHECK_PROOF || "Fresh execution"}\n`);
+      if (["full", "python"].includes(e.CHECK_SCOPE)) {
+        fs.mkdirSync(path.join(root, ".local", "ci"), {recursive: true});
+        fs.writeFileSync(path.join(root, ".local", "ci", "receipt.json"), JSON.stringify({
+          schema: "spireagent/ci-execution-1", executed: true, repository: e.GITHUB_REPOSITORY,
+          run_id: e.GITHUB_RUN_ID, run_attempt: e.GITHUB_RUN_ATTEMPT, scope: e.CHECK_SCOPE,
+          checkout: git("rev-parse", "HEAD"), tree: git("rev-parse", "HEAD^{tree}"),
+          workflow: git("rev-parse", "HEAD:.github/workflows/ci.yml"), results,
+        }, null, 2) + "\n");
+      }
+    }
+  } else if (args[0] === "execute") {
+    execute(process.env.CHECK_SCOPE);
   } else {
     const baseIndex = args.indexOf("--base");
     const headIndex = args.indexOf("--head");
     const plan = makePlan({ base: baseIndex < 0 ? process.env.CHECK_BASE : args[baseIndex + 1], head: headIndex < 0 ? "HEAD" : args[headIndex + 1], forceFull: args.includes("--full") || process.env.CHECK_FULL === "true" });
+    const e = process.env;
+    if (plan.scope === "python" && ((e.GITHUB_EVENT_NAME === "pull_request" && e.GITHUB_BASE_REF === "main") ||
+        (e.GITHUB_EVENT_NAME === "push" && e.GITHUB_REF === "refs/heads/main"))) {
+      Object.assign(plan, {scope: "full", reason: "executable_main_promotion"});
+    }
+    // Ordinary topic PRs always execute. Only promotion/integration can reuse.
+    if (e.GITHUB_ACTIONS === "true" && e.CHECK_FULL !== "true" && !args.includes("--full") &&
+        ["full", "python"].includes(plan.scope) && !["dirty_worktree", "diff_unavailable"].includes(plan.reason) &&
+        eligibleEvent(e.GITHUB_EVENT_NAME, e.GITHUB_REF, e.GITHUB_BASE_REF, e.GITHUB_HEAD_REF)) {
+      const git = (...values) => execFileSync("git", values, {cwd: root, encoding: "utf8", stdio: "pipe"});
+      const current = {repository: e.GITHUB_REPOSITORY, scope: plan.scope,
+        tree: git("rev-parse", "HEAD^{tree}").trim(), workflow: git("rev-parse", "HEAD:.github/workflows/ci.yml").trim()};
+      const proof = await findReceipt(current, {token: e.GH_TOKEN, git, runId: e.GITHUB_RUN_ID});
+      if (proof) Object.assign(plan, {scope: "reuse", reason: "verified_execution_same_tree", proof});
+    }
     process.stdout.write(`${JSON.stringify(plan, null, 2)}\n`);
-    if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, `scope=${plan.scope}\n`);
+    if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, `scope=${plan.scope}\nproof=${plan.proof?.url || ""}\n`);
     if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `Check scope: **${plan.scope}** (${plan.reason}). Base ${plan.base}; tested checkout ${plan.head}. Source/test only.\n`);
     if (args.includes("--run")) {
       if (plan.base && plan.head) execFileSync("git", ["diff", "--check", plan.base, plan.head, "--"], { cwd: root, stdio: "inherit" });
-      const result = spawnSync(process.platform === "win32" ? "npm.cmd" : "npm", ["run", plan.scope === "docs" ? "check:docs" : "check"], { cwd: root, stdio: "inherit", shell: process.platform === "win32" });
-      process.exitCode = result.status ?? 1;
+      execute(plan.scope);
     }
   }
 }

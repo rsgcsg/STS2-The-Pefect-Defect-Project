@@ -6,10 +6,12 @@ import { fileURLToPath } from "node:url";
 import { readBomAuthorities, validatePlatformBom } from "./check-platform-bom.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+// This file mutates copies; the checkout is immutable for this test process.
+const authoritySnapshot = await readBomAuthorities(root);
 
 test("current Platform BOM agrees with component and package authorities", async () => {
   const bom = JSON.parse(fs.readFileSync(path.join(root, "platform-bom.json"), "utf8"));
-  const errors = validatePlatformBom(bom, await readBomAuthorities(root));
+  const errors = validatePlatformBom(bom, structuredClone(authoritySnapshot));
   assert.deepEqual(errors, []);
 });
 
@@ -17,7 +19,7 @@ test("BOM check rejects component and public Connector pin drift", async () => {
   const bom = JSON.parse(fs.readFileSync(path.join(root, "platform-bom.json"), "utf8"));
   bom.components.annotator.version = "9.9.9";
   bom.public_packages.connector_host.sha256 = "0".repeat(64);
-  const errors = validatePlatformBom(bom, await readBomAuthorities(root));
+  const errors = validatePlatformBom(bom, structuredClone(authoritySnapshot));
   assert.ok(errors.some((error) => error.startsWith("annotator.version:")));
   assert.ok(errors.some((error) => error.startsWith("public Connector archive SHA:")));
 });
@@ -27,7 +29,7 @@ test("BOM keeps historical policy evidence separate from the standalone package 
   const policy = bom.unified_platform_runtime_candidate.policy_runtime;
   policy.source_revision = bom.components.policy_runtime.source_revision;
   policy.current_component_source_revision = "0".repeat(40);
-  const errors = validatePlatformBom(bom, await readBomAuthorities(root));
+  const errors = validatePlatformBom(bom, structuredClone(authoritySnapshot));
   assert.ok(errors.some((error) => error.startsWith("historical Policy Runtime source:")));
   assert.ok(errors.some((error) => error.startsWith("candidate current Policy Runtime source:")));
 });
@@ -36,7 +38,7 @@ test("BOM check rejects human gate drift and machine-proven origin claims", asyn
   const bom = JSON.parse(fs.readFileSync(path.join(root, "platform-bom.json"), "utf8"));
   bom.exact_runtime_candidate.gates.annotator_human.runtime_instance_id = "wrong-runtime";
   bom.exact_runtime_candidate.gates.annotator_human.human_origin = "machine_proven";
-  const errors = validatePlatformBom(bom, await readBomAuthorities(root));
+  const errors = validatePlatformBom(bom, structuredClone(authoritySnapshot));
   assert.ok(errors.some((error) => error.startsWith("human gate runtime:")));
   assert.ok(errors.some((error) => error.startsWith("human origin boundary:")));
 });
@@ -47,7 +49,7 @@ test("BOM check separates the loaded V2 artifact from later operations-only sour
   bom.current_v2_candidate.annotator.current_component_source_revision = "0".repeat(40);
   bom.current_v2_candidate.annotator.loaded = "pending";
   bom.current_v2_candidate.native_human_gate.status = "pass";
-  const errors = validatePlatformBom(bom, await readBomAuthorities(root));
+  const errors = validatePlatformBom(bom, structuredClone(authoritySnapshot));
   assert.ok(errors.some((error) => error.startsWith("V2 current Connector source:")));
   assert.ok(errors.some((error) => error.startsWith("V2 current Annotator source:")));
   assert.ok(errors.some((error) => error.startsWith("V2 annotator loaded:")));
@@ -62,7 +64,7 @@ test("BOM check rejects V2 evidence and selector-claim drift", async () => {
   bom.non_claims = bom.non_claims.filter(
     (claim) => claim !== "read_rich_v2_candidate_generated_card_choice_not_exercised"
   );
-  const errors = validatePlatformBom(bom, await readBomAuthorities(root));
+  const errors = validatePlatformBom(bom, structuredClone(authoritySnapshot));
   assert.ok(errors.some((error) => error.startsWith("V2 run-deck Reads:")));
   assert.ok(errors.some((error) => error.startsWith("V2 transfer retry:")));
   assert.ok(errors.some((error) => error.startsWith("V2 selector runtime:")));
@@ -77,10 +79,10 @@ test("BOM check keeps closed Human audit provenance independent from current sou
     candidate.owner_canary.audit_closeout_source_revision,
     bom.components.annotator.source_revision
   );
-  assert.deepEqual(validatePlatformBom(bom, await readBomAuthorities(root)), []);
+  assert.deepEqual(validatePlatformBom(bom, structuredClone(authoritySnapshot)), []);
 
   candidate.owner_canary.audit_closeout_source_revision = "0".repeat(40);
-  const errors = validatePlatformBom(bom, await readBomAuthorities(root));
+  const errors = validatePlatformBom(bom, structuredClone(authoritySnapshot));
   assert.ok(errors.some((error) => error.startsWith("native discriminator audit source:")));
 });
 
@@ -105,7 +107,7 @@ test("BOM check rejects Windows Native Foundation identity and claim drift", asy
   bom.non_claims = bom.non_claims.filter(
     (claim) => claim !== "native_foundation_windows_human_not_full_run"
   );
-  const errors = validatePlatformBom(bom, await readBomAuthorities(root));
+  const errors = validatePlatformBom(bom, structuredClone(authoritySnapshot));
   assert.ok(errors.some((error) =>
     error.startsWith("Windows Native Foundation main assembly:")));
   assert.ok(errors.some((error) => error.startsWith("Windows Native Foundation artifact MVID:")));
@@ -202,7 +204,7 @@ test("BOM check rejects unified artifact, identity and evidence promotion", asyn
   );
   bom.non_claims.push("native_semantic_discriminator_human_runtime_pending");
   bom.non_claims.push("semantic_execution_order_exact_rebind_not_exercised");
-  const errors = validatePlatformBom(bom, await readBomAuthorities(root));
+  const errors = validatePlatformBom(bom, structuredClone(authoritySnapshot));
   assert.ok(errors.some((error) => error.startsWith("candidate current Live UI source:")));
   assert.ok(errors.some((error) => error.startsWith("candidate common artifact SHA (live_ui):")));
   assert.ok(errors.some((error) => error.startsWith("candidate current Connector source:")));
@@ -272,7 +274,7 @@ test("final Full-Run candidate cannot borrow historical identity or Human qualif
   // a completed Human gate after final qualification.
   delete bom.final_full_run_candidate.human_evidence;
   bom.final_full_run_candidate.evidence_transfer_from_predecessor = true;
-  const errors = validatePlatformBom(bom, await readBomAuthorities(root));
+  const errors = validatePlatformBom(bom, structuredClone(authoritySnapshot));
   assert.ok(errors.some(error => error.startsWith("Final Full-Run annotator.source_revision:")));
   assert.ok(errors.some(error => error.startsWith("Final Full-Run Human audit:")));
   assert.ok(errors.some(error => error.startsWith("Final Full-Run predecessor transfer:")));
@@ -280,15 +282,15 @@ test("final Full-Run candidate cannot borrow historical identity or Human qualif
 
 test("portable verifier changes do not relabel closed native Human evidence", async () => {
   const bom = JSON.parse(fs.readFileSync(path.join(root, "platform-bom.json"), "utf8"));
-  assert.deepEqual(validatePlatformBom(bom, await readBomAuthorities(root)), []);
+  assert.deepEqual(validatePlatformBom(bom, structuredClone(authoritySnapshot)), []);
   bom.final_full_run_candidate.components.evidence.source_revision = "f".repeat(40);
-  assert.ok(validatePlatformBom(bom, await readBomAuthorities(root))
+  assert.ok(validatePlatformBom(bom, structuredClone(authoritySnapshot))
     .some(error => error.startsWith("Final Full-Run historical evidence source_revision:")));
 });
 
 test("new Live UI consumer source cannot relabel the recorded Human-tested native build", async () => {
   const bom = JSON.parse(fs.readFileSync(path.join(root, "platform-bom.json"), "utf8"));
-  const authorities = await readBomAuthorities(root);
+  const authorities = structuredClone(authoritySnapshot);
   assert.deepEqual(validatePlatformBom(bom, authorities), []);
   bom.final_full_run_candidate.components.live_ui.source_revision = "f".repeat(40);
   assert.ok(validatePlatformBom(bom, authorities).some(error => error.startsWith("Final Full-Run live_ui.source_revision:")));
@@ -296,7 +298,7 @@ test("new Live UI consumer source cannot relabel the recorded Human-tested nativ
 
 test("collection setup source and version updates cannot relabel the recorded Human artifact", async () => {
   const bom = JSON.parse(fs.readFileSync(path.join(root, "platform-bom.json"), "utf8"));
-  const authorities = await readBomAuthorities(root);
+  const authorities = structuredClone(authoritySnapshot);
   assert.deepEqual(validatePlatformBom(bom, authorities), []);
   for (const key of ["annotator", "game_mod"]) {
     const mutated = structuredClone(bom);
@@ -307,7 +309,7 @@ test("collection setup source and version updates cannot relabel the recorded Hu
 
 test("published Host pin is separate from a newer local source version", async () => {
   const bom = JSON.parse(fs.readFileSync(path.join(root, "platform-bom.json"), "utf8"));
-  const authorities = await readBomAuthorities(root);
+  const authorities = structuredClone(authoritySnapshot);
   assert.deepEqual(validatePlatformBom(bom, authorities), []);
   const published = structuredClone(bom.public_packages.host_runtime);
   // Model both a later source version and a legitimate future version sync.

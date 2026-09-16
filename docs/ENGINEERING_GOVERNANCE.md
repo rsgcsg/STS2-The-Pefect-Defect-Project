@@ -71,7 +71,7 @@ maximum of risk, claim strength, blast radius, uncertainty, and irreversibility.
 | Class | Typical scope | Minimum additional confidence |
 | --- | --- | --- |
 | `G0` | docs, governance, portable repository tooling | selected check plan (editorial only may use docs gate), closeout, diff check |
-| `G1` | portable implementation within one owner | regression, owning component suite, root portable check |
+| `G1` | portable implementation within one owner | regression, owning component suite, selected root portable check |
 | `G2` | public contract or cross-component behavior | `G1` plus contract/conformance and consumer compatibility |
 | `G3` | game-native C#, Harmony, Native Foundation seam | relevant `G2`, exact-game check, clean exact build, artifact identity |
 | `G4` | package, install, load, runtime lifecycle | `G3`, install, cold load, runtime verification, rollback |
@@ -255,8 +255,10 @@ Review in this order:
 7. Is the implementation maintainable?
 8. Style and nits.
 
-A rewritten head invalidates stale CI and source-identity claims. Merge only the
-latest tested head. Component-source PRs use normal merge while the current
+A rewritten head invalidates unverified CI and source-identity claims. Merge only the
+latest head with its required check. TESTING permits a verified same-content execution
+receipt for integration/promotion, with fresh current Git identity checks; it does not
+permit borrowing ancestor proof after content changes. Component-source PRs use normal merge while the current
 commit-provenance contract remains; governance-only PRs may be squashed.
 
 ## 9. Human and Agent collaboration

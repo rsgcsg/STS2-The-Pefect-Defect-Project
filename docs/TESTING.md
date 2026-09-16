@@ -32,28 +32,61 @@ npm run check:plan -- --base origin/develop
 npm run check:plan -- --base origin/develop --run
 ```
 
-The first rollout optimizes only modifications to the explicit editorial allowlist
-in `tools/check-plan.mjs`. `docs` runs `check:docs` (links, commands, routes,
-governance and patch hygiene) with Node alone; no Python/.NET installation.
-Governance/ADR/contract/CI/component paths, additions/deletions/type changes,
-unknown paths, dirty worktrees and unresolved Git refs select the full root suite
-on both Linux and Windows. A `.md` suffix alone never grants an exemption.
-For local uncommitted work the conservative result is full; inspect the exact
-committed diff for the lighter route. `npm run check` always means full.
+The router uses actual committed Git changes, not a caller-selected test list:
 
-`portable` remains the required status and evaluates all job outcomes, including
-failure and cancellation. It passes only if the plan succeeded and every selected
-lane succeeded; unselected lanes must be skipped. Its summary identifies scope
-and exact base/tested checkout. A docs PASS is not full portability evidence.
+| Scope | Selected checks | Eligible changes |
+|---|---|---|
+| `docs` | Node editorial/route/governance checks | modifications to the explicit editorial allowlist |
+| `python` | repository guards plus the entire Python gate on Linux and Windows | only `python/spireagent/`, `python/stpd/`, `python/tests/` additions/modifications/deletions, optionally explicit report/editorial companions |
+| `full` | complete root gate on both OSes | Platform, shared contracts/locks, CI/tools, deployment, governance, unknown paths or Git state |
+| `reuse` | fresh repository/identity/BOM/history checks, referencing a verified executed receipt | eligible integration/promotion with identical content and check definition |
 
-CI runs on every PR and pushes to `develop` and `main`. Release/hotfix branches
-use their PR run, avoiding duplicate push runs. Manual dispatch and weekly Sunday
-21:17 UTC runs retain full checks. Main/develop merge commits are tested in their
-own right. An executable release requires a full dual-OS result for its candidate;
-manual dispatch supplies it when needed. Scheduled results cover the default
-branch, so dispatch full checks on an unreleased active integration line before
-publication. Do not use whole-workflow path filters: required checks would remain
-Pending. Concurrency cancels superseded CI, never a production deployment.
+Companions are modified editorial allowlist files, CURRENT, PROJECT_CONSOLE, and
+added/modified single-file Markdown reports under docs/evidence. They qualify only
+alongside a Python owner change; standalone evidence edits and evidence deletions
+still use full. ADR/governance and unknown docs are not companions.
+
+The Python scope still covers installed Platform consumers, application/research tests,
+SDK contracts, typecheck, CPU E2E and packaging. Platform never imports Python applications;
+repository boundary guards run in both scopes. This is owner-level routing, not yet a
+per-test UI/research selector. Windows is not dropped. Renames use Git's no-renames A/D
+representation: both paths must qualify. Type changes, dirty worktrees and unresolved
+refs fall back to full. Local uncommitted regression is useful, but final routing uses a
+clean committed diff. `npm run check` always runs full.
+
+`portable` is the required aggregate: plan and all selected jobs must succeed;
+unselected jobs must be skipped. Failure/cancellation never becomes a PASS. A Python,
+docs or reuse result is labelled as such, not as a new full dual-OS execution.
+
+### Integration receipts instead of repeated identical execution
+
+Normal topic PRs always execute. Pushes to protected main/develop and `release/` PRs
+to main may reference a fresh executed result from this repository's CI workflow.
+Executable main promotion requires full scope, so a Python-only receipt cannot satisfy it.
+Manual dispatch and the weekly Sunday 21:17 UTC run always execute full; use dispatch
+when a runner/environment change or independent requalification requires fresh evidence.
+
+The shared verifier checks: successful completed original run and current attempt;
+repository and event; exact tree (therefore tracked source, tests, workflow and locks);
+workflow blob; executed scope and both OS outcomes; actual tested checkout recorded in
+the receipt; and a maximum seven-day age from the original run creation (reruns cannot refresh it). It downloads only the named small receipt,
+checks the GitHub artifact SHA256 and never executes artifact content. Missing/expired
+artifacts, unknown refs, API failure or mismatch select real execution. Reused runs do
+not publish another executable receipt, so reuse cannot extend age or form a proof chain.
+Only a bounded recent-run search is performed; cache misses are normal.
+
+Every new integration still runs the current repository/identity/BOM/history guards.
+Git source provenance is not inferred from tree equality. CI summaries link the original
+execution and identify the current checkout. The original run owns the runner image,
+versions and logs: reuse does not claim the current Windows image was freshly tested.
+Seven days is an explicit freshness policy, not arbitrary environment equivalence.
+Production/native/Human and artifact qualification remain separate, never inferred here.
+
+CI continues to run on all PRs and main/develop pushes; release/hotfix branches use their
+PR run, avoiding duplicate push runs. Do not skip whole required workflows by path.
+Concurrency cancels superseded CI, never a production deployment. The test jobs retain
+JUnit timing/skip diagnostics; Python stages print command duration. The successful
+aggregate seals the actual checkout in an immutable seven-day execution artifact.
 
 All third-party GitHub Actions are pinned by full commit SHA, checkout fetches
 full Git history because identity/history checks require it, and checkout does

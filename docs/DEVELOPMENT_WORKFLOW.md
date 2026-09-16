@@ -5,6 +5,36 @@ This is the one owner of branch, release and deployment coordination. Native ins
 cloud commands and research admission remain in their focused guides; do not copy new
 versions of those procedures into campaigns or incident notes.
 
+## 日常怎么做（维护与发布速查）
+
+**develop 收集已审查的日常改动；main 记录选定的正式交付批次。运行版本由发布清单和实际产物决定。**
+
+| 你在做什么 | 操作到哪里结束 | 不需要附带做什么 |
+|---|---|---|
+| 普通功能、修复、文档 | 最新 develop 开 topic → 相关回归/检查 → PR → develop → 核对集成检查 | 不顺手开 release PR、重启 Hub 或要求成员升级 |
+| 正式交付一批功能 | 选定 develop → 临时 release 分支 → main PR → 固定发布清单/原样产物 | 不把之后继续前进的 develop 自动带入候选 |
+| 只更新 Hub | 已审查源码、锁和镜像 → runbook 预检/备份/部署/观察 | 不重编 Mod，不重新登记电脑 |
+| 更新本机工作台或 Mod | 选择已验收发布，按受影响的安装/队列升级入口操作 | 不覆盖 pending 数据，不复制账号凭据 |
+| 紧急修复当前正式版 | 从受影响发布/main 开 hotfix；经 PR 修复，必要时回流 develop | 不在服务器直接改源码作为最终修复 |
+
+日常三个固定入口：`check:plan -- --base origin/develop --run` 选择检查，
+`project:closeout` 提醒影响，PR 完成审查和集成。命令前均为 `npm run`。
+开发过程中先跑最小忠实回归；待改动稳定后再跑计划检查，不在每次改一行后重复全仓。
+普通 topic PR 总是执行所选检查；合并/正式晋级允许按 TESTING 的回执规则复用同内容的已执行结果，
+并重新核对当前 Git 身份。手动 full 是强制重新执行入口。
+
+两个分支树相同时，不因 merge ancestry 或 SHA 不同开空同步 PR。
+main 有独有热修复时才通过 PR 带回 develop。组件源码继续普通 merge，保留来源。
+不要把 main 当生产服务开关，也不要移动旧 release tag 覆盖历史。
+
+维护频率按需要：日常看现有 System 健康/容量/失败任务；团队每周集中看依赖、安全、CI慢项和备份新鲜度，
+需要时安排恢复演练。确认的安全或正确性问题及时处理。正常机器继续使用已验收固定版，
+没有“每个提交都发布/每周所有人都重装”的要求。
+
+发布负责人先让本批候选收敛，再一次性完成所需发布流程。发现新缺陷就修复并重验受影响部分，
+不要在仍不断修补的同时对每个中间提交启动完整 main 晋级。只更新流程规范的任务通常到 develop 结束；
+如果任务明确包含正式发布，则完成 main 与发布回执。不要为了演示流程去重启无关生产服务。
+
 ## Branches: integration, publication and work
 
 | Ref | Purpose | What it does not do |
@@ -31,7 +61,7 @@ second governance system. A PR may cross components when one causal change requi
    newer base, merge that base into the topic branch, review conflicts and revalidate.
    Use a normal merge commit for any component source change; docs-only squash remains
    permitted by root policy. Preserve path-scoped component provenance.
-3. Merge the reviewed PR to develop and verify the actual merge-head CI.
+3. Merge the reviewed PR to develop and verify the actual merge-head CI (fresh checks or a verified execution receipt plus current identity checks).
    This completes an ordinary task unless publication/deployment is explicitly in scope. No service is
    deployed merely because that merge happened. Several compatible improvements may be
    grouped into one intentional release; do not make every commit a user update.
@@ -45,7 +75,7 @@ second governance system. A PR may cross components when one causal change requi
    promotion. A docs-only release needs source/doc checks, not a new Mod, image or canary.
    An explicitly authorized candidate deployment stays identified as a candidate until
    its own gate passes. Never use a failed Human gate as a green release receipt.
-6. Merge the release PR normally and verify exact main CI. If stabilization/hotfix changes
+6. Merge the release PR normally and verify exact main CI under the same receipt/identity rule. If stabilization/hotfix changes
    occurred only on the release/main line, synchronize them back to develop through a PR
    and check its merge head. When main/develop trees already match, a merge-only ancestry
    difference does not require an empty synchronization PR.
@@ -146,7 +176,7 @@ advances; operators consult the approved current runbook and actual deployment i
 
 For initial/full environment validation: npm ci, npm ci --prefix python, npm run setup:python, npm run check.
 For subsequent tasks use npm run check:plan -- --base origin/develop --run;
-TESTING.md defines the editorial route and all remaining full/native gates.
+TESTING.md defines editorial, Python-owner, full and verified integration scopes plus native gates.
 Run npm run project:closeout and git diff --check; match higher gates to TESTING.md.
 Review contracts/BOM/pins/version/ADR/docs only where affected. Record exact tested head,
 actual evidence, rollback and non-claims in the PR. Source merge never creates Human or

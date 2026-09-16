@@ -280,6 +280,8 @@ git push -u origin fix/collector/describe-problem
 gh pr create --base develop --draft --title "Describe the actual change" --body-file /ABS/PRIVATE/pr-body.md
 ```
 
+日常任务合 develop 并核对集成检查后结束；正式交付才批量进入 main。两分支区别与维护频率见 [开发流程速查](DEVELOPMENT_WORKFLOW.md)。
+
 PR 正文依根 [PR 模板](../.github/PULL_REQUEST_TEMPLATE.md) 写：exact base/head、G0–G6、owner、第一错误事实、改动/非目标、契约及身份、测试/证据、回滚和 non-claims。没有跨仓变更就明确不适用，仍保留相关历史依赖精确 pin。
 
 推送修复后看 **最新 head** 的 CI，不能借上一个提交的绿灯。若 develop 前进，按仓库规则合并最新 base、处理冲突并重验；不为方便改用 force push。自查后请求 reviewer，审查发现同一问题的修复继续在该 PR 内正常提交。
@@ -408,7 +410,7 @@ session / run / decision / receipt / dataset / job ID（按相关性）：
 
 - 普通工作：从最新 develop 开独立分支，修复、相关回归、按影响检查、PR、合 develop；除非任务要求上线，到这里就完成。
 - 正式交付：负责人选一批可发布改动，经 release PR 合 main；发布清单指定实际产物。main 有文档更新，不代表全员重装。
-- 检查入口：`npm run check:plan -- --base origin/develop --run`。普通说明文档可走 Node 轻检查；源码、契约、治理、未知影响仍走全套。原生/Human 等更高证据要求另外保留。
+- 检查入口：`npm run check:plan -- --base origin/develop --run`。普通说明文档可走 Node 轻检查；仅 Python owner 改动跑双系统 Python 全套和仓库检查；契约、锁、治理、未知影响仍走全套。合并和正式晋级可按 TESTING 核对同内容执行回执，当前身份另验。原生/Human 等更高证据要求另外保留。
 - 安装入口：按[开发者包安装指南](../python/docs/DEVELOPER_KIT_INSTALL.md)使用已批准 ZIP 与其一个校验值，工具准备固定目录、锁定环境和已发布二进制；不再手抄全部组件 hash。
 - 本地工作台“系统”页区分本机和 Hub 来源，链接正式发布说明。不同 SHA 不自动阻止连接；未知格式、过期观测和真实错误必须显示。
 - 云端普通更新：按 [RUNBOOK](../python/deploy/hub/RUNBOOK.md) 的 rollout 计划/应用入口，只更新受影响 Hub；数据库或配置变化走明确迁移流程。
