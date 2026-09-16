@@ -151,7 +151,8 @@ def test_game_overview_keeps_large_journal_inventory_in_stored_profile(tmp_path:
     for field in ("run_id", "complete", "outcome", "canonical", "native_starts", "native_ends"):
         assert first[field] == profile["runs"][0][field]
     with owner.operations.transaction() as db:
-        assert db.execute("SELECT result FROM decision_jobs WHERE id=?", (identity,)).fetchone()[0] == stored
+        saved = db.execute("SELECT result FROM decision_jobs WHERE id=?", (identity,)).fetchone()
+        assert saved[0] == stored
 
 
 def test_concurrent_worker_claim_runs_once(tmp_path: Path) -> None:
