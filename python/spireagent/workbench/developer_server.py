@@ -26,11 +26,9 @@ from urllib.request import ProxyHandler, Request, build_opener
 
 from spireagent.console.page import CSP, asset, render_shell
 from spireagent.json_boundary import BoundaryError
-from spireagent.workbench.collection_flow import CollectionFlow, upload_preference_status
 from spireagent.workbench.console import LocalConsole
 from spireagent.workbench.dashboard import _safe_value
 from spireagent.workbench.developer import ROOT, ProjectConfig, atomic_json, doctor, tool_identity
-from spireagent.workbench.evaluation_sharing import EvaluationSharing
 from spireagent.workbench.hub_client import HubClient
 from spireagent.workbench.identity import LocalIdentity
 from spireagent.workbench.local_models import LocalModelService
@@ -178,7 +176,9 @@ def status_project(config: ProjectConfig) -> dict[str, Any]:
 
 class Application:
     def __init__(self, config: ProjectConfig, *, config_path: Path | None = None) -> None:
+        from spireagent.workbench.collection_flow import CollectionFlow
         from spireagent.workbench.collection_setup import CollectionSetup
+        from spireagent.workbench.evaluation_sharing import EvaluationSharing
 
         self.config = config
         self.config_path = config_path
@@ -275,6 +275,8 @@ class Application:
             self.delivery, self.delivery_log = None, None
 
     def start_delivery(self) -> None:
+        from spireagent.workbench.collection_flow import upload_preference_status
+
         preference = upload_preference_status(self.config)
         self.delivery_error = preference.get("error")
         if not preference["enabled"]:
