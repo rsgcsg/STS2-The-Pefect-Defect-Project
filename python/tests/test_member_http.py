@@ -119,6 +119,18 @@ def test_loopback_models_and_member_actions_need_correct_credential(tmp_path, mo
     calls = []
     monkeypatch.setattr(app.models, "command", lambda action: calls.append(action) or {"ok": True})
     monkeypatch.setattr(app.models, "catalog", lambda: {"policies": []})
+    monkeypatch.setattr(
+        app.models,
+        "prepare_and_load",
+        lambda selection: calls.append("prepare:" + selection) or {"status": "pending"},
+    )
+    monkeypatch.setattr(
+        app.evaluation_sharing,
+        "share",
+        lambda identity, authorized: (
+            calls.append((identity, authorized)) or {"status": "preparing"}
+        ),
+    )
     try:
         with pytest.raises(HTTPError) as error:
             client.open(root + "/api/local-models")
@@ -145,6 +157,28 @@ def test_loopback_models_and_member_actions_need_correct_credential(tmp_path, mo
         ) as response:
             assert json.load(response) == {"ok": True}
         assert calls == ["human"]
+        for route, body in [
+            ("prepare", {"selection_id": "audited"}),
+            ("share", {"evaluation_id": "a" * 64, "authorized": True}),
+        ]:
+            with pytest.raises(HTTPError) as denied:
+                client.open(
+                    Request(
+                        root + "/api/local-models/" + route,
+                        data=json.dumps(body).encode(),
+                        headers={**headers, "Origin": "https://evil"},
+                    )
+                )
+            assert denied.value.code == 403
+            with client.open(
+                Request(
+                    root + "/api/local-models/" + route,
+                    data=json.dumps(body).encode(),
+                    headers=headers,
+                )
+            ) as response:
+                assert json.load(response)["status"] in {"pending", "preparing"}
+        assert calls == ["human", "prepare:audited", ("a" * 64, True)]
         cli = build_opener()
         with cli.open(
             Request(
@@ -273,3 +307,39 @@ def test_member_bff_rejects_arbitrary_urls_paths_and_admin_calls(tmp_path):
     ):
         with pytest.raises((BoundaryError, ValueError)):
             client.request(route)
+
+
+def test_live_evaluation_transport_has_bounded_larger_body_and_same_auth(
+    tmp_path, signed, monkeypatch
+):
+    access, token, _ = signed
+    app = HubApplication(
+        service(tmp_path), "admin" * 16, browser_access=access, public_origin="https://hub.example"
+    )
+    jwt = token()
+    identity = request(app, "/app/api/identity", jwt=jwt)[1]
+    calls = []
+    monkeypatch.setattr(
+        app.member_api.live_evaluations,
+        "publish",
+        lambda principal, body: calls.append(body) or {"accepted": True},
+    )
+    body = {"bounded_test_padding": "x" * 70000, "csrf_token": identity["csrf_token"]}
+    route = "/app/api/member/live-evaluations"
+    assert request(app, route, method="POST", jwt=jwt, body=body, origin="https://evil")[0] == 403
+    assert not calls
+    assert request(app, route, method="POST", jwt=jwt, body=body)[0] == 200
+    assert len(calls) == 1 and "csrf_token" not in calls[0]
+    assert request(app, "/app/api/member/exports", method="POST", jwt=jwt, body=body)[0] >= 400
+    assert (
+        request(
+            app,
+            route,
+            method="POST",
+            jwt=jwt,
+            body={},
+            headers={"CONTENT_LENGTH": str(32 * 1024 * 1024 + 1)},
+        )[0]
+        >= 400
+    )
+    assert len(calls) == 1

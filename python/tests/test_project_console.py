@@ -34,7 +34,8 @@ def test_shared_shell_has_no_embedded_runtime_data_or_external_dependencies():
     for mode, api in [("local", "/api/console"), ("cloud", "/app/api")]:
         page = render_shell(mode, api, "https://hub.example")
         assert 'lang="zh-CN"' in page and 'data-api="' + api in page
-        assert "录制与上传" in page
+        assert "训练与模型" in page
+        assert ('data-view="campaigns"' in page) == (mode == "local")
         assert "http-equiv" not in page
         assert "localStorage" not in asset("console.js")[1].decode()
         assert "innerHTML" not in asset("console.js")[1].decode()
@@ -43,9 +44,7 @@ def test_shared_shell_has_no_embedded_runtime_data_or_external_dependencies():
             "collections",
             "datasets",
             "research",
-            "models",
-            "statistics",
-            "downloads",
+            "evaluations",
             "system",
         ):
             assert 'data-view="' + view in page
@@ -266,7 +265,7 @@ def test_http_shell_and_assets_do_not_query_owners_or_accept_browser_mutations(
     try:
         with urlopen(root + "/?view=collections", timeout=2) as response:
             page = response.read().decode()
-            assert "采集记录" in page and app.control_token not in page
+            assert 'data-view="collections"' in page and app.control_token not in page
             assert response.headers["Content-Security-Policy"] == CSP
         for name, kind in (("console.js", "text/javascript"), ("console.css", "text/css")):
             with urlopen(root + "/assets/" + name, timeout=2) as response:
@@ -321,3 +320,22 @@ def test_upgrade_can_observe_and_stop_predecessor_but_cannot_start_it(
     path.write_text(json.dumps(previous))
     with pytest.raises(BoundaryError, match="unsupported_project_config"):
         ProjectConfig.load(path, require_current_combination=False)
+
+
+def test_bad_upload_preference_does_not_prevent_workbench_diagnostics(tmp_path, monkeypatch):
+    from spireagent.workbench.collection_flow import PREFERENCE_FILE
+
+    app = Application(config(tmp_path))
+    path = app.config.state_dir / PREFERENCE_FILE
+    path.write_text("invalid preference")
+    path.chmod(0o600)
+    monkeypatch.setattr(
+        subprocess, "Popen", lambda *args, **kwargs: pytest.fail("must not start uploader")
+    )
+    try:
+        app.start_delivery()
+        assert app.delivery_status()["status"] == "blocked"
+        assert app.collection_flow.status()["stage"] == "upload_blocked"
+        assert path.read_text() == "invalid preference"
+    finally:
+        app.close()

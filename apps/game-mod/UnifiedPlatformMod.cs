@@ -11,7 +11,7 @@ namespace STS2Platform.GameMod;
 [ModInitializer("Initialize")]
 public static class UnifiedPlatformMod
 {
-    public const string Version = "0.2.0-rc.6";
+    public const string Version = "0.2.0-rc.7";
 
     public static void Initialize()
     {
@@ -39,6 +39,9 @@ public static class UnifiedPlatformMod
         ConnectorMod.Initialize();
         RecorderMod.Initialize();
         PlatformLiveUiMod.Initialize();
+        try { PlatformTaskBridge.Start(); }
+        catch (Exception exception)
+        { GD.PrintErr($"[STS2 Platform] task bridge unavailable; model handoff blocked: {exception.Message}"); }
         GD.Print("[STS2 Platform] unified Mod initialized; components=connector,annotator,live-ui");
     }
 

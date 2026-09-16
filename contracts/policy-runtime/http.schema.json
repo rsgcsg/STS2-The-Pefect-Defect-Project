@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "sts2.policy-runtime/http-2",
   "title": "STS2 loopback Policy Runtime HTTP response",
-  "description": "HTTP-2 mutations use /v2/mode, /v2/tick and /v2/stop with exactly one X-STS2-Policy-Run-ID precondition matching the intended Runtime session.",
+  "description": "HTTP-2 mutations use /v2/mode, /v2/tick and /v2/stop with exactly one X-STS2-Policy-Run-ID matching the intended Runtime session. Non-Human mode/tick also validate optional X-STS2-Game-Instance-ID and X-STS2-Recovery-Epoch owner preconditions. New control clients obtain both through GET /v2/environment (environment.schema.json); legacy status envelopes remain unchanged.",
   "oneOf": [
     {
       "type": "object",

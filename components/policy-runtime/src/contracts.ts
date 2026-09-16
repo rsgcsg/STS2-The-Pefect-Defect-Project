@@ -12,7 +12,22 @@ export const POLICY_DECISION_SCHEMA = "sts2.policy-runtime/decision-1" as const;
 export const AGENT_RUN_SCHEMA = "sts2.policy-runtime/agent-run-1" as const;
 export const POLICY_PORT_SCHEMA = "sts2.policy-runtime/policy-port-1" as const;
 export const EVIDENCE_MANIFEST_SCHEMA = "sts2.policy-runtime/immutable-evidence-manifest-1" as const;
-export const POLICY_RUNTIME_VERSION = "0.1.0-rc.3" as const;
+export const POLICY_RUNTIME_VERSION = "0.1.0-rc.4" as const;
+export const RUNTIME_ENVIRONMENT_SCHEMA = "sts2.policy-runtime/environment-1" as const;
+
+/** Read-only observation used by control clients before preparing a command. */
+export interface RuntimeEnvironmentBinding {
+  schema: typeof RUNTIME_ENVIRONMENT_SCHEMA;
+  run_id: string;
+  runtime_instance_id: string;
+  recovery_epoch: number;
+}
+
+/** Additive control preconditions; legacy callers may omit both. */
+export interface RuntimeControlPreconditions {
+  gameInstanceId?: string;
+  recoveryEpoch?: number;
+}
 
 export type RuntimeMode = "human" | "shadow" | "one_step" | "auto";
 export type DecisionDisposition = "admit" | "abstain";
@@ -103,7 +118,7 @@ export interface PolicyPortDecisionResponse { schema: typeof POLICY_PORT_SCHEMA;
 export interface PolicyPortErrorResponse { schema: typeof POLICY_PORT_SCHEMA; message_type: "error"; request_id: string; error: { code: string; message: string } }
 
 export interface PolicyConnector {
-  capabilities(): Promise<PlayerEnvironmentCapabilities>;
+  capabilities(options?: { fresh?: boolean }): Promise<PlayerEnvironmentCapabilities>;
   observeBundle(requiredReadKinds: readonly string[]): Promise<DecisionBundle>;
   acquireController(): Promise<void>;
   releaseController(): Promise<void>;

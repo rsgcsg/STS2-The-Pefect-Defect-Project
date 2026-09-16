@@ -196,7 +196,8 @@ class HubApplication:
                 )
             return self.response(self.member_api.read(path, query, principal))
         if method == "POST" and not query:
-            value = self.body(env, maximum=65536)
+            maximum = 32 * 1024 * 1024 if path == "live-evaluations" else 65536
+            value = self.body(env, maximum=maximum)
             if not isinstance(value, dict):
                 raise BoundaryError("member", "invalid_member_request")
             if browser:

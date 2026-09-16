@@ -1,5 +1,34 @@
 # Current Status
 
+## Unified task flow — deployed, bounded acceptance recorded
+
+The unified daily collection flow is installed on the verified macOS collector and
+its Hub is deployed at source `f4a21a2d67392b557c593cd396b894d1c3439779`.
+[Exact acceptance](evidence/UNIFIED_TASK_FLOW_2026-09-16.md) records the immutable kit,
+native identities, source checks, deployment, rollback and fresh member download.
+Formal integration/publication is recorded separately by PR #10 and release receipts.
+
+The owner-operated canary contains 44 accepted actions and 43 proved/canonical
+decisions (four nested selectors). Its final End Turn was closed before a successor
+boundary: one unresolved / real-failure count remains, with the explicit reason
+`session_closed_before_successor_boundary`. Two pauses/resumes, durable Close,
+verified upload and byte-identical member download passed. This accepts the bounded
+recording/control/transfer journey; it is not a zero-failure Human or Full-Run gate.
+No raw disposition is reclassified. Only in-progress/resume run boundaries exist.
+
+Local model preparation, Recorder-to-model handoff and separately authorized Agent
+reports retain their own boundaries. Native model outcomes remain unmeasured and
+S1 requires CUDA. No Windows native, GPU training, scientific or production-throughput
+qualification is added. Compute budget remains zero.
+
+See [the member task flow](../python/docs/UNIFIED_TASK_FLOW.zh-CN.md),
+[collection orchestration](../python/docs/COLLECTION_FLOW.md),
+[model tasks and sharing](../python/docs/LOCAL_MODEL_TASK_FLOW.md), and
+[selected-decision unions](../python/docs/adr/0008-selected-decision-unions.md).
+The prior qualified combinations below keep their exact identities and evidence.
+
+## Previously qualified operating combinations
+
 The [operating-flow acceptance](evidence/OPERATING_FLOW_2026-09-16.md) qualifies
 the managed Workbench installation and same-schema Hub rollout: 60 new Human
 decisions proved/canonical, zero real failures, automatic Close/upload and exact
@@ -71,8 +100,8 @@ closeout](evidence/PR6_SUCCESSOR_OWNER_READY_SOURCE_CLOSEOUT_2026-09-01.md)
 
 ## Collection delivery engineering
 
-Current Evidence 0.1.0-rc.7 includes opt-in fixed-tool closed-session delivery and persistent
-HTTP receipt recovery. See [ADR 0008](adr/0008-release-bound-closed-session-delivery.md)
+The historical Evidence 0.1.0-rc.7 delivery baseline includes opt-in fixed-tool
+closed-session delivery and persistent HTTP receipt recovery. See [ADR 0008](adr/0008-release-bound-closed-session-delivery.md)
 and [delivery operation](../components/evidence/DELIVERY.md). Native gameplay
 source and the PR25 Human artifact are unchanged. Real cloud deployment and a
 fresh Close-to-cloud Human delivery journey are not established by portable tests.

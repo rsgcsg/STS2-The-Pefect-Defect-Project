@@ -12,14 +12,15 @@ const views = {
   games: ["对局与片段", "按原生边界整理；完整性、胜负与记录质量分别统计。"],
   datasets: ["数据集", "固定来源与版本；新上传的数据不会自动改变已有训练集。"],
   jobs: ["作业", "查看真实执行状态与产物。此页面不会启动计算。"],
-  models: ["模型与评估", "沿着数据与作业来源查看产物；下载不等于加载或运行。"],
+  models: ["模型目录", "沿着数据与作业来源查看产物；下载不等于加载或运行。"],
   system: ["系统", "查看连接、版本与运维证据，区分已确认事实和未观测状态。"],
   members: ["成员管理", "管理员管理成员；所有成员共享项目数据与研究能力。"],
   statistics: ["数据统计", "总量、类别和摘要覆盖，按明确的数据范围统计。"],
   downloads: ["数据下载", "固定下载清单和校验值；封存与未获共享授权的数据保持受限。"],
-  research: ["训练与分析", "查看真实训练产物、benchmark 和数据分析，区分尚未执行的计划。"],
-  "local-models": ["本机模型评估", "检查兼容性、加载模型，再明确开始真实游戏评估。"],
-  campaigns: ["录制与上传", "完成一次本机设置，日常录制后查看上传；专题活动按需选择。"],
+  research: ["训练与模型", "查看真实训练产物、benchmark 和数据分析，区分尚未执行的计划。"],
+  "local-models": ["模型实战", "检查兼容性、加载模型，再明确开始真实游戏评估。"],
+  campaigns: ["真人采集", "准备一次，在游戏内开始与结束录制；后台处理上传。"],
+  evaluations: ["评估结果", "模型游戏实战与离线评价分别展示；片段和未知结果不会计作胜局。"],
 };
 const labels = {
   verified: ["云端已验收", "good"],
@@ -835,6 +836,7 @@ function system(data) {
       ["设备最近联络", "在账号与电脑查看；最近联络不代表当前在线"],
     ]),
   );
+  if (data.access?.role === "admin" || data.role === "admin") body.append(link("采集说明设置", "?view=campaigns"));
   if (local) {
     body.append(
       node(
@@ -949,7 +951,7 @@ let renderedContext = null;
 function readLocation() {
   const params = new URLSearchParams(location.search),
     requested = params.get("view");
-  state.view = Object.hasOwn(views, requested) ? requested : "overview";
+  state.view = Object.hasOwn(views, requested) ? requested : (localShell ? "campaigns" : "collections");
   const id = params.get("id");
   state.id =
     ["collections", "datasets", "models"].includes(state.view) &&
@@ -980,6 +982,26 @@ function changePage(offset) {
   readLocation();
   load(true);
 }
+function navigationGroup(view) {
+  if (["collections", "statistics", "games", "downloads", "overview"].includes(view)) return "collections";
+  if (["research", "models", "jobs"].includes(view)) return "research";
+  return view;
+}
+function renderTaskTabs(view) {
+  const target = $("task-tabs");
+  if (!target) return;
+  const groups = {
+    collections: [["collections", "记录"], ["statistics", "统计"], ["games", "对局与片段"], ["downloads", "下载"]],
+    research: [["research", "训练与分析"], ["models", "模型目录"], ["jobs", "作业"]],
+  };
+  target.replaceChildren();
+  for (const [key, label] of groups[navigationGroup(view)] || []) {
+    const item = link(label, `?view=${key}`);
+    item.className = `task-tab${key === view ? " active" : ""}`;
+    item.addEventListener("click", event => { if (event.button === 0 && !event.metaKey && !event.ctrlKey) { event.preventDefault(); navigate(key); } });
+    target.append(item);
+  }
+}
 async function load(manual = false) {
   if (!manual && (document.activeElement?.id === "device-name" || document.activeElement?.closest("[data-editor], [data-project-editor]"))) return;
   if (state.busy && !manual) return;
@@ -1001,8 +1023,9 @@ async function load(manual = false) {
   document
     .querySelectorAll("[data-view]")
     .forEach((item) =>
-      item.classList.toggle("active", item.dataset.view === view),
+      item.classList.toggle("active", item.dataset.view === navigationGroup(view)),
     );
+  renderTaskTabs(view);
   $("content").setAttribute("aria-busy", "true");
   $("refresh").disabled = true;
   const route = id ? `${view}/${id}` : view;
@@ -1013,6 +1036,7 @@ async function load(manual = false) {
   try {
     const identity = await window.SpireIdentity.refresh(manual);
     if (serial !== state.serial) return;
+    document.querySelectorAll("[data-admin-only]").forEach(item => { item.hidden = identity?.principal?.role !== "admin"; });
     if (["members", "statistics", "downloads", "research", "campaigns"].includes(view) || (["datasets", "games"].includes(view) && !id)) {
       window.SpireIdentity.ensureProjectScope();
     }
@@ -1020,7 +1044,7 @@ async function load(manual = false) {
     context = `${pageContext}:${identityContext}`;
     if (renderedContext !== context) $("content").replaceChildren(empty("正在读取…", "当前账号与电脑范围"));
     local = window.SpireIdentity.isLocal();
-    if (["members", "statistics", "downloads", "research", "local-models", "campaigns"].includes(view) || (["datasets", "games"].includes(view) && !id)) {
+    if (["members", "statistics", "downloads", "research", "local-models", "campaigns", "evaluations"].includes(view) || (["datasets", "games"].includes(view) && !id)) {
       const opened = [...document.querySelectorAll("details[open]")].map(item => item.dataset.preserve);
       const content = await window.SpireProject.render(view, identity);
       if (serial !== state.serial || identityContext !== window.SpireIdentity.context()) return;

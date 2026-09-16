@@ -154,7 +154,9 @@ def refresh_decision_statistics(
                         or sum(item.size for item in manifest.payloads) > MAX_PROFILE_BYTES
                     ):
                         raise BoundaryError("statistics", "dataset_size_or_kind_limit")
-                    if manifest.parameters.value().get("schema") == "stpd/decision-dataset-v1":
+                    if manifest.parameters.value().get("schema") in {
+                        "stpd/decision-dataset-v1", "stpd/decision-union-v1",
+                    }:
                         from stpd.fullrun.decision_store import load as load_decisions
 
                         manifest, decisions = load_decisions(service.store, identity)

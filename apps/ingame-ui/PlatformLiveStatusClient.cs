@@ -15,6 +15,7 @@ public sealed class PlatformLiveStatusClient : IDisposable
 
     private readonly HttpClient _connectorHttp;
     private readonly HttpClient _policyRuntimeHttp;
+    private readonly HttpClient _policyRuntimeCommandHttp;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
@@ -24,15 +25,20 @@ public sealed class PlatformLiveStatusClient : IDisposable
 
     public PlatformLiveStatusClient()
     {
-        _connectorHttp = new HttpClient
+        _connectorHttp = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false })
         {
             BaseAddress = new Uri($"http://127.0.0.1:{ResolveConnectorPort()}/"),
             Timeout = TimeSpan.FromMilliseconds(900)
         };
-        _policyRuntimeHttp = new HttpClient
+        _policyRuntimeHttp = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false })
         {
             BaseAddress = ResolvePolicyRuntimeAddress(),
             Timeout = TimeSpan.FromMilliseconds(900)
+        };
+        _policyRuntimeCommandHttp = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false })
+        {
+            BaseAddress = _policyRuntimeHttp.BaseAddress,
+            Timeout = TimeSpan.FromSeconds(45)
         };
     }
 
@@ -114,31 +120,58 @@ public sealed class PlatformLiveStatusClient : IDisposable
             errors);
     }
 
+    public async Task<PlatformPolicyBinding> ObserveBindingAsync(
+        string expectedRunId, string expectedGameInstanceId, CancellationToken cancellationToken = default)
+    {
+        PlatformPolicyBinding observed = await GetAsync<PlatformPolicyBinding>(
+            _policyRuntimeHttp, "v2/environment", cancellationToken);
+        observed.Validate(expectedRunId, expectedGameInstanceId);
+        return observed;
+    }
+
     public async Task<PolicyRuntimeStatus> SetModeAsync(
         string mode,
         string expectedRunId,
+        PlatformPolicyBinding? binding = null,
         CancellationToken cancellationToken = default)
     {
         ValidateMode(mode);
+        if (mode != "human" && binding is null) throw new InvalidOperationException("A fresh game binding is required.");
         PolicyRuntimeHttpStatusResponse response = await PostAsync<PolicyRuntimeHttpStatusResponse>(
             "mode",
             new { mode },
             expectedRunId,
-            cancellationToken);
-        EnsurePolicyRuntimeStatus(response.Schema, response.Status);
+            cancellationToken, binding, value => {
+                EnsureCommandStatus(value.Schema, value.Status, expectedRunId);
+                if (value.Status.Mode != mode || (mode == "human" && value.Status.Controller != "released"))
+                    throw new JsonException("Policy Runtime did not confirm the requested mode.");
+            });
         return response.Status;
     }
 
-    public async Task<PolicyRuntimeStatus> TickAsync(string expectedRunId, CancellationToken cancellationToken = default)
+    public async Task<PolicyRuntimeStatus> StopAsync(string expectedRunId, CancellationToken cancellationToken = default)
+    {
+        var response = await PostAsync<PolicyRuntimeHttpStatusResponse>("stop", new { }, expectedRunId, cancellationToken,
+            validate: value => {
+                EnsureCommandStatus(value.Schema, value.Status, expectedRunId);
+                if (value.Status.Lifecycle != "stopped" || value.Status.Mode != "human" || value.Status.Controller != "released")
+                    throw new JsonException("Policy Runtime did not confirm stop.");
+            });
+        return response.Status;
+    }
+
+    public async Task<PolicyRuntimeStatus> TickAsync(string expectedRunId, PlatformPolicyBinding binding, CancellationToken cancellationToken = default)
     {
         PolicyRuntimeTickResponse response = await PostAsync<PolicyRuntimeTickResponse>(
             "tick",
             new { max_ticks = 1 },
             expectedRunId,
-            cancellationToken);
-        if (response.Schema != PolicyRuntimeTickSchema)
-            throw new JsonException($"Policy Runtime tick schema is unsupported: {response.Schema}");
-        EnsurePolicyRuntimeStatus(response.Schema, response.Status, allowTickSchema: true);
+            cancellationToken, binding, value => {
+                EnsureCommandStatus(value.Schema, value.Status, expectedRunId, allowTickSchema: true);
+                if (value.Schema != PolicyRuntimeTickSchema || value.Results == null || value.Results.Count != 1
+                    || value.Results[0].Type is not ("human" or "shadow" or "delivered" or "not_delivered" or "unknown" or "not_admitted" or "not_executed"))
+                    throw new JsonException("Policy Runtime tick result is incomplete.");
+            });
         return response.Status;
     }
 
@@ -146,6 +179,7 @@ public sealed class PlatformLiveStatusClient : IDisposable
     {
         _connectorHttp.Dispose();
         _policyRuntimeHttp.Dispose();
+        _policyRuntimeCommandHttp.Dispose();
     }
 
     private async Task<T> GetAsync<T>(
@@ -161,7 +195,9 @@ public sealed class PlatformLiveStatusClient : IDisposable
         string relativePath,
         object body,
         string expectedRunId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        PlatformPolicyBinding? binding = null,
+        Action<T>? validate = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(expectedRunId);
         using var request = new HttpRequestMessage(HttpMethod.Post, "v2/" + relativePath)
@@ -169,8 +205,17 @@ public sealed class PlatformLiveStatusClient : IDisposable
             Content = JsonContent.Create(body, options: JsonOptions)
         };
         request.Headers.Add("X-STS2-Policy-Run-ID", expectedRunId);
-        using HttpResponseMessage response = await _policyRuntimeHttp.SendAsync(request, cancellationToken);
-        return await ReadResponseAsync<T>(response, relativePath, cancellationToken);
+        if (binding is not null)
+        {
+            binding.Validate(expectedRunId, binding.RuntimeInstanceId);
+            request.Headers.Add("X-STS2-Game-Instance-ID", binding.RuntimeInstanceId);
+            request.Headers.Add("X-STS2-Recovery-Epoch", binding.RecoveryEpoch!.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+        return await PlatformPolicyTransport.SendAsync(_policyRuntimeCommandHttp, request, async response => {
+            T value = await ReadResponseAsync<T>(response, relativePath, cancellationToken);
+            validate?.Invoke(value);
+            return value;
+        }, cancellationToken);
     }
 
     private static async Task<T> ReadResponseAsync<T>(
@@ -183,6 +228,14 @@ public sealed class PlatformLiveStatusClient : IDisposable
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken)
             ?? throw new JsonException($"Loopback endpoint returned an empty {typeof(T).Name}.");
+    }
+
+    private static void EnsureCommandStatus(string envelopeSchema, PolicyRuntimeStatus status,
+        string expectedRunId, bool allowTickSchema = false)
+    {
+        EnsurePolicyRuntimeStatus(envelopeSchema, status, allowTickSchema);
+        if (status.RunId != expectedRunId)
+            throw new JsonException("Policy Runtime command response changed run identity.");
     }
 
     private static void EnsurePolicyRuntimeStatus(

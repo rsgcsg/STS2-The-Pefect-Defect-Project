@@ -13,7 +13,7 @@
     <EnableSourceLink>false</EnableSourceLink>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <DefineConstants>$(DefineConstants);STS2_PLATFORM_UNIFIED</DefineConstants>
-    <Version>0.2.0-rc.6</Version>
+    <Version>0.2.0-rc.7</Version>
     <PlatformSourceRevision Condition="'$(PlatformSourceRevision)' == ''">unavailable</PlatformSourceRevision>
     <!-- Keep the assembly stable when only non-Native workspace files change. -->
     <SourceRevisionId>$(PlatformSourceRevision)</SourceRevisionId>
@@ -49,6 +49,7 @@
 
   <ItemGroup>
     <Compile Include="UnifiedPlatformMod.cs" />
+    <Compile Include="PlatformTaskBridge.cs" />
     <Compile Include="NativeFoundationOwnerPatches.cs" />
     <Compile Include="../../components/native-foundation/src/*.cs" Link="NativeFoundation/%(Filename)%(Extension)" />
     <Compile Include="../../components/connector/host/**/*.cs"

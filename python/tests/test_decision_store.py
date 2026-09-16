@@ -177,3 +177,61 @@ def test_new_dataset_statistics_uses_its_own_loader(tmp_path: Path) -> None:
     manifest = publish(owner.store, (source,), rules, owner.producer, selected.logical_id)
     result = refresh_decision_statistics(owner, dataset_ids=(manifest.artifact_id,))
     assert result["items"][0]["availability"] == "available"
+
+
+def test_progress_survives_new_service_and_interruption_requires_explicit_retry(
+    tmp_path: Path,
+) -> None:
+    import json
+
+    owner, upload, _, jobs = setup(tmp_path)
+    job = jobs.create(MEMBER, {
+        "uploads": [upload], "rules": SelectionRules().to_dict(),
+        "preview_id": None, "name": "recoverable observation",
+    })
+    with owner.operations.transaction() as db:
+        db.execute("UPDATE decision_jobs SET state='running',updated=0,result=? WHERE id=?",
+                   (json.dumps({"progress": {"phase": "verifying_sources",
+                                            "completed": 0, "total": 1}}), job["id"]))
+    reopened = DecisionJobs(owner)
+    before = reopened.read(MEMBER, job["id"])
+    assert before["progress"]["phase"] == "verifying_sources"
+    assert before["result"] is None
+    reopened.pending()
+    after = reopened.read(MEMBER, job["id"])
+    assert after["state"] == "failed" and after["error"] == "worker_interrupted"
+    assert after["recovery"] == "explicit_retry"
+    assert after["progress"] == before["progress"]
+
+
+def test_all_shared_profile_scope_is_not_recent_hundred_or_upload_count(tmp_path: Path) -> None:
+    import json
+    import time
+
+    owner, upload, _, jobs = setup(tmp_path)
+    identity = jobs.pending()
+    jobs.run(identity)
+    first = jobs.read(MEMBER, identity)
+    report = first["result"]
+    with owner.operations.transaction() as db:
+        for i in range(2, 107):
+            next_upload = f"{i:032x}"
+            db.execute(
+                "INSERT INTO uploads(id,device,content_id,manifest_sha,intent,status) "
+                "VALUES(?,?,?,?,?,'verified')",
+                (next_upload, "one", f"{i:064x}", "b" * 64, "{}"),
+            )
+            db.execute("INSERT INTO collection_sharing VALUES(?,1,?,0)",
+                       (next_upload, "c" * 64))
+            if i < 106:
+                db.execute("INSERT INTO decision_jobs VALUES(?, 'receiver', ?, 'completed', "
+                           "?, NULL, ?, ?)",
+                           (f"{1000+i:032x}", json.dumps({"uploads": [next_upload]}),
+                            json.dumps(report), time.time(), time.time()))
+    result = jobs.games(MEMBER)
+    assert result["scope"] == "all_available_shared_recording_profiles"
+    assert result["shared_recordings"] == 106
+    assert result["profiled_recordings"] == 105
+    assert result["missing_profiles"] == 1 and result["partial"] is True
+    assert len(result["items"]) == 3  # Repeated evidence does not create 315 distinct runs.
+    assert all(len(run["uploads"]) == 105 for run in result["items"])
