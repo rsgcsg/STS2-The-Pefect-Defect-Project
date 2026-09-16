@@ -6,6 +6,7 @@ window.SpireIdentity = (() => {
   let identity = null, checked = 0, busy = null, scope = local ? "local" : "project";
   let deviceDraft = null;
   let timer = null, refreshPage = () => {}, epoch = 0, loggingOut = false;
+  const profileMeaning = "每条登记对应一个账号的工作台配置；同一台电脑可以有多条登记，修改名称不会合并账号或历史记录。";
   const el = (tag, text, cls) => {
     const node = document.createElement(tag);
     if (text !== undefined) node.textContent = text;
@@ -117,7 +118,7 @@ window.SpireIdentity = (() => {
   }
   function flowCard(flow) {
     const box = el("div", undefined, "onboarding-step");
-    box.append(el("h3", "在浏览器中确认"), el("p", "核对电脑名称及配对码，只批准刚刚由你发起的请求。"));
+    box.append(el("h3", "在浏览器中确认"), el("p", "核对连接名称及配对码，只批准刚刚由你发起的请求。"));
     box.append(el("strong", flow.user_code, "pair-code"));
     const link = el("a", "打开登录与绑定页面 ↗", "button");
     link.href = flow.approval_url; link.target = "_blank"; link.rel = "noreferrer";
@@ -128,20 +129,21 @@ window.SpireIdentity = (() => {
     const box = el("section", undefined, "panel onboarding"), who = identity?.principal;
     box.append(el("h2", who ? "账号与项目电脑" : "接入 SpireAgent"));
     box.append(el("p", "使用项目邀请的邮箱接入；首次验证后自动建立项目账号，无需另设密码。"));
-    box.append(el("p", "每条电脑记录对应一份工作台配置；同一台电脑可以有多份。退出登录不会转移设备归属或已有数据。"));
+    box.append(el("p", profileMeaning));
+    box.append(el("p", "退出登录不会转移配置归属或已有数据。"));
     if (local) {
       box.append(el("p", identity?.device_credential_present ?
         "这台电脑已保存上传凭据；是否有效以 Hub 最近验证为准。个人退出不会删除它。" :
-        "先登录并确认电脑名称。绑定成功后，打开“真人采集”确认日常录制授权并完成本机设置；登录不代表同意上传。"));
+        "先登录并确认连接名称。连接成功后，打开“真人采集”确认日常录制授权并完成本机设置；登录不代表同意上传。"));
       if (identity?.previous_account_email) box.append(el("p",
         `这份配置保存的上次登录邮箱：${identity.previous_account_email}。这是本机历史提示，设备归属仍以云端核对为准。`));
       if (!identity?.hub_configured) box.append(el("p", "尚未配置项目 Hub 地址。请使用项目提供的启动配置。"));
       else if (!who || identity.status !== "signed_in") {
-        const label = el("label", "这台电脑的名称"), input = el("input");
+        const label = el("label", "连接名称"), input = el("input");
         input.type = "text"; input.maxLength = 80; input.value = deviceDraft ?? identity?.device_name ?? "我的电脑";
         input.id = "device-name"; input.addEventListener("input", () => { deviceDraft = input.value; });
         label.append(input); box.append(label);
-        box.append(action("登录并绑定这台电脑", async () => {
+        box.append(action("登录并连接本机", async () => {
           const flow = await request("/api/identity/login", {device_name: input.value.trim()}, identity.csrf_token);
           await refresh(true); refreshPage();
           message("请打开登录页面，使用项目邮箱完成确认。");
@@ -189,16 +191,17 @@ window.SpireIdentity = (() => {
     const flow = new URLSearchParams(location.search).get("flow");
     if (local || !/^[a-f0-9]{32}$/.test(flow || "")) throw new Error("无效绑定请求");
     const facts = await request("/app/api/identity/flows/" + flow);
-    box.append(el("h2", "确认接入这台电脑"), el("p", `账号：${identity?.principal?.email || "当前登录账号"}`));
+    box.append(el("h2", "确认本机连接"), el("p", `账号：${identity?.principal?.email || "当前登录账号"}`));
+    box.append(el("p", profileMeaning));
     box.append(el("h3", facts.device_name), el("strong", facts.user_code, "pair-code"));
     const reconnect = facts.purpose === "connect_existing_device";
     box.append(el("p", reconnect ?
-      `重新连接已有电脑：${facts.device_id}` : "注册一台新的采集电脑"));
+      `重新连接已有工作台配置：${facts.device_id}` : "建立新的本机连接"));
     box.append(el("p", reconnect ?
       "请核对本机工作台的配对码。这份配置只能由原绑定账号重新连接；批准后恢复个人登录，沿用已有设备上传凭据，不会重新注册电脑或转移归属。" :
       "请与本机工作台显示的配对码核对。批准后，此电脑获得独立上传凭据，工作台可查看你获授权的项目数据。"));
     box.append(el("p", "连接不会启动游戏、训练或自动同意上传数据。"));
-    if (facts.status === "pending" && facts.approval_allowed === true && !facts.approval_block_reason) box.append(action("确认是我的电脑，批准接入", async () => {
+    if (facts.status === "pending" && facts.approval_allowed === true && !facts.approval_block_reason) box.append(action("确认是我的连接，批准接入", async () => {
       await request("/app/api/identity/flows/" + flow + "/approve", {
         csrf_token: identity.csrf_token, user_code: facts.user_code,
       }, identity.csrf_token);
@@ -206,7 +209,7 @@ window.SpireIdentity = (() => {
     }));
     else {
       const reasons = {
-        different_account: "当前登录邮箱不是这份工作台配置的原绑定账号。即使是管理员，也不能直接接管另一账号的电脑。",
+        different_account: "当前登录邮箱不是这份工作台配置的原绑定账号。即使是管理员，也不能直接接管另一账号的工作台配置。",
         device_disabled: "这台电脑或其所属成员的授权已停用。请联系管理员核对，不要删除已有配置或上传队列。",
         device_unavailable: "云端找不到这台电脑的登记。请联系管理员核对原设备记录。",
         proof_changed: "这台电脑的上传凭据已变更，当前连接请求使用的是旧凭据。请联系管理员按恢复流程处理。",
@@ -226,7 +229,7 @@ window.SpireIdentity = (() => {
         box.append(action("退出并更换登录账号", () => { location.assign("/cdn-cgi/access/logout"); }));
         box.append(el("p", "换账号后，回到发起连接的本机工作台标签页，点击“打开登录与绑定页面”。请勿删除设备、配置或已有数据。"));
       }
-      box.append(el("p", "返回本机：切回刚才的工作台标签页 → 账号与电脑 → 检查绑定结果；请求过期后再点“登录并绑定这台电脑”。"));
+      box.append(el("p", "返回本机：切回刚才的工作台标签页 → 账号与电脑 → 检查绑定结果；请求过期后再点“登录并连接本机”。"));
       const devices = el("a", "查看当前账号的电脑", "button secondary");
       devices.href = "?view=devices"; box.append(devices);
     }

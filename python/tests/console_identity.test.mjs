@@ -45,7 +45,9 @@ test('different account explains existing profile ownership and offers a real si
   assert.match(flatten(page), /沿用已有设备上传凭据/);
   assert.match(flatten(page), /即使是管理员/);
   assert.match(flatten(page), /切回刚才的工作台标签页/);
-  assert.equal(descendants(page).some(n => n.textContent === '确认是我的电脑，批准接入'), false);
+  assert.equal(descendants(page).some(n => n.textContent === '确认是我的连接，批准接入'), false);
+  assert.match(flatten(page), /另一账号的工作台配置/);
+  assert.doesNotMatch(flatten(page), /另一账号的电脑/);
   await descendants(page).find(n => n.textContent === '退出并更换登录账号').onclick();
   assert.deepEqual(navigations, ['/cdn-cgi/access/logout']);
   assert.equal(calls.length, 0);
@@ -58,7 +60,7 @@ test('specific connection blocks do not invite permission bypass or invent an ow
     ['flow_invalidated','连接请求已失效']]) {
     const {page} = await connectionPage({approval_block_reason: reason});
     assert.match(flatten(page), new RegExp(phrase));
-    assert.equal(descendants(page).some(n => n.textContent === '确认是我的电脑，批准接入'), false);
+    assert.equal(descendants(page).some(n => n.textContent === '确认是我的连接，批准接入'), false);
     assert.equal(descendants(page).some(n => n.textContent === '退出并更换登录账号'), false);
   }
 });
@@ -69,8 +71,27 @@ test('legacy Hub boolean remains compatible without guessing a specific block', 
   assert.doesNotMatch(flatten(page), /当前登录邮箱不是/);
   for (const extra of [{}, {approval_block_reason: null}]) {
     const allowed = await connectionPage({approval_allowed: true, ...extra});
-    assert.ok(descendants(allowed.page).some(n => n.textContent === '确认是我的电脑，批准接入'));
+    assert.ok(descendants(allowed.page).some(n => n.textContent === '确认是我的连接，批准接入'));
   }
+});
+
+test('local and cloud account pages explain profiles instead of unique physical computers', async () => {
+  const meaning = /每条登记对应一个账号的工作台配置；同一台电脑可以有多条登记，修改名称不会合并账号或历史记录/;
+  for (const mode of ['local', 'cloud']) {
+    const env = setup(mode);
+    const loading = env.ui.refresh(true);
+    env.calls.shift().answer(mode === 'local' ? {status: 'signed_out', hub_configured: true} : person());
+    await loading;
+    const page = env.ui.renderDevices();
+    assert.match(flatten(page), meaning);
+    if (mode === 'local') {
+      assert.ok(descendants(page).some(n => n.textContent === '连接名称'));
+      assert.ok(descendants(page).some(n => n.textContent === '登录并连接本机'));
+    }
+  }
+  const {page} = await connectionPage({approval_allowed: true});
+  assert.match(flatten(page), meaning);
+  assert.match(flatten(page), /重新连接已有工作台配置/);
 });
 
 test('account logout rejects an already in-flight identity response and retains local scope', async () => {
