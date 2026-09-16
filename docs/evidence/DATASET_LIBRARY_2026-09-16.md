@@ -91,3 +91,41 @@ Use the owning stopped Workbench/configuration and Hub rollout procedures.
 The old image ignores additive visibility and coverage metadata; removed previews
 may reappear. Preserve new records, revocations and queued deliveries. Do not
 restore an old database merely to roll back application code.
+
+## Follow-up: large game overview response
+
+Final observation found that the game list also returned per-decision `journal_refs`.
+With 16 shared recordings / 25 runs or fragments its response reached 1,072,609 bytes,
+exceeding the local member gateway's 1 MiB bound. The Hub was healthy but the local
+view correctly refused the oversized response. Publication was paused for an owning
+Hub correction rather than increasing the gateway limit.
+
+Hub source `0290e2532eee8fca835f90f4367ece7444e17a78` returns the same run summaries
+with `journal_ref_count`; full references remain unchanged in original stored profiles
+and immutable artifacts. The Workbench/kit stays at `bf17e69`, with the same native
+bytes, lock and account/configuration. Hub image is
+`ghcr.io/rsgcsg/spireagent-hub@sha256:c349ac4dcf018ed019a6794b1d166686785235856713b1ee94517ae1ec9ef20d`.
+The unchanged-lock qualified-image refresh, locked offline sync and package consistency
+checks passed. Hub-only rollout plan
+`305ce9dd69e252405cc4564f50cf0df659459b85bd3d4a630bfd21e7491da5bb`
+passed the owning schema/capacity/fresh-backup/health checks; no database restore,
+Workbench restart, TLS restart or native installation was needed.
+
+The actual local member response is 22,285 bytes. Its canonical JSON SHA256
+`fe0ca9e19984a86de382a5e9f2c1986ec833497dbbd1e92f99c0af5cc660e1e1`
+matches the pre-deployment summaries after only replacing references with their count.
+The browser receives all 25 rows, including four complete native boundaries; no profile
+is pending or failed at this observation. These are run/fragments in shared profiles,
+not a new scientific-admission or globally unique-game claim.
+
+A regression constructs a profile larger than 1 MiB, checks the compact overview and
+proves stored profile bytes and native/count fields are unchanged. Fourteen focused
+store tests and the full root gate at `51598ee79cf51fbe721390e3d7792f553231ecf6` passed
+(965 Python tests, three skips, 21 subtests; 40 console regressions and component gates).
+That head differs from the deployed Hub source only in test formatting. Subsequent
+acceptance/documentation commits do not change the application bytes. Final follow-up
+PR and integration refs/CI are recorded in the formal release integration receipt.
+
+The preceding `bf17e69` image remains a compatible same-schema rollback, but can
+reproduce this large-list error. The earlier `f4a21a2` rollback remains retained as
+recorded above. Source rollback never requires deleting/restoring the live database.

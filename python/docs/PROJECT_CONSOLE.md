@@ -350,3 +350,7 @@ The **对局与片段** view reports boundaries, recording continuity, outcome, 
 conditions separately. Source profiles refresh once in the existing bounded worker; old
 profiles awaiting refresh report unknown, and older immutable selection reports keep their
 original strict meaning. Several fragments never manufacture an uninterrupted game.
+
+The game overview returns run summaries and `journal_ref_count`. Full per-decision
+references remain in original profiles/artifacts; the overview does not transport that
+unbounded inventory or weaken the local response limit.
