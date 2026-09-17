@@ -2810,7 +2810,7 @@ internal static class NativeRunEndedPatch
 internal static class NativeRunCleanupPatch
 {
     private static void Prefix(RunManager __instance, out bool __state) =>
-        __state = __instance.State != null;
+        __state = __instance.IsInProgress;
 
     private static void Postfix([HarmonyArgument(0)] bool graceful, bool __state)
     {
