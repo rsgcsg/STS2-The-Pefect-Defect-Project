@@ -1,6 +1,6 @@
 # ADR-0010: Dataset curation and continuous per-run recording
 
-Status: Proposed (implementation and qualification in progress)
+Status: Accepted
 
 Date: 2026-09-17
 
@@ -58,8 +58,11 @@ selection/scroll stability; overlap/Gold laundering and concurrency; native boun
 and close-tail regression, exact build/install/load and owner-operated canary.
 
 Implementation, portable tests, deployed CPU jobs, loaded native bytes and Human
-canary are distinct gates. No GPU/model-quality claim. Record exact evidence in
-the task PR and dated acceptance, then mark this ADR Accepted.
+canary are distinct gates. No GPU/model-quality claim. The bounded implementation,
+capacity, deployed-service and owner-operated canary results are recorded in
+[the dated acceptance](../evidence/CURATION_CONTINUOUS_ACCEPTANCE_2026-09-17.md).
+PR and release receipts retain exact final integration checks; this decision does
+not promote untested native paths or unlimited-capacity claims.
 
 ## Compatibility and rollback
 

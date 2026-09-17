@@ -4,7 +4,19 @@ Use rsgcsg/STS2-The-Perfect-Defect-Project for all new development.
 Platform components, `python/spireagent` applications and `python/stpd` research
 share root governance, one local/cloud console and one Hub membership authority.
 
-Workbench source is `fedbed097e30fb78bf0e86efff560fd8b1263c99`. The accepted
+The current qualified Workbench/Hub candidate is
+`bafef714a767c3d1d2bf9a4d04281595996f8a5c`.
+[Dataset curation and continuous recording acceptance](../evidence/CURATION_CONTINUOUS_ACCEPTANCE_2026-09-17.md)
+records the exact kit/Mod/tool/image, 37-source capacity test, successful retry of
+the user's 35-source preview, and owner-operated abandonment/partial-exit segments:
+27 accepted, 25 proved/canonical, two cancellations, six diagnostics, zero real
+failures and zero unresolved. Both segments automatically sealed/uploaded and passed
+member download verification. The partial exit remains incomplete. ADR-0010 owns
+purpose-bound datasets, durable Gold isolation and quality annotations. PR21 and
+its release integration receipt own formal promotion; runtime bytes remain pinned.
+Gold reservations prohibit rolling affected access back to an unenforcing old image.
+
+The previous Workbench source was `fedbed097e30fb78bf0e86efff560fd8b1263c99`. The accepted
 20-source dataset baseline used Hub source
 `3a4b8997d06011952a2248902c67f64f531dbcff`; the subsequent
 [export follow-up](../evidence/DATASET_EXPORT_2026-09-17.md) records the download correction.
