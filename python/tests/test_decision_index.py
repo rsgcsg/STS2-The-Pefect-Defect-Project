@@ -84,3 +84,33 @@ def test_fixed_preview_copies_verified_bytes_without_decoding_game_states(tmp_pa
     with cache._connect() as db:
         db.execute("UPDATE decision_source_rows SET body=? WHERE ordinal=0", (b"{}",))
     assert fixed.get(key, selected.logical_id) is None
+
+
+def test_large_preview_is_compressed_but_expansion_stays_bounded(tmp_path: Path, monkeypatch):
+    import hashlib
+    import zlib
+    from dataclasses import replace
+
+    import stpd.fullrun.decision_preview as module
+    from spireagent.json_boundary import FrozenObject
+
+    owner, _, source, _ = setup(tmp_path)
+    cache = VerifiedSourceCache(owner.operations.path, "owner")
+    selected = preview(owner.store, (source,), SelectionRules(), cache=cache)
+    selected = replace(selected, report=FrozenObject.of({
+        **selected.report.value(), "large_report": "unchanged verified summary" * 4096,
+    }))
+    monkeypatch.setattr(module, "MAX_ENTRY_BYTES", 4096)
+    fixed = module.PreviewCache(cache)
+    fixed.put({"large": True}, selected)
+    restored = fixed.get({"large": True}, selected.logical_id)
+    assert restored == selected
+    monkeypatch.setattr(module, "MAX_PREVIEW_BYTES", 1024)
+    assert fixed.get({"large": True}, selected.logical_id) is None
+    # A checksum alone must not permit unbounded decompression or corrupt framing.
+    for raw in (zlib.compress(b"x" * 2048), b"not-compressed"):
+        with cache._connect() as db:
+            db.execute("INSERT OR REPLACE INTO decision_preview_cache VALUES(?,?,?)", (
+                fixed._key({"large": True}), raw, hashlib.sha256(raw).hexdigest(),
+            ))
+        assert fixed.get({"large": True}, selected.logical_id) is None

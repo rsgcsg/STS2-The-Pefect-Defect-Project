@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import hashlib
 import json
+import zlib
 from typing import Any
 
 from spireagent.json_boundary import BoundaryError, FrozenObject, json_bytes
 
-from .decision_cache import MAX_ENTRY_BYTES, VerifiedSourceCache
+from .decision_cache import MAX_CACHE_BYTES, MAX_ENTRY_BYTES, VerifiedSourceCache
 from .decision_dataset import DecisionDataset, _identity
 from .decision_index import INDEX_SCHEMA
 from .decision_spool import DecisionSpool, SpoolSelection, row_summary
+
+MAX_PREVIEW_BYTES = 64 * 1024**2
 
 
 class PreviewCache:
@@ -59,6 +62,9 @@ class PreviewCache:
                              sequence, summary])
             body = json_bytes({"logical_id": dataset.logical_id,
                                "report": dataset.report.value(), "rows": refs})
+            if len(body) > MAX_PREVIEW_BYTES:
+                return
+            body = zlib.compress(body)
             if len(body) > MAX_ENTRY_BYTES:
                 return
             db.execute("INSERT OR REPLACE INTO decision_preview_cache VALUES(?,?,?)",
@@ -66,6 +72,14 @@ class PreviewCache:
             # This is disposable acceleration, not the authoritative durable job history.
             db.execute("DELETE FROM decision_preview_cache WHERE rowid NOT IN "
                        "(SELECT rowid FROM decision_preview_cache ORDER BY rowid DESC LIMIT 32)")
+            total = db.execute("SELECT coalesce(sum(length(body)),0) "
+                               "FROM decision_preview_cache").fetchone()[0]
+            for key, size in db.execute("SELECT key,length(body) FROM decision_preview_cache "
+                                        "ORDER BY rowid").fetchall():
+                if total <= MAX_CACHE_BYTES:
+                    break
+                db.execute("DELETE FROM decision_preview_cache WHERE key=?", (key,))
+                total -= size
 
     def get(self, selection: dict[str, Any], expected: str) -> DecisionDataset | None:
         with self.cache._connect() as db:
@@ -74,9 +88,15 @@ class PreviewCache:
             if row is None:
                 return None
             try:
-                if hashlib.sha256(row[0]).hexdigest() != row[1]:
+                if (len(row[0]) > MAX_ENTRY_BYTES
+                        or hashlib.sha256(row[0]).hexdigest() != row[1]):
                     raise ValueError("preview checksum")
-                value = json.loads(row[0])
+                decoder = zlib.decompressobj()
+                body = decoder.decompress(row[0], MAX_PREVIEW_BYTES + 1)
+                if (len(body) > MAX_PREVIEW_BYTES or not decoder.eof
+                        or decoder.unused_data or decoder.unconsumed_tail):
+                    raise ValueError("preview expansion limit")
+                value = json.loads(body)
                 if value["logical_id"] != expected:
                     raise ValueError("preview identity")
                 spool = DecisionSpool()
@@ -101,7 +121,7 @@ class PreviewCache:
                     raise ValueError("preview changed")
                 self.cache.preview_hits += 1
                 return result
-            except (ValueError, KeyError, TypeError, BoundaryError):
+            except (ValueError, KeyError, TypeError, BoundaryError, zlib.error):
                 db.execute("DELETE FROM decision_preview_cache WHERE key=?",
                            (self._key(selection),))
                 return None
