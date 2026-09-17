@@ -42,8 +42,8 @@ def index_ready(cache: VerifiedSourceCache, payload: Payload) -> bool:
             return False
         try:
             header = json.loads(row[0])
-            return (header["schema"] == INDEX_SCHEMA and header["owner"] == cache.owner
-                    and header["source"] == payload.sha256 and header["size"] == payload.size)
+            return bool(header["schema"] == INDEX_SCHEMA and header["owner"] == cache.owner
+                        and header["source"] == payload.sha256 and header["size"] == payload.size)
         except (ValueError, KeyError, TypeError):
             return False
 
