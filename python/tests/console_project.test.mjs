@@ -1186,3 +1186,53 @@ test("retry follows the new task instead of keeping the focused failed preview",
   assert.ok(h.calls.some(c=>c.url.endsWith(`/datasets/${nextId}`)));
   assert.doesNotMatch(text(page),/环境身份存在冲突/);
 });
+
+test("dataset background refresh retains unchanged cards and keeps navigation usable", async () => {
+  let delayed = false, finish;
+  const job = {id:uploadId,state:"pending",request:{name:"durable work",uploads:[uploadId],rules:{},preview_id:null}};
+  const h = setup({view:"datasets",handler:url => {
+    if(url.includes("/member/datasets?")) return delayed ? new Promise(resolve => {finish=resolve;}) : {items:[job],total:1};
+    return emptyList();
+  }});
+  await action(await h.render(),"dataset-tab-previews").onclick();
+  const page = await h.render(), card = find(page, node => node.dataset.refreshKey === uploadId);
+  assert.equal(await h.ui.refresh("datasets"), true);
+  assert.equal(find(page,node => node.dataset.refreshKey === uploadId),card);
+  delayed = true; const refreshing = h.ui.refresh("datasets");
+  await action(page,"dataset-tab-create").onclick();
+  const next = await h.render();
+  finish({items:[],total:0}); await refreshing;
+  assert.equal(action(next,"dataset-tab-create").attributes["aria-current"],"page");
+  assert.equal(find(page,node => node.dataset.refreshKey === uploadId),card);
+  const calls = h.calls.length;
+  field(next,"dataset-name").value = "unfinished draft";
+  assert.equal(await h.ui.refresh("datasets"),true);
+  assert.equal(h.calls.length,calls);
+  assert.equal(field(next,"dataset-name").value,"unfinished draft");
+});
+
+test("background refresh updates changed task cards without a loading shell", async () => {
+  let state = "pending";
+  const h=setup({view:"datasets",handler:url=>url.includes("/member/datasets?") ? {
+    items:[{id:uploadId,state,request:{name:"task",uploads:[uploadId],rules:{},preview_id:null}}],total:1,
+  }:emptyList()});
+  await action(await h.render(),"dataset-tab-previews").onclick();
+  const page=await h.render(), card=find(page,node=>node.dataset.refreshKey===uploadId);
+  // This fixture has no details; the production branch also preserves open details by key.
+  card.querySelectorAll=()=>[];
+  const make=h.context.document.createElement;
+  h.context.document.createElement=tag=>{const n=make(tag);n.querySelectorAll=()=>[];return n;};
+  state="running"; await h.ui.refresh("datasets");
+  assert.notEqual(find(page,node=>node.dataset.refreshKey===uploadId),card);
+  assert.match(text(page),/正在处理/);
+  assert.doesNotMatch(text(page),/正在读取/);
+});
+
+test("background denial removes previously displayed private dataset data", async () => {
+  let denied=false;
+  const h=setup({view:"datasets",handler:()=>denied?{httpStatus:403}:{items:[{artifact_id:id("b"),display_name:"private dataset"}],total:1}});
+  const page=await h.render(); assert.match(text(page),/private dataset/);
+  denied=true; await h.ui.refresh("datasets");
+  assert.doesNotMatch(text(page),/private dataset/);
+  assert.match(text(page),/需要重新登录/);
+});

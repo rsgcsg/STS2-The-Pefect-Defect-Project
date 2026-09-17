@@ -213,7 +213,8 @@ received bundle artifacts. The strict `fullrun.data` contract remains separate. 
 
 Authenticated member BFF routes: `GET games`, `GET datasets`, `GET datasets/{job_id}`,
 `POST datasets` (name, explicit uploads, typed rules, nullable preview_id), and
-`POST datasets/{job_id}/retry` (empty body; failed tasks only, new attempt identity). Browser requests
+`POST datasets/{job_id}/retry` (empty body; failed/cancelled tasks, same task and a new fenced attempt),
+and `POST datasets/{job_id}/cancel` (empty body; before final publication). Browser requests
 retain Origin/CSRF enforcement; personal tokens and device credentials are not interchangeable.
 POST queues CPU work. A completed preview's logical ID must match a reproduced publication.
 Game/profile reads use persisted summaries, not archive extraction. Artifact downloads reuse
@@ -223,7 +224,9 @@ The same POST also accepts `datasets` in place of `uploads` for selected-set uni
 input kind is allowed; a completed preview must match inputs and rules during publication.
 `stpd/decision-union-v1` parents retain the original selected datasets. Its owner loader rechecks
 parent selection and lineage; it does not expand excluded rows. Job reads expose durable phase,
-work-unit counts, elapsed/observed times and explicit-retry status. These are observations, not
-resumable checkpoints. Game summaries cover all available shared profiles and report missing
+work-unit counts, elapsed/observed times and explicit-retry status. Retrying continues the same
+task ID, retaining prior failures in events. Private source indices and fixed preview selections
+can reuse completed work; eviction falls back to verified reproduction. These checkpoints never
+resume unknown gameplay commands. Game summaries cover all available shared profiles and report missing
 coverage; they do not claim globally deduplicated independent games. See
 [ADR-0008](adr/0008-selected-decision-unions.md) for cache trust, immutable contracts and limits.

@@ -52,6 +52,8 @@ ledger.
 
 - [ADR-0009: Scoped checks and verified integration receipts](0009-scoped-checks-and-integration-receipts.md)
 
+- [ADR-0010: Dataset curation and continuous per-run recording](0010-dataset-curation-and-continuous-recording.md)
+
 ## New ADR template
 
 ```markdown

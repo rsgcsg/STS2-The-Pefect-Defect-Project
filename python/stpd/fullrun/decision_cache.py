@@ -37,7 +37,10 @@ def implementation_identity() -> str:
              for p in owner.rglob("*.py")]
     root = Path(__file__).parent
     files.extend(("research/" + name, root / name) for name in (
-        "decision_cache.py", "decision_dataset.py", "platform_bundle3.py", "contracts.py",
+        "decision_cache.py", "decision_index.py", "decision_dataset.py",
+        "decision_preview.py", "decision_spool.py", "decision_store.py",
+        "decision_union.py", "data.py",
+        "platform_bundle3.py", "contracts.py",
     ))
     return hashlib.sha256(json_bytes([
         [name, hashlib.sha256(path.read_bytes()).hexdigest()]
@@ -58,7 +61,7 @@ class VerifiedSourceCache:
         self.owner = hashlib.sha256(json_bytes([
             CACHE_SCHEMA, ADAPTER_ID, implementation_identity(), producer_identity,
         ])).hexdigest()
-        self.hits = self.misses = self.corrupt = self.bypassed = 0
+        self.hits = self.misses = self.corrupt = self.bypassed = self.preview_hits = 0
         with self._connect() as db:
             db.execute(
                 "CREATE TABLE IF NOT EXISTS decision_source_cache("
@@ -78,7 +81,8 @@ class VerifiedSourceCache:
 
     def metrics(self) -> dict[str, int]:
         return {"cache_hits": self.hits, "cache_misses": self.misses,
-                "cache_corrupt": self.corrupt, "cache_bypassed": self.bypassed}
+                "cache_corrupt": self.corrupt, "cache_bypassed": self.bypassed,
+                "preview_hits": self.preview_hits}
 
     def resolve(self, source: bytes) -> tuple[SourceProjection, dict[str, Any]]:
         import json

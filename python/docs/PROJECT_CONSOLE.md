@@ -365,3 +365,31 @@ directly; failed previews offer **修改录制选择** while retaining the origi
 Dataset tabs show their own loading state immediately; slower old replies cannot replace the
 selected tab. Task reads use indexed access rather than fetching remote source manifests.
 Full original-byte validation remains in the background worker.
+
+## Bounded dataset processing and stable refresh
+
+Dataset construction streams sources in archive-digest order and spools canonical rows to
+private temporary SQLite storage. The maximum expanded source remains an independent
+resource bound; this does not claim arbitrary archive sizes fit the worker. The private
+verified index binds receipt archive digest/size and installed projection/code/lock identity.
+Rows commit in small batches, with a checksum-bound completion header last; an incomplete
+index never admits a source. Damaged or evicted derivatives reverify original bytes.
+No HTTP endpoint accepts imported index rows or grants access from cached membership.
+
+A fixed preview checkpoint references exact verified rows, source manifests and rules.
+Confirmation checks its logical content identity and current access before publication;
+it can skip repeated source download, verification and selection. Existing v1 manifests
+and their independent reprojection retain their meanings. Deferred materialization and
+new dataset purposes are separate work under root ADR-0010, not claims of this checkpoint.
+
+Cancelled and failed jobs continue under the same ID when explicitly retried, retaining
+the previous failure/progress in events. Attempt fences prevent an old worker from
+changing a later attempt. A heartbeat is separate from observable work progress.
+Cancellation is allowed before the final publication phase; after publication starts,
+the UI waits for its outcome instead of claiming already-published bytes were undone.
+
+Automatic dataset refresh retains the mounted panel and unchanged task cards. It does
+not reconstruct a creation form. Navigation remains active while a status request is
+pending, and a late response cannot update a different page/account. An authentication
+denial clears private displayed data; an ordinary transient failure leaves the last
+observation with an explicit notice. These are presentation changes, not cached access grants.

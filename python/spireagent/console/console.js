@@ -1052,6 +1052,12 @@ async function load(manual = false, forceIdentity = manual) {
     context = `${pageContext}:${identityContext}`;
     if (renderedContext !== context) $("content").replaceChildren(empty("正在读取…", "当前账号与电脑范围"));
     local = window.SpireIdentity.isLocal();
+    if (!manual && !id && renderedContext === context && window.SpireProject.refresh &&
+        await window.SpireProject.refresh(view)) {
+      if (serial === state.serial && identityContext === window.SpireIdentity.context())
+        $("updated").textContent = "当前页面状态已检查";
+      return;
+    }
     if (["members", "statistics", "downloads", "research", "local-models", "campaigns", "evaluations"].includes(view) || (["datasets", "games"].includes(view) && !id)) {
       const opened = [...document.querySelectorAll("details[open]")].map(item => item.dataset.preserve);
       const content = await window.SpireProject.render(view, identity, shell => {

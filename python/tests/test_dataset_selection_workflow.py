@@ -69,7 +69,7 @@ def test_task_navigation_and_enqueue_do_not_read_object_storage(tmp_path: Path, 
 
 
 def test_preview_reuses_verified_projection_for_run_coverage(tmp_path: Path, monkeypatch):
-    from stpd.fullrun.decision_cache import VerifiedSourceCache
+    import stpd.fullrun.decision_store as decision_store
     from stpd.fullrun.run_coverage import summarize_run_coverage
 
     owner, upload, _, jobs = setup(tmp_path)
@@ -81,17 +81,17 @@ def test_preview_reuses_verified_projection_for_run_coverage(tmp_path: Path, mon
         seen.add(payload.sha256)
         return read(payload)
 
-    resolve = VerifiedSourceCache.resolve
+    resolve = decision_store.resolve_payload
     projections = []
 
-    def project(cache, raw):
+    def project(cache, store, payload):
         assert not projections, "preview decoded a second projection for run coverage"
-        value = resolve(cache, raw)
+        value = resolve(cache, store, payload)
         projections.append(value[0])
         return value
 
     monkeypatch.setattr(owner.store, "read_payload", once)
-    monkeypatch.setattr(VerifiedSourceCache, "resolve", project)
+    monkeypatch.setattr(decision_store, "resolve_payload", project)
     job = jobs.create(MEMBER, {"uploads": [upload], "name": "one traversal", "preview_id": None,
                                "rules": SelectionRules().to_dict()})
     jobs.run(job["id"])

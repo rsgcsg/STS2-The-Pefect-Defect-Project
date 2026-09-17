@@ -226,10 +226,14 @@ def test_explicit_retry_keeps_failed_attempt(tmp_path: Path) -> None:
     )
     jobs.fail(job["id"], "worker_resource_or_process_limit")
     retry = jobs.retry(MEMBER, job["id"], {})
-    assert retry["id"] != job["id"]
+    assert retry["id"] == job["id"]
     jobs.run(retry["id"])
-    assert jobs.read(MEMBER, job["id"])["state"] == "failed"
     assert jobs.read(MEMBER, retry["id"])["state"] == "completed"
+    with jobs.service.operations.transaction() as db:
+        event = db.execute(
+            "SELECT detail FROM events WHERE operation='decision_job_retry'",
+        ).fetchone()
+        assert "worker_resource_or_process_limit" in event[0]
 
 
 def test_new_dataset_statistics_uses_its_own_loader(tmp_path: Path) -> None:
@@ -447,7 +451,7 @@ def test_batched_parquet_preserves_order_and_exact_reprojection(
     selected = preview(owner.store, (source,), rules)
     # More than two physical row groups; the existing reprojection must compare
     # every row, including order, missing rows and extra rows.
-    selected = replace(selected, records=selected.records * 50)
+    selected = replace(selected, records=tuple(selected.records) * 50)
     manifest = module._publish(owner.store, (source,), rules, owner.producer,
                                selected.logical_id, selected, SCHEMA, None)
     raw = b"".join(owner.store.read_payload(manifest.payload("records")))
@@ -488,3 +492,47 @@ def test_batched_parquet_preserves_order_and_exact_reprojection(
     owner.store.publish(bad)
     with pytest.raises(BoundaryError, match="records_reprojection_mismatch"):
         load(owner.store, bad.artifact_id)
+
+
+def test_cancel_and_resume_use_one_task_and_fence_old_workers(tmp_path: Path) -> None:
+    from unittest.mock import patch
+
+    from spireagent.hub.decision_jobs import preview as real_preview
+
+    owner, upload, _, jobs = setup(tmp_path)
+    job = jobs.create(MEMBER, {"uploads": [upload], "rules": SelectionRules().to_dict(),
+                               "preview_id": None, "name": "one durable task"})
+    first = True
+
+    def interleaved(*args, **kwargs):
+        nonlocal first
+        if first:
+            first = False
+            result = real_preview(*args, **kwargs)
+            assert jobs.cancel(MEMBER, job["id"], {})["state"] == "cancelled"
+            assert jobs.retry(MEMBER, job["id"], {})["id"] == job["id"]
+            jobs.run(job["id"])
+            jobs.fail(job["id"], "stale_worker_error", attempt=1)
+            return result
+        return real_preview(*args, **kwargs)
+
+    with patch("spireagent.hub.decision_jobs.preview", side_effect=interleaved):
+        jobs.run(job["id"])
+    assert jobs.read(MEMBER, job["id"])["state"] == "completed"
+    with owner.operations.transaction() as db:
+        assert db.execute("SELECT count(*) FROM decision_jobs").fetchone()[0] == 1
+        assert db.execute("SELECT attempt FROM decision_job_execution").fetchone()[0] == 3
+
+
+def test_cancel_is_not_allowed_during_manifest_publication(tmp_path: Path) -> None:
+    import json
+
+    owner, upload, _, jobs = setup(tmp_path)
+    job = jobs.create(MEMBER, {"uploads": [upload], "rules": SelectionRules().to_dict(),
+                               "preview_id": None, "name": "publication boundary"})
+    with owner.operations.transaction() as db:
+        db.execute("UPDATE decision_jobs SET state='running',result=? WHERE id=?",
+                   (json.dumps({"progress": {"phase": "publishing_dataset"}}), job["id"]))
+    with pytest.raises(BoundaryError, match="publication_already_started"):
+        jobs.cancel(MEMBER, job["id"], {})
+    assert jobs.read(MEMBER, job["id"])["state"] == "running"

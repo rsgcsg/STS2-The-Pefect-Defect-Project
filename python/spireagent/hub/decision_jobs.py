@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import sqlite3
+import threading
 import time
 import uuid
+from contextlib import closing
 from typing import Any
 
 from spireagent.hub.collections import CollectionAccess
@@ -48,6 +51,8 @@ class DecisionJobs:
             )
             db.execute("CREATE INDEX IF NOT EXISTS decision_jobs_artifact ON decision_jobs("
                        "json_extract(result,'$.artifact_id'))")
+            db.execute("CREATE TABLE IF NOT EXISTS decision_job_execution("
+                       "id TEXT PRIMARY KEY,attempt INTEGER NOT NULL)")
 
     def set_archived(self, principal: ConsolePrincipal, body: object) -> dict[str, Any]:
         """Personal list cleanup; immutable sources, results and job state remain intact."""
@@ -66,7 +71,7 @@ class DecisionJobs:
                                  (identity,)).fetchone()
                 if row is None or row["owner"] != principal.subject:
                     raise BoundaryError("decision_job", "not_found")
-                if row["state"] not in {"completed", "failed"}:
+                if row["state"] not in {"completed", "failed", "cancelled"}:
                     raise BoundaryError("decision_job", "active_job_cannot_be_archived")
             for identity in ids:
                 db.execute("INSERT OR REPLACE INTO decision_job_visibility VALUES(?,?,?)",
@@ -236,7 +241,7 @@ class DecisionJobs:
         if body != {}:
             raise BoundaryError("decision_job", "unexpected_retry_fields")
         prior = self.read(principal, identity)
-        if prior["state"] != "failed":
+        if prior["state"] not in {"failed", "cancelled"}:
             raise BoundaryError("decision_job", "retry_requires_failed_job")
         with self.service.operations.transaction() as db:
             if (
@@ -246,18 +251,53 @@ class DecisionJobs:
                 >= 10
             ):
                 raise BoundaryError("decision_job", "queue_full")
-            old = db.execute(
-                "SELECT owner,request FROM decision_jobs WHERE id=?", (identity,)
-            ).fetchone()
-            new_id, now = uuid.uuid4().hex, time.time()
-            db.execute(
-                "INSERT INTO decision_jobs VALUES(?,?,?,'pending',NULL,NULL,?,?)",
-                (new_id, old["owner"], old["request"], now, now),
-            )
+            changed = db.execute(
+                "UPDATE decision_jobs SET state='pending',error=NULL,updated=? "
+                "WHERE id=? AND state IN ('failed','cancelled')", (time.time(), identity),
+            ).rowcount
+            if changed != 1:
+                raise BoundaryError("decision_job", "retry_requires_failed_job")
             self.service.operations._event(
-                db, principal.subject, "decision_job_retry", new_id, {"previous_job": identity}
+                db, principal.subject, "decision_job_retry", identity,
+                {"previous_state": prior["state"], "previous_error": prior["error"],
+                 "previous_updated_at": prior["updated_at"], "progress": prior["progress"]},
             )
-        return {"id": new_id, "state": "pending"}
+        return {"id": identity, "state": "pending"}
+
+    def cancel(self, principal: ConsolePrincipal, identity: str, body: object) -> dict[str, Any]:
+        if body != {}:
+            raise BoundaryError("decision_job", "unexpected_cancel_fields")
+        self.read(principal, identity)
+        with self.service.operations.transaction() as db:
+            row = db.execute("SELECT state,result FROM decision_jobs WHERE id=?",
+                             (identity,)).fetchone()
+            if row["state"] not in {"pending", "running"}:
+                raise BoundaryError("decision_job", "cancel_requires_active_job")
+            progress = json.loads(row["result"] or "{}").get("progress", {})
+            if row["state"] == "running" and progress.get("phase") == "publishing_dataset":
+                raise BoundaryError("decision_job", "publication_already_started")
+            db.execute("UPDATE decision_jobs SET state='cancelled',updated=? WHERE id=?",
+                       (time.time(), identity))
+            db.execute("UPDATE decision_job_execution SET attempt=attempt+1 WHERE id=?",
+                       (identity,))
+            self.service.operations._event(
+                db, principal.subject, "decision_job_cancel", identity, {})
+        return {"id": identity, "state": "cancelled"}
+
+    def next_attempt(self, identity: str) -> int:
+        with closing(self.service.console_index.read()) as db:
+            row = db.execute("SELECT attempt FROM decision_job_execution WHERE id=?",
+                             (identity,)).fetchone()
+        return int(row[0]) + 1 if row else 1
+
+    def should_stop(self, identity: str, attempt: int) -> bool:
+        with closing(self.service.console_index.read()) as db:
+            row = db.execute("SELECT j.state,e.attempt FROM decision_jobs j "
+                             "LEFT JOIN decision_job_execution e ON e.id=j.id WHERE j.id=?",
+                             (identity,)).fetchone()
+        return row is None or row["state"] == "cancelled" or (
+            row["attempt"] is not None and row["attempt"] > attempt
+        )
 
     def games(self, principal: ConsolePrincipal) -> dict[str, Any]:
         self.collections.require_member(principal)
@@ -365,12 +405,16 @@ class DecisionJobs:
             ).fetchone()
         return row[0] if row else None
 
-    def fail(self, identity: str, reason: str) -> None:
+    def fail(self, identity: str, reason: str, *, attempt: int | None = None) -> None:
         with self.service.operations.transaction() as db:
             db.execute(
                 "UPDATE decision_jobs SET state='failed',error=?,updated=? "
-                "WHERE id=? AND state IN ('pending','running')",
-                (reason, time.time(), identity),
+                "WHERE id=? AND state IN ('pending','running') AND (? IS NULL OR EXISTS "
+                "(SELECT 1 FROM decision_job_execution e "
+                "WHERE e.id=decision_jobs.id AND e.attempt=?) OR (state='pending' AND "
+                "COALESCE((SELECT attempt FROM decision_job_execution e "
+                "WHERE e.id=decision_jobs.id),0)=?-1))",
+                (reason, time.time(), identity, attempt, attempt, attempt),
             )
 
     def run(self, identity: str) -> None:
@@ -383,6 +427,10 @@ class DecisionJobs:
             if changed != 1:
                 return
             row = db.execute("SELECT * FROM decision_jobs WHERE id=?", (identity,)).fetchone()
+            db.execute("INSERT INTO decision_job_execution VALUES(?,1) ON CONFLICT(id) "
+                       "DO UPDATE SET attempt=attempt+1", (identity,))
+            attempt = db.execute("SELECT attempt FROM decision_job_execution WHERE id=?",
+                                 (identity,)).fetchone()[0]
         started = time.monotonic()
         cache = VerifiedSourceCache(
             self.service.operations.path, semantic_hash(self.service.producer.to_dict())
@@ -395,10 +443,35 @@ class DecisionJobs:
                 **cache.metrics(),
             }}
             with self.service.operations.transaction() as db:
-                db.execute(
-                    "UPDATE decision_jobs SET result=?,updated=? WHERE id=? AND state='running'",
-                    (json.dumps(value), time.time(), identity),
-                )
+                changed = db.execute(
+                    "UPDATE decision_jobs SET result=?,updated=? WHERE id=? AND state='running' "
+                    "AND EXISTS (SELECT 1 FROM decision_job_execution e "
+                    "WHERE e.id=decision_jobs.id AND e.attempt=?)",
+                    (json.dumps(value), time.time(), identity, attempt),
+                ).rowcount
+                if changed != 1:
+                    raise BoundaryError("decision_job", "job_cancelled_or_superseded")
+
+        stopped = threading.Event()
+
+        def heartbeat() -> None:
+            while not stopped.wait(15):
+                try:
+                    with self.service.operations.transaction() as db:
+                        changed = db.execute(
+                            "UPDATE decision_jobs SET updated=? WHERE id=? AND state='running' "
+                            "AND EXISTS (SELECT 1 FROM decision_job_execution e "
+                            "WHERE e.id=decision_jobs.id AND e.attempt=?)",
+                            (time.time(), identity, attempt),
+                        ).rowcount
+                    if changed != 1:
+                        return
+                except sqlite3.OperationalError:
+                    # Writer contention does not fabricate a fresh lease.
+                    continue
+
+        pulse = threading.Thread(target=heartbeat, name="dataset-heartbeat", daemon=True)
+        pulse.start()
 
         try:
             progress("checking_access", 0, 1)
@@ -491,10 +564,18 @@ class DecisionJobs:
                     raise BoundaryError("decision_job", "membership_not_authorized")
                 db.execute(
                     "UPDATE decision_jobs SET state='completed',result=?,updated=? "
-                    "WHERE id=? AND state='running'",
-                    (json.dumps(result), time.time(), identity),
+                    "WHERE id=? AND state='running' AND EXISTS "
+                    "(SELECT 1 FROM decision_job_execution e "
+                    "WHERE e.id=decision_jobs.id AND e.attempt=?)",
+                    (json.dumps(result), time.time(), identity, attempt),
                 )
         except (ValueError, OSError) as error:
             self.fail(
-                identity, error.code if isinstance(error, BoundaryError) else "processing_failed"
+                identity, error.code if isinstance(error, BoundaryError) else "processing_failed",
+                attempt=attempt,
             )
+        except MemoryError:
+            self.fail(identity, "worker_memory_limit", attempt=attempt)
+        finally:
+            stopped.set()
+            pulse.join(timeout=1)

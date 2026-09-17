@@ -4,19 +4,27 @@ from __future__ import annotations
 
 import io
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from itertools import zip_longest
 from typing import TYPE_CHECKING
 
-from spireagent.artifact_contracts import Manifest, Parent, Producer
+from spireagent.artifact_contracts import Manifest, Parent, Payload, Producer
 from spireagent.json_boundary import BoundaryError, FrozenObject, decode_json, json_bytes
 from spireagent.storage.store import ArtifactStore
 
 from ..canonical import canonical_json
 from .contracts import SourceProjection
-from .decision_dataset import SCHEMA, DecisionDataset, SelectionRules, select_decisions
+from .decision_dataset import (
+    SCHEMA,
+    DecisionDataset,
+    SelectionRules,
+    _versions,
+    select_verified_sources,
+)
+from .decision_index import resolve_payload
+from .decision_preview import PreviewCache
 from .decision_union import UNION_SCHEMA, union_decisions
-from .platform_bundle3 import MAX_BYTES
+from .platform_bundle3 import MAX_BYTES, PlatformBundle3SourceAdapter
 
 if TYPE_CHECKING:
     from .decision_cache import VerifiedSourceCache
@@ -25,15 +33,14 @@ Progress = Callable[[str, int, int], None]
 
 
 def _sources(
-    store: ArtifactStore, sources: tuple[Manifest, ...], progress: Progress | None = None,
-) -> tuple[bytes, ...]:
+    sources: tuple[Manifest, ...], progress: Progress | None = None,
+) -> Iterator[Payload]:
     if not 1 <= len(sources) <= 100:
         raise BoundaryError("decision_dataset", "source_selection_limit")
-    result: list[bytes] = []
     total = 0
-    for source in sources:
+    for index, source in enumerate(sorted(sources, key=lambda s: s.payload("archive").sha256)):
         if progress:
-            progress("reading_sources", len(result), len(sources))
+            progress("reading_sources", index, len(sources))
         info = source.parameters.value()
         if (
             source.kind != "evidence"
@@ -45,8 +52,12 @@ def _sources(
         total += payload.size
         if payload.size > MAX_BYTES or total > MAX_BYTES:
             raise BoundaryError("decision_dataset", "source_size_limit")
-        result.append(b"".join(store.read_payload(payload)))
-    return tuple(result)
+        yield payload
+
+
+def _selection(sources: tuple[Manifest, ...], rules: SelectionRules, schema: str) -> dict:
+    return {"schema": schema, "sources": sorted(source.artifact_id for source in sources),
+            "rules": rules.to_dict()}
 
 
 def preview(
@@ -54,14 +65,18 @@ def preview(
     *, cache: VerifiedSourceCache | None = None, progress: Progress | None = None,
     on_projection: Callable[[SourceProjection], None] | None = None,
 ) -> DecisionDataset:
-    raw = _sources(store, sources, progress)
-    if progress:
-        progress("verifying_sources", 0, len(sources))
-    dataset = select_decisions(
-        raw, rules, cache=cache, on_projection=on_projection,
-        on_source=(lambda completed, total: progress("verifying_sources", completed, total))
-        if progress else None,
-    )
+    def projections() -> Iterator[tuple[SourceProjection, dict]]:
+        for index, payload in enumerate(_sources(sources, progress)):
+            if progress:
+                progress("verifying_sources", index, len(sources))
+            if cache is None:
+                raw = b"".join(store.read_payload(payload))
+                yield PlatformBundle3SourceAdapter().project(raw), _versions(raw)
+                del raw
+            else:
+                yield resolve_payload(cache, store, payload)
+
+    dataset = select_verified_sources(projections(), rules, on_projection)
     if progress:
         progress("verifying_sources", len(sources), len(sources))
     contracts = dataset.report.value()["source_contracts"]
@@ -71,6 +86,8 @@ def preview(
             != source.parameters.value()["content_id"]
         ):
             raise BoundaryError("decision_dataset", "received_content_identity_mismatch")
+    if cache is not None:
+        PreviewCache(cache).put(_selection(sources, rules, SCHEMA), dataset)
     return dataset
 
 
@@ -82,7 +99,10 @@ def publish(
     expected_preview: str,
     *, cache: VerifiedSourceCache | None = None, progress: Progress | None = None,
 ) -> Manifest:
-    dataset = preview(store, sources, rules, cache=cache, progress=progress)
+    dataset = (PreviewCache(cache).get(_selection(sources, rules, SCHEMA), expected_preview)
+               if cache is not None else None)
+    if dataset is None:
+        dataset = preview(store, sources, rules, cache=cache, progress=progress)
     return _publish(store, sources, rules, producer, expected_preview, dataset, SCHEMA, progress)
 
 
@@ -104,7 +124,10 @@ def preview_union(
         loaded.append((result[0].artifact_id, result[1]))
     if progress:
         progress("union_selected_decisions", len(loaded), len(parents))
-    return union_decisions(tuple(loaded), rules)
+    dataset = union_decisions(tuple(loaded), rules)
+    if cache is not None:
+        PreviewCache(cache).put(_selection(parents, rules, UNION_SCHEMA), dataset)
+    return dataset
 
 
 def publish_union(
@@ -112,7 +135,10 @@ def publish_union(
     producer: Producer, expected_preview: str,
     *, cache: VerifiedSourceCache | None = None, progress: Progress | None = None,
 ) -> Manifest:
-    dataset = preview_union(store, parents, rules, cache=cache, progress=progress)
+    dataset = (PreviewCache(cache).get(_selection(parents, rules, UNION_SCHEMA), expected_preview)
+               if cache is not None else None)
+    if dataset is None:
+        dataset = preview_union(store, parents, rules, cache=cache, progress=progress)
     return _publish(store, parents, rules, producer, expected_preview,
                     dataset, UNION_SCHEMA, progress)
 

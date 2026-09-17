@@ -29,6 +29,8 @@ window.SpireProject = (() => {
   let exportId = null;
   let readiness = new Map();
   const pending = new Set();
+  let activeDataset = null;
+  const datasetSnapshots = new WeakMap();
   const labels = {
     invited: "待首次登录",
     active: "已启用",
@@ -39,7 +41,7 @@ window.SpireProject = (() => {
     proved: "因果后继已证明",
     canonical: "已录入决策",
     real_failures: "真实录制失败",
-    cancelled: "正常取消",
+    cancelled: "已取消",
     aborted: "中断",
     diagnostics: "诊断",
     unsupported: "不在记录范围",
@@ -209,6 +211,13 @@ window.SpireProject = (() => {
   const failure = (error) => {
     const known = {
       authentication_required: "当前账号已过期或无权访问，请重新登录项目账号。",
+      publication_already_started: "已进入最后保存阶段，请等待结果。完成后可以从列表移除。",
+      worker_memory_limit: "处理时达到内存上限。已核验的来源会保留，重试会复用这些结果。",
+      worker_timeout: "本次处理超时。已完成的来源会保留，可继续同一任务。",
+      worker_cpu_limit: "本次处理达到计算时间上限。已完成的来源会保留。",
+      worker_killed: "处理进程被终止。请查看系统状态后继续同一任务。",
+      worker_start_failed: "处理进程未能启动，请查看系统状态。",
+      worker_exit_failed: "处理进程异常退出。已完成的来源会保留。",
       last_admin_required:
         "必须保留至少一位已激活的管理员。先让另一位管理员完成首次登录。",
       member_already_exists: "此邮箱已在成员列表中；请修改现有成员。",
@@ -1087,11 +1096,46 @@ window.SpireProject = (() => {
     try {
       const content = tab === "create" ? await datasetCreate(ctx) :
         ["previews", "archived"].includes(tab) ? await datasetTasks(ctx) : await datasetLibrary(ctx);
-      if (live(ctx) && tab === datasetTab()) box.replaceChildren(nav, content);
+      if (live(ctx) && tab === datasetTab()) {
+        box.replaceChildren(nav, content);
+        activeDataset = {ctx, tab, box, content};
+      }
     } catch (error) {
       if (live(ctx) && tab === datasetTab()) box.replaceChildren(nav, panel("暂未读取到内容", failure(error)));
     }
     return box;
+  }
+  async function refreshDataset() {
+    const page = activeDataset;
+    if (!page || !live(page.ctx) || page.tab !== datasetTab()) return false;
+    // A form is the user's draft. Polling never reconstructs its inputs or selection.
+    if (page.tab === "create") return true;
+    try {
+      const next = page.tab === "library" ? await datasetLibrary(page.ctx) : await datasetTasks(page.ctx);
+      if (!live(page.ctx) || activeDataset !== page || page.tab !== datasetTab()) return true;
+      if (datasetSnapshots.get(next) === datasetSnapshots.get(page.content)) return true;
+      const previous = new Map([...page.content.children].filter(n => n.dataset?.refreshKey)
+        .map(n => [n.dataset.refreshKey, n]));
+      const children = [...next.children].map(node => {
+        const old = previous.get(node.dataset?.refreshKey);
+        if (old && datasetSnapshots.get(old) === datasetSnapshots.get(node)) return old;
+        if (old) {
+          const opened = new Set([...old.querySelectorAll("details[open]")].map(n => n.dataset.preserve));
+          node.querySelectorAll("details[data-preserve]").forEach(n => { n.open = opened.has(n.dataset.preserve); });
+        }
+        return node;
+      });
+      // Keep the mounted panel and unchanged task cards. No loading shell or empty frame.
+      page.content.replaceChildren(...children);
+      datasetSnapshots.set(page.content, datasetSnapshots.get(next));
+    } catch (error) {
+      if (!live(page.ctx) || activeDataset !== page) return true;
+      if (error.message === "authentication_required") {
+        page.box.replaceChildren(panel("需要重新登录", failure(error)));
+        activeDataset = null;
+      } else note(page.ctx, "状态暂未更新，保留上次结果。" + failure(error), "error");
+    }
+    return true;
   }
   async function datasetLibrary(ctx) {
     const box = panel("已生成的数据集", "这里是已固定版本、可查看和下载的数据集。预览在单独的工作区；生成数据集不等于已经通过训练或模型效果验收。");
@@ -1105,6 +1149,7 @@ window.SpireProject = (() => {
     const q = encodeURIComponent(drafts.get("dataset-search") || "");
     const catalog = await request(ctx, project(`datasets?limit=25&offset=${offsets.get("dataset-catalog") || 0}${q ? `&q=${q}` : ""}`));
     if (catalog.availability === "not_authorized") throw new Error("authentication_required");
+    datasetSnapshots.set(box, JSON.stringify({...catalog, observed_at:undefined}));
     box.append(el("p", `共 ${count(catalog.total)} 个${q ? "匹配的" : "已生成的"}数据集`, "muted"));
     const mergeSet = new Set(drafts.get("merge-datasets") || []);
     const rows = [];
@@ -1278,6 +1323,7 @@ window.SpireProject = (() => {
     const jobs = focused ? {items: [await request(ctx, member(`datasets/${focused}`))],total:1} :
       await request(ctx, member(`datasets${archived ? "/archived" : ""}?limit=25&offset=${offsets.get(key) || 0}`));
     const box = panel(archived ? "已移除的预览与任务" : "预览与任务", archived ? "可以恢复到任务列表。原始录制、固定数据集和失败记录始终保留。" : "预览成功后，确认生成才会进入数据集列表。处理中可离开页面，回来查看同一任务。");
+    datasetSnapshots.set(box, JSON.stringify(jobs));
     if (focused) box.append(command(ctx, "show-all-dataset-tasks", "查看所有预览与任务", async () => {
       drafts.delete("dataset-task-id"); await reload(ctx);
     }));
@@ -1292,6 +1338,8 @@ window.SpireProject = (() => {
     }));
     for (const job of jobs.items || []) {
       const row = panel(job.request.name, `${job.request.preview_id ? "生成数据集" : "预览"} · ${show(job.state)} · ${when(job.created_at)}`);
+      row.dataset.refreshKey = job.id;
+      datasetSnapshots.set(row, JSON.stringify(job));
       if (job.progress && ["pending", "running"].includes(job.state)) {
         const phases = {checking_access:"核对权限", reading_sources:"读取来源", verifying_sources:"校验并整理", loading_selected_datasets:"读取已选数据", union_selected_decisions:"合并与去重", publishing_dataset:"保存固定数据集"};
         row.append(el("p", `${phases[job.progress.phase] || show(job.progress.phase)} · ${count(job.progress.completed)} / ${count(job.progress.total)} 个来源 · ${Number(job.progress.elapsed_seconds || 0).toFixed(1)} 秒`));
@@ -1328,13 +1376,17 @@ window.SpireProject = (() => {
         if (hex(created.id,32)) drafts.set("dataset-task-id",created.id);
         await reload(ctx);
       }, {primary:true, disabled: !job.result?.selected}));
-      if (!archived && job.state === "failed") row.append(command(ctx, `retry-dataset-${job.id}`, "重试此任务", async () => {
+      if (!archived && ["failed", "cancelled"].includes(job.state)) row.append(command(ctx, `retry-dataset-${job.id}`, "重试此任务", async () => {
         const created = await request(ctx, member(`datasets/${job.id}/retry`), {});
         if (!live(ctx)) return;
         if (hex(created.id,32)) drafts.set("dataset-task-id",created.id);
         await reload(ctx);
       }));
-      if (["completed", "failed"].includes(job.state)) row.append(command(ctx, `visibility-${job.id}`, archived ? "恢复到任务列表" : job.request.preview_id ? "移除任务记录" : "移除预览", () => visibility([job.id], !archived)));
+      if (!archived && ["pending", "running"].includes(job.state)) row.append(command(ctx, `cancel-dataset-${job.id}`, "取消任务", async () => {
+        await request(ctx, member(`datasets/${job.id}/cancel`), {});
+        await reload(ctx);
+      }, {disabled:job.progress?.phase === "publishing_dataset" && job.state === "running"}));
+      if (["completed", "failed", "cancelled"].includes(job.state)) row.append(command(ctx, `visibility-${job.id}`, archived ? "恢复到任务列表" : job.request.preview_id ? "移除任务记录" : "移除预览", () => visibility([job.id], !archived)));
       box.append(row);
     }
     if (!jobs.items?.length) box.append(empty(archived ? "没有已移除的任务" : "没有待确认的预览或任务", "已生成的数据集在第一个页签中。"));
@@ -2181,6 +2233,7 @@ window.SpireProject = (() => {
   }
   return {
     reload: async () => {},
+    refresh: async view => view === "datasets" ? refreshDataset() : false,
     openDatasetLibrary() {
       drafts.set("dataset-tab", "library");
       if (window.SpireProject.navigate) window.SpireProject.navigate("datasets");
@@ -2191,6 +2244,7 @@ window.SpireProject = (() => {
       const nextAccount = `${identity?.principal?.subject || "anonymous"}:${identity?.principal?.role || ""}:${identity?.status || ""}`;
       if (account !== nextAccount) {
         account = nextAccount;
+        activeDataset = null;
         offsets = new Map();
         drafts = new Map();
         selected = new Set();

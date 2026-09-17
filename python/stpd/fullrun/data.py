@@ -6,6 +6,7 @@ import hashlib
 import io
 import tempfile
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from spireagent.artifact_contracts import Manifest, Parent, Producer
@@ -40,7 +41,7 @@ class AdmittedDataset:
         )
 
 
-def split_whole_runs(records: tuple[ResearchTransitionV1, ...], seed: int) -> FrozenObject:
+def split_whole_runs(records: Sequence[ResearchTransitionV1], seed: int) -> FrozenObject:
     """Keep entire runs and repeated semantic decision components in a single partition."""
     unsigned(seed, "split.seed")
     parent = {record.run_id: record.run_id for record in records}

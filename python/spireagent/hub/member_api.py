@@ -104,6 +104,9 @@ class MemberApi:
         retry = re.fullmatch(r"datasets/([a-f0-9]{32})/retry", route)
         if retry:
             return self.decisions.retry(current, retry[1], body)
+        cancel = re.fullmatch(r"datasets/([a-f0-9]{32})/cancel", route)
+        if cancel:
+            return self.decisions.cancel(current, cancel[1], body)
         # No admin, compute, grants or implicit enrollment mutations on this surface.
         raise BoundaryError("member_api", "resource_not_found")
 
