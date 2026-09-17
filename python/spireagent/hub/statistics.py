@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import time
 from collections import Counter
+from collections.abc import Sequence
 from contextlib import closing
 from typing import TYPE_CHECKING, Any
 
@@ -29,7 +30,7 @@ DIMENSIONS = (
 MAX_PROFILE_BYTES = 256 * 1024**2
 
 
-def decision_profile(records: tuple[ResearchTransitionV1, ...]) -> dict[str, Any]:
+def decision_profile(records: Sequence[ResearchTransitionV1]) -> dict[str, Any]:
     """Facts from verified research projection, never proof of Dataset admission."""
     counts: dict[str, Counter[Any]] = {name: Counter() for name in DIMENSIONS}
     for record in records:

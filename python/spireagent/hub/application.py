@@ -477,9 +477,12 @@ class HubApplication:
         artifact = re.fullmatch(r"/v1/artifacts/([a-f0-9]{64})(?:/payloads/([a-z0-9_]+))?", path)
         if artifact and method == "GET":
             manifest = self.service.store.get_manifest(artifact[1])
-            require_artifact_access(
+            checked = require_artifact_access(
                 manifest, project_member=admin, payload_role=artifact[2], store=self.service.store
             )
+            from spireagent.hub.curation_access import record_use
+
+            record_use(ops, self.service.store, manifest, "download", nodes=checked)
             if artifact[2] is None:
                 return self.response(decode_json(manifest.to_bytes()))
             return (

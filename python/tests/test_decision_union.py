@@ -97,7 +97,7 @@ def test_union_jobs_recheck_ancestor_permission_and_preview(tmp_path: Path) -> N
     jobs.run(build["id"])
     artifact = jobs.read(MEMBER, build["id"])["result"]["artifact_id"]
     assert len(load(owner.store, artifact)[1].records) == 6
-    assert jobs.read(MEMBER, build["id"])["progress"]["cache_hits"] == 1
+    assert jobs.read(MEMBER, build["id"])["progress"]["preview_hits"] == 1
     jobs.collections.set_collection_access(upload, approved=False,
                                           evidence_ref="d" * 64, actor="test")
     with pytest.raises(BoundaryError, match="source_sharing_not_established"):

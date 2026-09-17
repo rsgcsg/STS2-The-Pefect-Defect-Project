@@ -16,8 +16,16 @@ return args switch
         string output, string sourceRevision, "human_origin_attested"] =>
         PackSession(directory, worker, campaign, output, sourceRevision, compatibility: true),
     ["identity", string assembly] => Identity(assembly),
+    ["recover-interrupted", string recordings, string recovered] => RecoverInterrupted(recordings, recovered),
     _ => Usage()
 };
+
+static int RecoverInterrupted(string recordings, string recovered)
+{
+    Console.WriteLine(JsonSerializer.Serialize(
+        InterruptedRecordingRecovery.RecoverOne(recordings, recovered), EvidenceJson.IndentedOptions));
+    return 0;
+}
 
 static int PackSession(
     string directory,
@@ -94,6 +102,6 @@ static int Identity(string assembly)
 
 static int Usage()
 {
-    Console.Error.WriteLine("usage: sts2-human-annotator audit <recording-dir> | audit-native-semantic <recording-dir> | export[-compatibility] <recording-dir> <output.jsonl> | pack-session[-compatibility] <recording-dir> <worker-id> <campaign-id> <output-dir> <source-revision> human_origin_attested | identity <assembly>");
+    Console.Error.WriteLine("usage: sts2-human-annotator audit <recording-dir> | audit-native-semantic <recording-dir> | export[-compatibility] <recording-dir> <output.jsonl> | pack-session[-compatibility] <recording-dir> <worker-id> <campaign-id> <output-dir> <source-revision> human_origin_attested | identity <assembly> | recover-interrupted <recordings-root> <recovered-root>");
     return 2;
 }

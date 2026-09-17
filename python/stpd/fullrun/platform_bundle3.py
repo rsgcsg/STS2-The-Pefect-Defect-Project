@@ -478,6 +478,7 @@ class PlatformBundle3SourceAdapter:
                 for e in events
                 if e["kind"]
                 in {
+                    "recording_interrupted",
                     "run_resumed_native",
                     "run_abandoned",
                     "recording_paused",

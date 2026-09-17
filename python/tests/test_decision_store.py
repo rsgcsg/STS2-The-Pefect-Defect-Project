@@ -44,6 +44,40 @@ def test_immutable_publication_and_reprojection(tmp_path: Path) -> None:
         publish(owner.store, (source,), rules, owner.producer, "f" * 64)
 
 
+def test_selection_statistics_and_manifest_do_not_redecode_game_payloads(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from dataclasses import replace
+
+    from stpd.fullrun.contracts import ResearchTransitionV2
+    from stpd.fullrun.curated_dataset import curate, publish_selection
+    from stpd.fullrun.data import split_run_fingerprints, split_whole_runs
+    from stpd.fullrun.decision_dataset import _facets
+    from stpd.fullrun.decision_spool import SpoolSelection
+
+    owner, _, source, _ = setup(tmp_path)
+    rules = SelectionRules()
+    selected = preview(owner.store, (source,), rules)
+    materialized = replace(selected, records=tuple(selected.records))
+    expected = curate(materialized, "training", {"revision": 0, "items": {}})
+    assert isinstance(selected.records, SpoolSelection)
+    assert split_whole_runs(materialized.records, 0) == split_run_fingerprints(
+        ((r["run_id"], r["fingerprint"]) for r in selected.records.summaries()), 0,
+    )
+    expected_id = expected.logical_id
+    source_id = materialized.logical_id
+    facets = _facets(materialized.records, selected.report.value()["environments"])
+    monkeypatch.setattr(ResearchTransitionV2, "decode",
+                        lambda *args: pytest.fail("full game payload decoded again"))
+    assert selected.logical_id == source_id
+    assert _facets(selected.records, selected.report.value()["environments"]) == facets
+    curated = curate(selected, "training", {"revision": 0, "items": {}})
+    assert curated.logical_id == expected_id
+    manifest = publish_selection(owner.store, (source,), rules, owner.producer, curated,
+                                 merging=False, expected=expected_id, paired_training=None)
+    assert manifest.parameters.value()["logical_id"] == expected_id
+
+
 def test_preview_then_build_job_and_revocation(tmp_path: Path) -> None:
     owner, upload, _, jobs = setup(tmp_path)
     body = {
@@ -205,7 +239,7 @@ def test_concurrent_worker_claim_runs_once(tmp_path: Path) -> None:
         },
     )
     with (
-        patch("spireagent.hub.decision_jobs.preview", wraps=preview) as call,
+        patch("spireagent.hub.dataset_curation.preview", wraps=preview) as call,
         ThreadPoolExecutor(max_workers=2) as pool,
     ):
         list(pool.map(jobs.run, [job["id"], job["id"]]))
@@ -226,10 +260,14 @@ def test_explicit_retry_keeps_failed_attempt(tmp_path: Path) -> None:
     )
     jobs.fail(job["id"], "worker_resource_or_process_limit")
     retry = jobs.retry(MEMBER, job["id"], {})
-    assert retry["id"] != job["id"]
+    assert retry["id"] == job["id"]
     jobs.run(retry["id"])
-    assert jobs.read(MEMBER, job["id"])["state"] == "failed"
     assert jobs.read(MEMBER, retry["id"])["state"] == "completed"
+    with jobs.service.operations.transaction() as db:
+        event = db.execute(
+            "SELECT detail FROM events WHERE operation='decision_job_retry'",
+        ).fetchone()
+        assert "worker_resource_or_process_limit" in event[0]
 
 
 def test_new_dataset_statistics_uses_its_own_loader(tmp_path: Path) -> None:
@@ -447,7 +485,7 @@ def test_batched_parquet_preserves_order_and_exact_reprojection(
     selected = preview(owner.store, (source,), rules)
     # More than two physical row groups; the existing reprojection must compare
     # every row, including order, missing rows and extra rows.
-    selected = replace(selected, records=selected.records * 50)
+    selected = replace(selected, records=tuple(selected.records) * 50)
     manifest = module._publish(owner.store, (source,), rules, owner.producer,
                                selected.logical_id, selected, SCHEMA, None)
     raw = b"".join(owner.store.read_payload(manifest.payload("records")))
@@ -488,3 +526,132 @@ def test_batched_parquet_preserves_order_and_exact_reprojection(
     owner.store.publish(bad)
     with pytest.raises(BoundaryError, match="records_reprojection_mismatch"):
         load(owner.store, bad.artifact_id)
+
+
+def test_cancel_and_resume_use_one_task_and_fence_old_workers(tmp_path: Path) -> None:
+    from unittest.mock import patch
+
+    from spireagent.hub.decision_jobs import preview as real_preview
+
+    owner, upload, _, jobs = setup(tmp_path)
+    job = jobs.create(MEMBER, {"uploads": [upload], "rules": SelectionRules().to_dict(),
+                               "preview_id": None, "name": "one durable task"})
+    first = True
+
+    def interleaved(*args, **kwargs):
+        nonlocal first
+        if first:
+            first = False
+            result = real_preview(*args, **kwargs)
+            assert jobs.cancel(MEMBER, job["id"], {})["state"] == "cancelled"
+            assert jobs.retry(MEMBER, job["id"], {})["id"] == job["id"]
+            jobs.run(job["id"])
+            jobs.fail(job["id"], "stale_worker_error", attempt=1)
+            return result
+        return real_preview(*args, **kwargs)
+
+    with patch("spireagent.hub.dataset_curation.preview", side_effect=interleaved):
+        jobs.run(job["id"])
+    assert jobs.read(MEMBER, job["id"])["state"] == "completed"
+    with owner.operations.transaction() as db:
+        assert db.execute("SELECT count(*) FROM decision_jobs").fetchone()[0] == 1
+        assert db.execute("SELECT attempt FROM decision_job_execution").fetchone()[0] == 3
+
+
+def test_cancel_is_not_allowed_during_manifest_publication(tmp_path: Path) -> None:
+    import json
+
+    owner, upload, _, jobs = setup(tmp_path)
+    job = jobs.create(MEMBER, {"uploads": [upload], "rules": SelectionRules().to_dict(),
+                               "preview_id": None, "name": "publication boundary"})
+    with owner.operations.transaction() as db:
+        db.execute("UPDATE decision_jobs SET state='running',result=? WHERE id=?",
+                   (json.dumps({"progress": {"phase": "publishing_dataset"}}), job["id"]))
+    with pytest.raises(BoundaryError, match="publication_already_started"):
+        jobs.cancel(MEMBER, job["id"], {})
+    assert jobs.read(MEMBER, job["id"])["state"] == "running"
+
+
+def test_large_cold_selection_checkpoints_without_restarting_verified_sources(
+    tmp_path, monkeypatch
+):
+    from unittest.mock import patch
+
+    from stpd.fullrun.platform_bundle3 import PlatformBundle3SourceAdapter
+
+    owner, upload, source, jobs = setup(tmp_path)
+    uploads = [upload]
+    for number in (2, 3):
+        bundle = bundle3(tmp_path / str(number), runs=number + 3)
+        new, _ = received(
+            owner,
+            archive_bundle(bundle),
+            number=number,
+            content_id=load_json(bundle / "session-bundle-manifest.json")["bundle_content_id"],
+        )
+        uploads.append(new)
+    monkeypatch.setattr("spireagent.hub.decision_jobs.SOURCE_PREPARATION_BATCH", 1)
+    identity = jobs.create(
+        MEMBER,
+        {
+            "uploads": uploads,
+            "rules": SelectionRules().to_dict(),
+            "preview_id": None,
+            "name": "checkpoint",
+        },
+    )["id"]
+    original = PlatformBundle3SourceAdapter.project
+    with patch.object(
+        PlatformBundle3SourceAdapter, "project", autospec=True, side_effect=original
+    ) as verify:
+        for completed in (1, 2, 3):
+            jobs.run(identity)
+            status = jobs.read(MEMBER, identity)
+            assert status["state"] == "pending"
+            assert status["progress"]["completed"] == completed
+            assert verify.call_count == completed
+        jobs.run(identity)
+        assert jobs.read(MEMBER, identity)["state"] == "completed"
+        assert verify.call_count == 3
+    with owner.operations.transaction() as db:
+        assert not db.execute(
+            "SELECT 1 FROM sqlite_master WHERE name='decision_source_rows'"
+        ).fetchone()
+    # All duplicate exports remain governed by the normal deduplication algorithm.
+    assert jobs.read(MEMBER, identity)["result"]["selected"] == 12
+
+
+@pytest.mark.parametrize("change", ["cancel", "revoke"])
+def test_checkpoint_rechecks_authority_before_next_batch(tmp_path, monkeypatch, change):
+    owner, upload, _, jobs = setup(tmp_path)
+    bundle = bundle3(tmp_path / "second", runs=4)
+    second, _ = received(
+        owner,
+        archive_bundle(bundle),
+        number=2,
+        content_id=load_json(bundle / "session-bundle-manifest.json")["bundle_content_id"],
+    )
+    monkeypatch.setattr("spireagent.hub.decision_jobs.SOURCE_PREPARATION_BATCH", 1)
+    identity = jobs.create(
+        MEMBER,
+        {
+            "uploads": [upload, second],
+            "rules": SelectionRules().to_dict(),
+            "preview_id": None,
+            "name": "checkpoint",
+        },
+    )["id"]
+    jobs.run(identity)
+    assert jobs.read(MEMBER, identity)["state"] == "pending"
+    if change == "cancel":
+        jobs.cancel(MEMBER, identity, {})
+    else:
+        with owner.operations.transaction() as db:
+            db.execute(
+                "UPDATE identity_members SET status='disabled' WHERE subject=?", (MEMBER.subject,)
+            )
+    jobs.run(identity)
+    status = jobs.read(MEMBER, identity)
+    assert status["state"] == ("cancelled" if change == "cancel" else "failed")
+    if change == "revoke":
+        assert status["error"] == "membership_not_authorized"

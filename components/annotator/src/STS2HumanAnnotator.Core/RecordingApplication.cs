@@ -4,7 +4,7 @@ public static class RecordingApplicationContract
 {
     public const string CommandSchema = "sts2.ai-platform/recording-command-1";
     public const string CommandResultSchema = "sts2.ai-platform/recording-command-result-1";
-    public const string StatusSchema = "sts2.ai-platform/recording-status-4";
+    public const string StatusSchema = "sts2.ai-platform/recording-status-5";
     public const string EventBatchSchema = "sts2.ai-platform/recording-event-batch-2";
 }
 
@@ -182,7 +182,8 @@ public sealed record RecordingApplicationStatus(
     RecorderEnvironmentIdentity? Environment,
     string? CurrentSnapshotId,
     IReadOnlyList<string> Blockers,
-    long LatestEventSequence);
+    long LatestEventSequence,
+    ContinuousRecordingStatus? Continuous = null);
 
 public enum RecordingEventKind
 {

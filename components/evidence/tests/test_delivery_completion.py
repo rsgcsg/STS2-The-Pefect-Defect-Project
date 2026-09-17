@@ -29,7 +29,7 @@ class DeliveryCompletionTests(unittest.TestCase):
     _object = delivery_tests.DeliveryTests._object
     _reseal = delivery_tests.DeliveryTests._reseal
 
-    def _ready(self, *, failed_only=False):
+    def _ready(self, *, failed_only=False, recovered=False):
         self.root = self.root.resolve()
         bundle = self._bundle(failed_only=failed_only)
         manifest = json.loads((bundle / "raw/recording-manifest.json").read_text())
@@ -40,7 +40,18 @@ class DeliveryCompletionTests(unittest.TestCase):
             "session_id": manifest["session_id"], "timeline_id": manifest["timeline_id"],
             "closed_at": "2026-09-15T00:00:00Z"})
         self._reseal(bundle)
-        self.source = self.root / "recordings/session"
+        if recovered:
+            delivery_tests.v3.HumanSessionBundleV3Tests._recover_bundle(self, bundle)
+            self.source = self.root / "outbox/recovered-recordings/recovered-fixture"
+            original = self.root / "recordings" / manifest["session_id"]
+            original.mkdir(parents=True)
+            recovery = json.loads((bundle / "raw/recording-recovery.json").read_text())
+            for name, info in recovery["original_files"].items():
+                target = original / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes((bundle / "raw" / name).read_bytes()[:info["bytes"]])
+        else:
+            self.source = self.root / "recordings/session"
         shutil.copytree(bundle / "raw", self.source)
         tool = self.root / "tool"
         tool.mkdir()
@@ -55,11 +66,11 @@ class DeliveryCompletionTests(unittest.TestCase):
             "schema": "sts2.evidence/collection-tool-1", "identity": identity, "release_id": release_id})
         owner = CollectionTool(tool, release_id)
         bm = json.loads((bundle / "session-bundle-manifest.json").read_text())
-        self.config = DeliveryConfig(self.source.parent, self.root / "outbox", tool, release_id,
+        self.config = DeliveryConfig(self.root / "recordings", self.root / "outbox", tool, release_id,
                                      bm["worker_id"], bm["campaign_id"], True,
                                      "https://hub.example", ["storage.example"])
         self.outbox = DeliveryOutbox(self.config.outbox_root, **self.config.identity)
-        self.assertEqual(self.outbox.reconcile(self.config.recordings_root)["enqueued"], 1)
+        self.assertEqual(self.outbox.reconcile(self.source.parent)["enqueued"], 1)
         packer = delivery_tests.FixturePacker(bundle)
         packer.release_id, packer.manifest = owner.release_id, owner.manifest
         transport = HubTransport("https://hub.example", "fixture-token", self.outbox.root / "archives",
@@ -107,6 +118,16 @@ class DeliveryCompletionTests(unittest.TestCase):
     def _sql(self, query, parameters=()):
         with closing(sqlite3.connect(self.database)) as connection, connection:
             connection.execute(query, parameters)
+
+    def test_verified_recovered_copy_completes_only_with_unchanged_original(self):
+        self._ready(failed_only=True, recovered=True)
+        proof = self._proof()
+        self.assertEqual(proof["session_count"], 1)
+        original = next(self.config.recordings_root.iterdir())
+        with (original / "run-journal.jsonl").open("a") as file:
+            file.write(" ")
+        with self.assertRaisesRegex(ValueError, "completion_recovery_origin_changed"):
+            self._proof()
 
     def test_complete_receipt_is_immutable_stable_and_holds_worker_lock(self):
         self._ready()

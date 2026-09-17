@@ -2805,3 +2805,17 @@ internal static class NativeRunEndedPatch
     private static void Postfix([HarmonyArgument(0)] bool isVictory) =>
         RecorderRuntime.ObserveNativeRunEnded(isVictory);
 }
+
+[HarmonyPatch(typeof(RunManager), nameof(RunManager.CleanUp))]
+internal static class NativeRunCleanupPatch
+{
+    private static void Prefix(RunManager __instance, out bool __state) =>
+        __state = __instance.IsInProgress;
+
+    private static void Postfix([HarmonyArgument(0)] bool graceful, bool __state)
+    {
+        if (!__state) return;
+        try { RecorderRuntime.ObserveNativeRunCleanup(graceful); }
+        catch (Exception exception) { NativeUiObservationSafety.Report("run.cleanup", exception); }
+    }
+}

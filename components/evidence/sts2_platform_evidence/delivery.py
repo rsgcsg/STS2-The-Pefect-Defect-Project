@@ -142,6 +142,8 @@ class DeliveryOutbox:
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
             for session in sorted(root.iterdir()):
+                if session.name.startswith("."):
+                    continue  # Unpublished recovery/pack staging never enters delivery.
                 if not session.is_dir() or not (session / "recording-manifest.json").is_file():
                     continue
                 if not (session / "session-close-receipt.json").is_file():
@@ -308,10 +310,21 @@ class DeliveryOutbox:
 def reconcile_and_drain(outbox: DeliveryOutbox, recordings_root: Path, tool: CollectionTool,
                         transport: Transport, *, limit: int = 10) -> dict[str, Any]:
     counts = outbox.reconcile(recordings_root)
+    recovery = None
+    recovered = outbox.root / "recovered-recordings"
+    if counts["unsealed"] and tool.manifest.get("identity", {}).get("interrupted_recovery_schema"):
+        try:
+            recovery = tool.recover_interrupted(recordings_root, recovered)
+        except (CollectionFailure, OSError, ValueError):
+            recovery = {"status": "incident", "reason": "interrupted_recording_requires_review"}
+    if recovered.is_dir():
+        discovered = outbox.reconcile(recovered)
+        for key in counts:
+            counts[key] += discovered[key]
     processed = []
     for _ in range(limit):
         value = outbox.drain_one(tool, transport)
         if value is None:
             break
         processed.append(value)
-    return {"discovery": counts, "processed": processed}
+    return {"discovery": counts, "processed": processed, "recovery": recovery}

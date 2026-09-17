@@ -224,11 +224,17 @@ class CollectionAccess:
             raise BoundaryError("sharing", "collection_identity_mismatch")
         return manifest
 
-    def artifact(self, artifact_id: str) -> Manifest:
+    def artifact(self, artifact_id: str, *, use: str | None = None) -> Manifest:
         manifest = self.service.store.get_manifest(digest(artifact_id, "export.artifact_id"))
         checked = require_artifact_access(
             manifest, project_member=True, store=self.service.store,
         )
+        from spireagent.hub.curation_access import guarded_runs, record_use
+
+        if use is None:
+            guarded_runs(self.service.operations, self.service.store, manifest, nodes=checked)
+        else:
+            record_use(self.service.operations, self.service.store, manifest, use, nodes=checked)
         # Catalogued project datasets need no second publication grant. A deliberate
         # withdrawal of a received source still applies to its derived data.
         if manifest.kind == "dataset":

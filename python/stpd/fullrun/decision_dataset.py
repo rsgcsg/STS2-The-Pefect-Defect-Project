@@ -10,7 +10,7 @@ import hashlib
 import json
 import tempfile
 from collections import Counter, defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -19,7 +19,7 @@ from spireagent.json_boundary import BoundaryError, FrozenObject, object_fields,
 
 from ..canonical import canonical_json, semantic_hash
 from .contracts import ResearchTransitionV2, SourceProjection
-from .data import split_whole_runs
+from .data import split_run_fingerprints
 from .platform_bundle3 import PlatformBundle3SourceAdapter, _extract
 
 if TYPE_CHECKING:
@@ -95,18 +95,39 @@ class SelectionRules:
 
 @dataclass(frozen=True)
 class DecisionDataset:
-    records: tuple[ResearchTransitionV2, ...]
+    records: Sequence[ResearchTransitionV2]
     report: FrozenObject
+
+    @property
+    def run_ids(self) -> set[str]:
+        from .decision_spool import SpoolSelection
+
+        if isinstance(self.records, SpoolSelection):
+            return {row["run_id"] for row in self.records.summaries()}
+        return {record.run_id for record in self.records}
+
+    def fingerprints(self) -> Iterator[str]:
+        from .decision_spool import SpoolSelection
+        from .representation import decision_fingerprint
+
+        if isinstance(self.records, SpoolSelection):
+            yield from (row["fingerprint"] for row in self.records.summaries())
+        else:
+            yield from (decision_fingerprint(record) for record in self.records)
 
     @property
     def logical_id(self) -> str:
         # Emit the exact sorted-key canonical object one record at a time. Building
         # every decoded record and another canonical tree exhausts bounded workers.
+        from .decision_spool import SpoolSelection
+
+        rows = (self.records.canonical_rows() if isinstance(self.records, SpoolSelection)
+                else (canonical_json(r.to_dict()).encode("utf-8") for r in self.records))
         digest = hashlib.sha256(b'{"records":[')
-        for index, record in enumerate(self.records):
+        for index, row in enumerate(rows):
             if index:
                 digest.update(b",")
-            digest.update(canonical_json(record.to_dict()).encode("utf-8"))
+            digest.update(row)
         digest.update(b'],"report":')
         digest.update(self.report.encoded.encode("utf-8"))
         digest.update(b',"schema":')
@@ -181,6 +202,12 @@ def _runs(projection: SourceProjection) -> list[dict[str, Any]]:
                 "RunManager.OnEnded(isVictory=true)": "win",
                 "RunManager.OnEnded(isVictory=false)": "loss",
             }.get(ends[0].get("detail"), "unknown")
+            if outcome == "loss" and any(
+                e["kind"] == "run_abandoned_native"
+                and e.get("detail") == "RunManager.OnEnded observed IsAbandoned=true."
+                for e in journal
+            ):
+                outcome = "abandoned"
         failures = {
             o["action"]["action_witness_id"]
             for o in ledger
@@ -297,24 +324,45 @@ def select_decisions(
     """Verify original bytes or reuse a private owner-bound verification of identical bytes."""
     if not 1 <= len(sources) <= 100:
         raise BoundaryError("decision_dataset", "source_selection_limit")
-    projections: list[SourceProjection] = []
-    versions: dict[str, Any] = {}
-    for source in sources:
+    def projections() -> Iterator[tuple[SourceProjection, dict[str, Any]]]:
+        # Sort small source references before projecting; never retain every decoded source.
+        ordered = sorted(sources, key=lambda raw: hashlib.sha256(raw).hexdigest())
+        for index, source in enumerate(ordered):
+            if on_source:
+                on_source(index, len(sources))
+            if cache is None:
+                yield PlatformBundle3SourceAdapter().project(source), _versions(source)
+            else:
+                yield cache.resolve(source)
         if on_source:
-            on_source(len(projections), len(sources))
-        if cache is None:
-            projection = PlatformBundle3SourceAdapter().project(source)
-            environments = _versions(source)
-        else:
-            projection, environments = cache.resolve(source)
-        projections.append(projection)
-        if on_projection:
-            on_projection(projection)
-        for key, value in environments.items():
-            _merge_environment(versions, key, value)
-    if on_source:
-        on_source(len(projections), len(sources))
-    return _select(projections, rules or SelectionRules(), versions)
+            on_source(len(sources), len(sources))
+    return select_verified_sources(projections(), rules or SelectionRules(), on_projection)
+
+
+def select_verified_sources(
+    sources: Iterable[tuple[SourceProjection, dict[str, Any]]], rules: SelectionRules,
+    on_projection: Callable[[SourceProjection], None] | None = None,
+) -> DecisionDataset:
+    """Internal streaming entry: installed owner projections, in archive digest order."""
+    versions: dict[str, Any] = {}
+
+    def projections() -> Iterator[SourceProjection]:
+        previous = ""
+        count = 0
+        for projection, environments in sources:
+            count += 1
+            if count > 100 or projection.source_sha256 < previous:
+                raise BoundaryError("decision_dataset", "source_selection_order_or_limit")
+            previous = projection.source_sha256
+            if on_projection:
+                on_projection(projection)
+            for key, value in environments.items():
+                _merge_environment(versions, key, value)
+            yield projection
+        if not count:
+            raise BoundaryError("decision_dataset", "source_selection_limit")
+
+    return _select(projections(), rules, versions)
 
 
 def _metadata(record: ResearchTransitionV2, versions: dict[str, Any]) -> dict[str, Any]:
@@ -332,31 +380,46 @@ def _metadata(record: ResearchTransitionV2, versions: dict[str, Any]) -> dict[st
     }
 
 
-def _facets(records: list[ResearchTransitionV2], versions: dict[str, Any]) -> dict[str, Any]:
-    result = {}
-    for key in sorted(FILTERS):
-        counts: Counter[Any] = Counter()
-        for record in records:
-            value = _metadata(record, versions)[key]
+def _facets(records: Sequence[ResearchTransitionV2], versions: dict[str, Any]) -> dict[str, Any]:
+    from .decision_spool import SpoolSelection
+
+    counters: dict[str, Counter[Any]] = {key: Counter() for key in sorted(FILTERS)}
+    metadata_rows = (
+        (_summary_metadata(row, versions) for row in records.summaries())
+        if isinstance(records, SpoolSelection)
+        else (_metadata(record, versions) for record in records)
+    )
+    for metadata in metadata_rows:
+        for key, counts in counters.items():
+            value = metadata[key]
             if (key == "difficulty" and type(value) is int and value >= 0) or (
                 key != "difficulty" and isinstance(value, str) and 0 < len(value) <= 256
             ):
                 counts[value] += 1
-        result[key] = {
-            "known": sum(counts.values()),
-            "unknown": len(records) - sum(counts.values()),
-            "items": [
-                {"value": value, "count": count}
-                for value, count in sorted(counts.items(), key=lambda x: str(x[0]))
-            ],
-        }
-    return result
+    return {
+        key: {"known": sum(counts.values()), "unknown": len(records) - sum(counts.values()),
+              "items": [{"value": value, "count": count}
+                        for value, count in sorted(counts.items(), key=lambda x: str(x[0]))]}
+        for key, counts in counters.items()
+    }
+
+
+def _summary_metadata(row: dict[str, Any], versions: dict[str, Any]) -> dict[str, Any]:
+    metadata = dict(row["metadata"])
+    environment = versions.get(metadata["environment_identity"], {})
+    for component in ("game", "connector", "annotator"):
+        metadata[component + "_version"] = environment.get(component, {}).get("version")
+    return metadata
 
 
 def _select(
-    projections: list[SourceProjection], rules: SelectionRules, versions: dict[str, Any]
+    projections: Iterable[SourceProjection], rules: SelectionRules, versions: dict[str, Any],
 ) -> DecisionDataset:
-    records: dict[str, ResearchTransitionV2] = {}
+    from .decision_spool import DecisionSpool
+
+    records = DecisionSpool()
+    source_contracts: dict[str, Any] = {}
+    source_invalidations: dict[str, Any] = {}
     facts: dict[str, str] = {}
     aliases: dict[str, list[dict[str, str]]] = defaultdict(list)
     excluded: list[dict[str, Any]] = []
@@ -364,10 +427,15 @@ def _select(
     context: dict[str, dict[str, Any]] = {}
     seen_sources: set[str] = set()
     accepted_ids: dict[str, set[str]] = defaultdict(set)
-    for projection in sorted(projections, key=lambda p: p.source_sha256):
+    for projection in projections:
         if projection.source_sha256 in seen_sources:
             continue
         seen_sources.add(projection.source_sha256)
+        accounting = projection.accounting.value()
+        source_contracts[projection.source_sha256] = {
+            "adapter": projection.adapter_id, "bundle_content_id": accounting["bundle_content_id"],
+        }
+        source_invalidations[projection.source_sha256] = accounting["invalidations"]
         projection_runs = _runs(projection)
         for run in projection_runs:
             previous = runs.get(run["run_id"])
@@ -444,14 +512,18 @@ def _select(
             aliases[identity].append(
                 {"source_sha256": projection.source_sha256, "transition_id": record.transition_id}
             )
-            records.setdefault(identity, record)
+            if identity not in records:
+                records[identity] = record
+    if seen_sources:
+        del projection  # Do not retain the last expanded archive while selecting disk rows.
+    canonical_counts = Counter(row["run_id"] for row in records.summaries())
     for run_id, run in runs.items():
         run["accepted"] = len(accepted_ids[run_id])
-        run["canonical"] = sum(r.run_id == run_id for r in records.values())
-    chosen = []
-    for identity, record in sorted(records.items()):
-        run = runs[record.run_id]
-        metadata = _metadata(record, versions)
+        run["canonical"] = canonical_counts[run_id]
+    for row in records.summaries():
+        identity = row["id"]
+        run = runs[row["run_id"]]
+        metadata = _summary_metadata(row, versions)
         reason = None
         if rules.complete_only and not run["complete"]:
             reason = "incomplete_run"
@@ -467,42 +539,32 @@ def _select(
         if reason:
             excluded.append({"decision_id": identity, "reason": reason})
         else:
-            chosen.append(record)
-    chosen.sort(
-        key=lambda r: (r.run_id, r.source_evidence.value()["action_sequence"], _identity(r))
-    )
+            records.select(identity)
+    chosen = records.selected()
     try:
-        splits = split_whole_runs(tuple(chosen), rules.seed).value()
+        splits = split_run_fingerprints(
+            ((r["run_id"], r["fingerprint"]) for r in chosen.summaries()), rules.seed,
+        ).value()
         split_status = "assigned"
     except BoundaryError as error:
         if error.code != "insufficient_independent_run_components":
             raise
-        splits = {r.run_id: "unassigned" for r in chosen}
+        splits = {r["run_id"]: "unassigned" for r in chosen.summaries()}
         split_status = error.code
     report = {
         "schema": SCHEMA,
         "environments": versions,
         "rules": rules.to_dict(),
         "sources": sorted(seen_sources),
-        "source_contracts": {
-            p.source_sha256: {
-                "adapter": p.adapter_id,
-                "bundle_content_id": p.accounting.value()["bundle_content_id"],
-            }
-            for p in projections
-        },
+        "source_contracts": source_contracts,
         "runs": list(runs.values()),
         "selected": len(chosen),
         "selected_facets": _facets(chosen, versions),
         "excluded": excluded,
         "exclusion_counts": dict(Counter(e["reason"] for e in excluded)),
         "aliases": dict(aliases),
-        "invalidations": [
-            {"source_sha256": p.source_sha256, "items": p.accounting.value()["invalidations"]}
-            for p in sorted(
-                {p.source_sha256: p for p in projections}.values(), key=lambda p: p.source_sha256
-            )
-        ],
+        "invalidations": [{"source_sha256": key, "items": value}
+                          for key, value in sorted(source_invalidations.items())],
         "context": context,
         "splits": splits,
         "split_status": split_status,
@@ -514,4 +576,4 @@ def _select(
             "model game ability",
         ],
     }
-    return DecisionDataset(tuple(chosen), FrozenObject.of(report))
+    return DecisionDataset(chosen, FrozenObject.of(report))

@@ -9,7 +9,9 @@ membership remain outside this cache and must be checked on every operation.
 from __future__ import annotations
 
 import hashlib
+import os
 import sqlite3
+import stat
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -37,7 +39,14 @@ def implementation_identity() -> str:
              for p in owner.rglob("*.py")]
     root = Path(__file__).parent
     files.extend(("research/" + name, root / name) for name in (
-        "decision_cache.py", "decision_dataset.py", "platform_bundle3.py", "contracts.py",
+        "decision_cache.py", "decision_index.py", "decision_dataset.py",
+        "decision_preview.py", "decision_spool.py", "decision_store.py",
+        "decision_union.py", "data.py",
+        "platform_bundle3.py", "contracts.py", "representation.py",
+    ))
+    app = root.parents[1] / "spireagent"
+    files.extend(("app/" + name, app / name) for name in (
+        "encoding.py", "json_boundary.py",
     ))
     return hashlib.sha256(json_bytes([
         [name, hashlib.sha256(path.read_bytes()).hexdigest()]
@@ -54,11 +63,22 @@ class VerifiedSourceCache:
     """
 
     def __init__(self, database: Path, producer_identity: str) -> None:
-        self.database = database
+        # Disposable large projections must not inflate the backed-up authority DB
+        # or contend with its membership/lease writer during a long cache read.
+        self.database = database.with_name(database.stem + ".decision-cache.sqlite")
+        if self.database.is_symlink():
+            raise BoundaryError("decision_cache", "private_regular_cache_required")
+        fd = os.open(self.database, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        try:
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode) or (os.name != "nt" and info.st_mode & 0o077):
+                raise BoundaryError("decision_cache", "private_regular_cache_required")
+        finally:
+            os.close(fd)
         self.owner = hashlib.sha256(json_bytes([
             CACHE_SCHEMA, ADAPTER_ID, implementation_identity(), producer_identity,
         ])).hexdigest()
-        self.hits = self.misses = self.corrupt = self.bypassed = 0
+        self.hits = self.misses = self.corrupt = self.bypassed = self.preview_hits = 0
         with self._connect() as db:
             db.execute(
                 "CREATE TABLE IF NOT EXISTS decision_source_cache("
@@ -78,7 +98,8 @@ class VerifiedSourceCache:
 
     def metrics(self) -> dict[str, int]:
         return {"cache_hits": self.hits, "cache_misses": self.misses,
-                "cache_corrupt": self.corrupt, "cache_bypassed": self.bypassed}
+                "cache_corrupt": self.corrupt, "cache_bypassed": self.bypassed,
+                "preview_hits": self.preview_hits}
 
     def resolve(self, source: bytes) -> tuple[SourceProjection, dict[str, Any]]:
         import json

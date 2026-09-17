@@ -1197,7 +1197,7 @@ internal sealed class PlatformLivePanel : IDisposable
     {
         if (_recorderTitle == null)
             return;
-        _recorderTitle.Text = $"{recording.Lifecycle.State}";
+        _recorderTitle.Text = PlatformLiveActionFeed.FormatRun(recording);
         PlatformLiveActionCounts counts = _actionFeed.Counts;
         _recorderHealth.Text = PlatformLiveActionFeed.FormatCompactCounters(recording.Counters);
         _recorderCountScope.Text = PlatformLiveActionFeed.FormatCounters(recording.Counters)
@@ -1205,7 +1205,7 @@ internal sealed class PlatformLivePanel : IDisposable
             + (counts.Exact ? "" : " Partial history; session totals above remain authoritative.");
         if (_layout.ActiveSurface == "human_recorder")
         {
-            _compactSummary.Text = PlatformLiveActionFeed.FormatCompactCounters(recording.Counters);
+            _compactSummary.Text = PlatformLiveActionFeed.FormatRun(recording);
             _compactRecent.Text = PlatformLiveActionFeed.FormatCompactRecent(_actionFeed.RecentDecisions(3));
         }
         _recorderHealth.AddThemeColorOverride("font_color", recording.Lifecycle.State switch
@@ -1217,14 +1217,14 @@ internal sealed class PlatformLivePanel : IDisposable
         });
         STS2HumanAnnotator.Core.RecordingLifecycleState state = recording.Lifecycle.State;
         _recordingButtons[STS2HumanAnnotator.Core.RecordingCommandKind.StartNewSession].Disabled =
-            state is not (STS2HumanAnnotator.Core.RecordingLifecycleState.Ready
+            recording.Continuous?.Armed == true || state is not (STS2HumanAnnotator.Core.RecordingLifecycleState.Ready
                 or STS2HumanAnnotator.Core.RecordingLifecycleState.Closed);
         _recordingButtons[STS2HumanAnnotator.Core.RecordingCommandKind.Pause].Disabled =
             state != STS2HumanAnnotator.Core.RecordingLifecycleState.Recording;
         _recordingButtons[STS2HumanAnnotator.Core.RecordingCommandKind.Resume].Disabled =
             state != STS2HumanAnnotator.Core.RecordingLifecycleState.Paused;
         _recordingButtons[STS2HumanAnnotator.Core.RecordingCommandKind.Close].Disabled =
-            state is not (STS2HumanAnnotator.Core.RecordingLifecycleState.Recording
+            recording.Continuous?.Armed != true && state is not (STS2HumanAnnotator.Core.RecordingLifecycleState.Recording
                 or STS2HumanAnnotator.Core.RecordingLifecycleState.Paused);
     }
 
@@ -1267,6 +1267,10 @@ internal sealed class PlatformLivePanel : IDisposable
             foreach (STS2HumanAnnotator.Core.RecordingEvent value in batch.Events)
             {
                 _lastRecordingEventSequence = Math.Max(_lastRecordingEventSequence, value.Sequence);
+                if (string.Equals(value.SessionId, sessionId, StringComparison.Ordinal)
+                    && value.Kind is STS2HumanAnnotator.Core.RecordingEventKind.RunStarted
+                        or STS2HumanAnnotator.Core.RecordingEventKind.SessionClosed)
+                    PushToast($"recording.boundary.{value.EventId}", PlatformLiveActionFeed.FormatRun(recording));
                 if (sessionId == null
                     || !string.Equals(value.SessionId, sessionId, StringComparison.Ordinal)
                     || !PlatformLiveActionFeed.IsActionEvent(value.Kind))

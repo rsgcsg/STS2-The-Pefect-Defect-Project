@@ -105,6 +105,9 @@ def prepare_training_input(
     *,
     protocol_id: str | None = None,
 ) -> Manifest:
+    from ..fullrun.dataset_policy import training_sources
+
+    training_sources(store, feature_id)
     features = load_features(store, feature_id)
     _research_admission(store, features, config, protocol_id)
     parents = [
@@ -158,6 +161,9 @@ def prepare_run(
 def load_training_input(
     store: ArtifactStore, input_id: str, runtime: Producer
 ) -> tuple[Manifest, TrainingConfig, LoadedFeatures]:
+    from ..fullrun.dataset_policy import training_sources
+
+    training_sources(store, input_id)
     training = store.get_manifest(input_id)
     info = training.parameters.value()
     if (

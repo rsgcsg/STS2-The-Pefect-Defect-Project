@@ -72,7 +72,10 @@ directory, close the game for binding, then reopen it and continue checks. Routi
 uses one daily configuration, without publishing or joining an activity. Pause/resume automatic
 upload on this page; viewing a page never grants consent or starts model control.
 
-Record through the game Recorder, press 结束录制 (Close) and check this session's cloud receipt in
+Start recording through the game Recorder. With the continuous-recording release, each observed
+native victory, defeat or abandonment seals one segment and recording stays armed for the next
+run. Orderly game exit seals a partial segment; it does not invent a game outcome. Press
+结束录制 (Close) when you want to stop continuous recording. Check each segment's cloud receipt in
 数据. Setup status is saved; the receipt remains separate. After reboot, reopen the same
 configuration. Keep the workbench running for uploads; closing a tab does not stop delivery.
 

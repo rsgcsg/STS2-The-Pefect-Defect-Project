@@ -65,7 +65,7 @@ def model_samples(
             ModelSample(
                 record.transition_id,
                 record.run_id,
-                splits[record.run_id],
+                "test" if splits[record.run_id] == "gold_test" else splits[record.run_id],
                 record.surface,
                 record.family,
                 state,

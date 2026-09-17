@@ -19,7 +19,7 @@ const views = {
   downloads: ["数据下载", "固定下载清单和校验值；封存与未获共享授权的数据保持受限。"],
   research: ["训练与模型", "查看真实训练产物、benchmark 和数据分析，区分尚未执行的计划。"],
   "local-models": ["模型实战", "检查兼容性、加载模型，再明确开始真实游戏评估。"],
-  campaigns: ["真人采集", "准备一次，在游戏内开始与结束录制；后台处理上传。"],
+  campaigns: ["真人采集", "准备一次，在游戏内控制录制；后台自动保存和上传。"],
   evaluations: ["评估结果", "模型游戏实战与离线评价分别展示；片段和未知结果不会计作胜局。"],
 };
 const labels = {
@@ -614,7 +614,7 @@ function detail(data) {
         ["原生恢复次数", number(run.native_resumes)],
         [
           "结果",
-          { victory: "胜利", defeat: "自然败北", natural_defeat: "自然败北" }[
+          { victory: "胜利", defeat: "失败", natural_defeat: "自然败北", abandoned: "放弃" }[
             run.outcome
           ] ||
             run.outcome ||
@@ -1052,6 +1052,12 @@ async function load(manual = false, forceIdentity = manual) {
     context = `${pageContext}:${identityContext}`;
     if (renderedContext !== context) $("content").replaceChildren(empty("正在读取…", "当前账号与电脑范围"));
     local = window.SpireIdentity.isLocal();
+    if (!manual && !id && renderedContext === context && window.SpireProject.refresh &&
+        await window.SpireProject.refresh(view)) {
+      if (serial === state.serial && identityContext === window.SpireIdentity.context())
+        $("updated").textContent = "当前页面状态已检查";
+      return;
+    }
     if (["members", "statistics", "downloads", "research", "local-models", "campaigns", "evaluations"].includes(view) || (["datasets", "games"].includes(view) && !id)) {
       const opened = [...document.querySelectorAll("details[open]")].map(item => item.dataset.preserve);
       const content = await window.SpireProject.render(view, identity, shell => {
@@ -1125,6 +1131,11 @@ async function load(manual = false, forceIdentity = manual) {
       const page = document.createDocumentFragment();
       page.append(setup, content);
       content = page;
+    }
+    if (view === "collections" && id && /^[a-f0-9]{32}$/.test(id)) {
+      const quality = await window.SpireProject.render("record-quality", identity);
+      if (serial !== state.serial || identityContext !== window.SpireIdentity.context()) return;
+      content.append(quality);
     }
     $("content").replaceChildren(content);
     renderedContext = context;

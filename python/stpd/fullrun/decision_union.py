@@ -7,7 +7,6 @@ from typing import Any
 
 from spireagent.json_boundary import BoundaryError, FrozenObject
 
-from .contracts import ResearchTransitionV2
 from .data import split_whole_runs
 from .decision_dataset import (
     DecisionDataset,
@@ -18,6 +17,7 @@ from .decision_dataset import (
     _merge_environment,
     _metadata,
 )
+from .decision_spool import DecisionSpool
 
 UNION_SCHEMA = "stpd/decision-union-v1"
 
@@ -28,7 +28,7 @@ def union_decisions(
     """Internal owner composition. Public callers enter through decision_store loaders."""
     if not 1 <= len(parents) <= 100 or len({p[0] for p in parents}) != len(parents):
         raise BoundaryError("decision_union", "invalid_parents")
-    records: dict[str, ResearchTransitionV2] = {}
+    records = DecisionSpool()
     facts: dict[str, str] = {}
     environments: dict[str, Any] = {}
     runs: dict[str, Any] = {}
@@ -92,8 +92,9 @@ def union_decisions(
             for alias in report["aliases"][identity]:
                 if alias not in identities:
                     identities.append(alias)
-    chosen, excluded = [], []
-    for identity, record in sorted(records.items()):
+    excluded = []
+    for identity in records:
+        record = records[identity]
         run = runs[record.run_id]
         metadata = _metadata(record, environments)
         reason = None
@@ -111,12 +112,10 @@ def union_decisions(
         if reason:
             excluded.append({"decision_id": identity, "reason": reason})
         else:
-            chosen.append(record)
-    chosen.sort(key=lambda r: (
-        r.run_id, r.source_evidence.value()["action_sequence"], _identity(r),
-    ))
+            records.select(identity)
+    chosen = records.selected()
     try:
-        splits = split_whole_runs(tuple(chosen), rules.seed).value()
+        splits = split_whole_runs(chosen, rules.seed).value()
         split_status = "assigned"
     except BoundaryError as error:
         if error.code != "insufficient_independent_run_components":
@@ -138,4 +137,4 @@ def union_decisions(
                        "continuity across excluded decisions", "model game ability",
                        "automatic training compatibility"],
     }
-    return DecisionDataset(tuple(chosen), FrozenObject.of(report))
+    return DecisionDataset(chosen, FrozenObject.of(report))

@@ -27,6 +27,8 @@ public static class RecorderMod
             tree.Connect(
                 SceneTree.SignalName.ProcessFrame,
                 Callable.From(RecorderRuntime.OnProcessFrame));
+            tree.Root.Connect(Node.SignalName.TreeExiting,
+                Callable.From(RecorderRuntime.ObserveGameExiting));
             GD.Print(
                 $"[STS2 Human Annotator] v{Version} observer ready; no recording session is open.");
         }

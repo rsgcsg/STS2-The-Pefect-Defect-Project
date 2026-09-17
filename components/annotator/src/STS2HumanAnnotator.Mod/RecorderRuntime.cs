@@ -106,6 +106,8 @@ internal static partial class RecorderRuntime
     private static bool _closeDispositionPersistenceFailed;
     private static bool _closeProjectionPersistenceFailed;
     private static readonly RecordingRunLifecycle RunLifecycle = new();
+    private static readonly ContinuousRecording Continuous = new();
+    private static bool _sealAfterNativeTerminal;
     // A native RunManager.OnEnded observation is the only authoritative
     // terminal marker.  Polling IsInProgress may describe a transition, but
     // it must never publish a successful terminal disposition by itself.
@@ -197,7 +199,8 @@ internal static partial class RecorderRuntime
                 _lastEnvironment,
                 _lastSnapshotId,
                 _lastBlockers.ToArray(),
-                ApplicationEvents.LatestSequence);
+                ApplicationEvents.LatestSequence,
+                Continuous.Snapshot());
         }
     }
 
@@ -205,7 +208,8 @@ internal static partial class RecorderRuntime
         ApplicationEvents.ReadAfter(afterSequence);
 
     internal static RecordingCommandResult ExecuteRecordingCommand(
-        RecordingCommand command, RecordingSessionExpectation? expectedSession = null)
+        RecordingCommand command, RecordingSessionExpectation? expectedSession = null,
+        bool automatic = false)
     {
         if (!string.Equals(
                 command.Schema,
@@ -315,6 +319,18 @@ internal static partial class RecorderRuntime
                 snapshotId = _lastSnapshotId;
                 blockers = _lastBlockers;
             }
+            if (result.Accepted && !automatic)
+            {
+                if (command.Kind is RecordingCommandKind.StartNewSession or RecordingCommandKind.Resume)
+                    Continuous.Arm();
+                else if (command.Kind == RecordingCommandKind.Pause)
+                    Continuous.Pause();
+                else if (command.Kind == RecordingCommandKind.Close)
+                    Continuous.Disarm();
+            }
+            if (result.Accepted && command.Kind == RecordingCommandKind.Close
+                && _lifecycle.State == RecordingLifecycleState.Closing)
+                Continuous.RequestSeal();
             CommandLedger.Remember(command.CommandId, result);
         }
 
@@ -374,7 +390,8 @@ internal static partial class RecorderRuntime
             EvidenceIdentity.Sha256Json(CaptureProfile),
             CaptureProfile.SupportedActionFamilies,
             CaptureProfile.NonClaims.Append("not_human_validated").ToArray())
-        { DecisionSchemaVersion = DecisionOccurrenceIdentity.CurrentSchemaVersion, DispositionSchemaVersion = 1, CloseSchemaVersion = 1 };
+        { DecisionSchemaVersion = DecisionOccurrenceIdentity.CurrentSchemaVersion, DispositionSchemaVersion = 1,
+            CloseSchemaVersion = 1, RecoverySchemaVersion = 1, ContinuousSchemaVersion = 1 };
         RecordingSessionStore store = RecordingSessionStore.Create(
             _configuration.RecordingRoot,
             manifest,
@@ -392,6 +409,8 @@ internal static partial class RecorderRuntime
         _lastIdleStatusAt = DateTimeOffset.MinValue;
         _statusRefreshRequested = true;
         RunLifecycle.Reset();
+        Continuous.BeginSession();
+        _sealAfterNativeTerminal = false;
         ResetNativeActionTrackingUnsafe();
         _semanticBoundaryTraceHealthy = true;
         Interlocked.Increment(ref _cardStageGeneration);
@@ -653,6 +672,8 @@ internal static partial class RecorderRuntime
                 snapshot = store?.GetSnapshot() ?? _lastStoreSnapshot;
                 _lastStoreSnapshot = snapshot;
                 _store = null;
+                _sealAfterNativeTerminal = false;
+                Continuous.MarkSealed();
                 _sessionClosedAt = DateTimeOffset.UtcNow;
                 _lifecycle = RecordingLifecycleStateMachine.MarkClosed(_lifecycle, _sessionClosedAt.Value);
                 _closeout = new RecordingCloseoutStatus(
@@ -1878,6 +1899,7 @@ internal static partial class RecorderRuntime
             foreach (NativeTaskCompletion completion in queuedPostCommitCompletions)
                 ObserveNativePostCommitCompletion(completion);
 
+            SealAfterNativeTerminal();
             FinalizeClose();
 
             DateTimeOffset now = DateTimeOffset.UtcNow;
@@ -4675,6 +4697,12 @@ internal static partial class RecorderRuntime
                 || RunLifecycle.ObserveNativeEnded() != RecordingRunObservation.EndedNative)
                 return;
             AppendJournal("run_ended_native", null, _lastSnapshotId, detail);
+            bool abandoned = RunManager.Instance.IsAbandoned;
+            if (abandoned)
+                AppendJournal("run_abandoned_native", null, _lastSnapshotId,
+                    "RunManager.OnEnded observed IsAbandoned=true.");
+            Continuous.ObserveTerminal(isVictory, abandoned);
+            _sealAfterNativeTerminal = true;
             _statusRefreshRequested = true;
         }
         PublishApplicationEvent(RecordingEventKind.RunEnded, detail: detail);
@@ -4687,12 +4715,20 @@ internal static partial class RecorderRuntime
     /// </summary>
     internal static void ObserveNativeRunStarted(string journalKind)
     {
+        bool begin;
+        lock (Gate)
+            begin = _store == null && Continuous.Armed
+                && _lifecycle.State is RecordingLifecycleState.Ready or RecordingLifecycleState.Closed;
+        if (begin)
+            ExecuteRecordingCommand(new RecordingCommand($"auto-start-{Guid.NewGuid():N}",
+                RecordingCommandKind.StartNewSession), automatic: true);
         lock (Gate)
         {
             if (_store == null
                 || RunLifecycle.ObserveNativeStarted() != RecordingRunObservation.StartedNative)
                 return;
             _statusRefreshRequested = true;
+            Continuous.ObserveLaunch(journalKind);
             AppendJournal(
                 journalKind,
                 null,
@@ -4700,6 +4736,39 @@ internal static partial class RecorderRuntime
                 "RunManager.Launch completed; exact RunState setup provenance: " + journalKind);
         }
         PublishApplicationEvent(RecordingEventKind.RunStarted, detail: journalKind);
+    }
+
+    private static void SealAfterNativeTerminal()
+    {
+        bool seal;
+        lock (Gate)
+        {
+            seal = _sealAfterNativeTerminal;
+            _sealAfterNativeTerminal = false;
+        }
+        if (seal)
+            ExecuteRecordingCommand(new RecordingCommand($"auto-seal-{Guid.NewGuid():N}",
+                RecordingCommandKind.Close), automatic: true);
+    }
+
+    internal static void ObserveNativeRunCleanup(bool graceful)
+    {
+        // Cleanup is an observed exit boundary, not victory/defeat evidence.
+        lock (Gate)
+        {
+            if (!graceful) Continuous.Disarm();
+            if (_store == null) return;
+            AppendJournal("recording_segment_exit", null, _lastSnapshotId,
+                graceful ? "RunManager.CleanUp(graceful=true)" : "RunManager.CleanUp(graceful=false)");
+        }
+        ExecuteRecordingCommand(new RecordingCommand($"auto-exit-{Guid.NewGuid():N}",
+            RecordingCommandKind.Close), automatic: true);
+    }
+
+    internal static void ObserveGameExiting()
+    {
+        try { ObserveNativeRunCleanup(false); }
+        catch (Exception exception) { NativeUiObservationSafety.Report("recording.game_exit", exception); }
     }
 
     /// <summary>

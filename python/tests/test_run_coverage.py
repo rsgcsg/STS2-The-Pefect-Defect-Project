@@ -58,6 +58,31 @@ def test_victory_and_defeat_have_the_same_native_coverage(tmp_path, victory, out
     assert select_decisions((source,)).logical_id == logical
 
 
+def test_abandonment_requires_native_flag_and_keeps_start_end_coverage(tmp_path):
+    bundle = bundle3(tmp_path, runs=1)
+    path = bundle / "raw/run-journal.jsonl"
+    journal = rows(path)
+    terminal = next(event for event in journal if event["kind"] == "run_ended_native")
+    terminal["detail"] = "RunManager.OnEnded(isVictory=false)"
+    journal.insert(journal.index(terminal) + 1, {
+        **terminal, "event_id": "abandon-witness", "kind": "run_abandoned_native",
+        "detail": "RunManager.OnEnded observed IsAbandoned=true.",
+    })
+    for index, event in enumerate(journal, 1):
+        event["sequence"] = index
+    stream(path, journal)
+    projection = _projection(bundle)
+    coverage = summarize_run_coverage(projection)["runs"][0]
+    assert coverage["outcome"] == "abandoned"
+    assert coverage["native_boundary_complete"] is True
+    selected = select_decisions((archive_bundle(bundle),))
+    assert selected.report.value()["runs"][0]["outcome"] == "abandoned"
+    from sts2_platform_evidence import summarize_verified_human_bundle, verify_human_session_bundle
+
+    summary = summarize_verified_human_bundle(verify_human_session_bundle(bundle).require_value())
+    assert summary["runs"][0]["outcome"] == "abandoned"
+
+
 def test_native_complete_does_not_invent_a_missing_canonical_successor(tmp_path):
     bundle = bundle3(tmp_path, runs=1)
     raw = bundle / "raw"

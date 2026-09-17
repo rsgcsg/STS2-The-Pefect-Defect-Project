@@ -8,6 +8,100 @@ namespace STS2HumanAnnotator.Core.Tests;
 public sealed class CurrentEvidenceTests
 {
     [Fact]
+    public void ExplicitContinuousEmptySessionIsValidButMissingPromisedProjectionIsNot()
+    {
+        string root = Temp("empty-continuous");
+        try
+        {
+            var profile = Profile();
+            var manifest = Manifest(profile) with { ContinuousSchemaVersion = 1, DispositionSchemaVersion = 1 };
+            string session;
+            using (var store = RecordingSessionStore.Create(root, manifest, profile))
+            { session = store.DirectoryPath; AppendJournal(store, manifest); }
+            var audit = RecordingSessionAuditor.Audit(session);
+            Assert.True(audit.Status == "pass", JsonSerializer.Serialize(audit.Errors));
+            File.AppendAllText(Path.Combine(session, "run-journal.jsonl"), JsonSerializer.Serialize(new RunJournalEvent(
+                2, CurrentRecordingContract.RunJournalSchema, "promised", manifest.SessionId, "run-0001",
+                manifest.TimelineId, 3, DateTimeOffset.UnixEpoch, "canonical_transition_recorded", "missing", null, null),
+                EvidenceJson.Options) + "\n");
+            Assert.Equal("fail", RecordingSessionAuditor.Audit(session).Status);
+        }
+        finally { Delete(root); }
+    }
+
+    [Fact]
+    public void InterruptedRecoveryPreservesOriginalBytesAndAddsOnlyUnknownClosure()
+    {
+        string root = Temp("interrupted-source"), recovered = Temp("interrupted-copy");
+        try
+        {
+            var profile = Profile();
+            var manifest = Manifest(profile) with { CloseSchemaVersion = 1, RecoverySchemaVersion = 1,
+                DispositionSchemaVersion = 1 };
+            string session;
+            using (var store = RecordingSessionStore.Create(root, manifest, profile))
+            {
+                session = store.DirectoryPath;
+                AppendJournal(store, manifest);
+                var frame = CurrentRecord(RecordValidationTests.ValidRecord(),
+                    (PersistReads(store, "snapshot-a"), PersistReads(store, "snapshot-b"))).Pre;
+                var action = new SemanticActionReference("pending-action", 1, "record-ref", "run-0001",
+                    "PlayCardAction", 1, frame.SnapshotId);
+                store.AppendSemanticEvidenceEvents(new[] {
+                    SemanticEvidenceEvent(manifest, 1, SemanticBoundaryTraceKinds.ActionAccepted, action)
+                        with { HumanObservationRef = store.PersistSemanticFrame(frame) }
+                });
+                var busy = JsonSerializer.SerializeToElement(InterruptedRecordingRecovery.RecoverOne(root, recovered));
+                Assert.Equal("idle", busy.GetProperty("status").GetString());
+                Assert.Equal(1, busy.GetProperty("busy").GetInt32());
+            }
+            // Model process loss after durable stream writes but before the final seal.
+            File.Delete(Path.Combine(session, "session-close-receipt.json"));
+            var original = Directory.GetFiles(session, "*", SearchOption.AllDirectories)
+                .ToDictionary(p => p, EvidenceIdentity.Sha256File);
+            var result = JsonSerializer.SerializeToElement(InterruptedRecordingRecovery.RecoverOne(root, recovered));
+            Assert.Equal("recovered", result.GetProperty("status").GetString());
+            foreach (var (path, hash) in original) Assert.Equal(hash, EvidenceIdentity.Sha256File(path));
+            string copy = Assert.Single(Directory.GetDirectories(recovered));
+            var audit = RecordingSessionAuditor.Audit(copy);
+            Assert.True(audit.Status == "pass", JsonSerializer.Serialize(audit.Errors));
+            var trace = File.ReadAllLines(Path.Combine(copy, "semantic-boundary-trace.jsonl"))
+                .Select(line => JsonSerializer.Deserialize<SemanticEvidenceEvent>(line, EvidenceJson.Options)!).ToArray();
+            Assert.Equal(2, trace.Length);
+            Assert.Equal("transition_unknown", trace[1].Kind);
+            Assert.Null(trace[1].SuccessorRef);
+            var again = JsonSerializer.SerializeToElement(InterruptedRecordingRecovery.RecoverOne(root, recovered));
+            Assert.Equal("idle", again.GetProperty("status").GetString());
+            File.AppendAllText(Path.Combine(copy, "capture-profile.json"), " ");
+            Assert.Contains("recording_recovery_invalid", RecordingSessionAuditor.Audit(copy).Errors.Keys);
+        }
+        finally { Delete(root); Delete(recovered); }
+    }
+
+    [Fact]
+    public void InterruptedRecoveryRetainsTornStreamAsIncident()
+    {
+        string root = Temp("torn-source"), recovered = Temp("torn-copy");
+        try
+        {
+            var profile = Profile();
+            var manifest = Manifest(profile) with { CloseSchemaVersion = 1, RecoverySchemaVersion = 1 };
+            string session;
+            using (var store = RecordingSessionStore.Create(root, manifest, profile))
+            { session = store.DirectoryPath; AppendJournal(store, manifest); }
+            File.Delete(Path.Combine(session, "session-close-receipt.json"));
+            string trace = Path.Combine(session, "semantic-boundary-trace.jsonl");
+            File.AppendAllText(trace, "{\"schema\":");
+            string before = EvidenceIdentity.Sha256File(trace);
+            var result = JsonSerializer.SerializeToElement(InterruptedRecordingRecovery.RecoverOne(root, recovered));
+            Assert.Equal("incident", result.GetProperty("status").GetString());
+            Assert.Equal(before, EvidenceIdentity.Sha256File(trace));
+            Assert.Empty(Directory.GetDirectories(recovered, "recovered-*"));
+        }
+        finally { Delete(root); Delete(recovered); }
+    }
+
+    [Fact]
     public void CloseWriteFailureLeavesAccountingUnavailableWithoutACompletedReceipt()
     {
         string root = Temp("close-receipt-failure");

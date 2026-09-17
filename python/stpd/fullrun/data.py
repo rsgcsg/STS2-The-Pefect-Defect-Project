@@ -6,6 +6,7 @@ import hashlib
 import io
 import tempfile
 from collections import defaultdict
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
 from spireagent.artifact_contracts import Manifest, Parent, Producer
@@ -21,7 +22,7 @@ DATASET_SCHEMA = "stpd/fullrun-dataset-v1"
 
 @dataclass(frozen=True)
 class AdmittedDataset:
-    records: tuple[ResearchTransitionV1, ...]
+    records: Sequence[ResearchTransitionV1]
     splits: FrozenObject
     seed: int
     scope: str
@@ -40,10 +41,17 @@ class AdmittedDataset:
         )
 
 
-def split_whole_runs(records: tuple[ResearchTransitionV1, ...], seed: int) -> FrozenObject:
+def split_whole_runs(records: Sequence[ResearchTransitionV1], seed: int) -> FrozenObject:
     """Keep entire runs and repeated semantic decision components in a single partition."""
+    return split_run_fingerprints(
+        ((record.run_id, decision_fingerprint(record)) for record in records), seed,
+    )
+
+
+def split_run_fingerprints(rows: Iterable[tuple[str, str]], seed: int) -> FrozenObject:
+    """The same whole-run algorithm over the trusted selector's compact row index."""
     unsigned(seed, "split.seed")
-    parent = {record.run_id: record.run_id for record in records}
+    parent: dict[str, str] = {}
 
     def root(value: str) -> str:
         while parent[value] != value:
@@ -52,10 +60,10 @@ def split_whole_runs(records: tuple[ResearchTransitionV1, ...], seed: int) -> Fr
         return value
 
     first: dict[str, str] = {}
-    for record in records:
-        fingerprint = decision_fingerprint(record)
-        previous = first.setdefault(fingerprint, record.run_id)
-        left, right = root(previous), root(record.run_id)
+    for run_id, fingerprint in rows:
+        parent.setdefault(run_id, run_id)
+        previous = first.setdefault(fingerprint, run_id)
+        left, right = root(previous), root(run_id)
         if left != right:
             parent[max(left, right)] = min(left, right)
     groups: dict[str, list[str]] = defaultdict(list)
@@ -256,7 +264,7 @@ def publish_received_source(
 
 
 def _projections_from_manifests(
-    store: ArtifactStore, records: tuple[ResearchTransitionV1, ...], sources: tuple[Manifest, ...]
+    store: ArtifactStore, records: Sequence[ResearchTransitionV1], sources: tuple[Manifest, ...]
 ) -> tuple[SourceProjection, ...]:
     by_source = {source.payload("source").sha256: source for source in sources}
     if not sources or len(by_source) != len(sources):
@@ -384,6 +392,18 @@ def load_dataset(store: ArtifactStore, artifact_id: str) -> tuple[Manifest, Admi
 
     manifest = store.get_manifest(artifact_id)
     parameters = manifest.parameters.value()
+    from .curated_dataset import SCHEMA as CURATED_SCHEMA
+    from .curated_dataset import load_selection
+
+    if manifest.kind == "dataset" and parameters.get("schema") == CURATED_SCHEMA:
+        selected = load_selection(store, manifest, cache=None)
+        report = selected.report.value()
+        if "unassigned" in report["splits"].values():
+            raise BoundaryError("dataset", "insufficient_independent_run_components")
+        return manifest, AdmittedDataset(
+            selected.records, FrozenObject.of(report["splits"]), parameters["rules"]["seed"],
+            "platform_verified", report["exact_duplicate_decisions"],
+        )
     if manifest.kind != "dataset" or parameters.get("schema") != DATASET_SCHEMA:
         raise BoundaryError("dataset", "unsupported_dataset_contract")
     if {p.role for p in manifest.payloads} != {"records", "splits"}:

@@ -3,21 +3,30 @@
 from __future__ import annotations
 
 import json
+import sqlite3
+import threading
 import time
 import uuid
+from contextlib import closing
 from typing import Any
 
 from spireagent.hub.collections import CollectionAccess
 from spireagent.hub.console_auth import ConsolePrincipal
+from spireagent.hub.curation import CurationLedger
+from spireagent.hub.dataset_curation import DatasetCuration, specification
 from spireagent.hub.uploads import UploadService
 from spireagent.json_boundary import BoundaryError, digest, object_fields
 from stpd.canonical import semantic_hash
 from stpd.fullrun.contracts import SourceProjection
+from stpd.fullrun.curated_dataset import SCHEMA as CURATED_SCHEMA
 from stpd.fullrun.decision_cache import VerifiedSourceCache
 from stpd.fullrun.decision_dataset import SelectionRules
+from stpd.fullrun.decision_index import index_ready, resolve_payload
 from stpd.fullrun.decision_store import preview, preview_union, publish, publish_union
 from stpd.fullrun.decision_union import UNION_SCHEMA
 from stpd.fullrun.run_coverage import summarize_run_coverage
+
+SOURCE_PREPARATION_BATCH = 4
 
 
 def _run_summary(run: dict[str, Any]) -> dict[str, Any]:
@@ -34,6 +43,7 @@ class DecisionJobs:
     def __init__(self, service: UploadService) -> None:
         self.service = service
         self.collections = CollectionAccess(service)
+        self.curation = CurationLedger(service.operations)
         with service.operations.transaction() as db:
             db.execute(
                 "CREATE TABLE IF NOT EXISTS decision_jobs("
@@ -48,6 +58,8 @@ class DecisionJobs:
             )
             db.execute("CREATE INDEX IF NOT EXISTS decision_jobs_artifact ON decision_jobs("
                        "json_extract(result,'$.artifact_id'))")
+            db.execute("CREATE TABLE IF NOT EXISTS decision_job_execution("
+                       "id TEXT PRIMARY KEY,attempt INTEGER NOT NULL)")
 
     def set_archived(self, principal: ConsolePrincipal, body: object) -> dict[str, Any]:
         """Personal list cleanup; immutable sources, results and job state remain intact."""
@@ -66,7 +78,7 @@ class DecisionJobs:
                                  (identity,)).fetchone()
                 if row is None or row["owner"] != principal.subject:
                     raise BoundaryError("decision_job", "not_found")
-                if row["state"] not in {"completed", "failed"}:
+                if row["state"] not in {"completed", "failed", "cancelled"}:
                     raise BoundaryError("decision_job", "active_job_cannot_be_archived")
             for identity in ids:
                 db.execute("INSERT OR REPLACE INTO decision_job_visibility VALUES(?,?,?)",
@@ -88,17 +100,33 @@ class DecisionJobs:
             raise BoundaryError("decision_job", "source_not_verified")
         return sources
 
-    def _inputs(self, request: dict[str, Any]) -> tuple[Any, ...]:
+    def _inputs(
+        self, request: dict[str, Any], *, receiver_profile: bool = False
+    ) -> tuple[Any, ...]:
         if "datasets" not in request:
-            return self._sources(request["uploads"])
+            sources = self._sources(request["uploads"])
+            if "curation" not in request and not receiver_profile:
+                from spireagent.hub.curation_access import guarded_runs
+
+                for source in sources:
+                    guarded_runs(self.service.operations, self.service.store, source)
+            return sources
         selections = request["datasets"]
         if (not isinstance(selections, list) or not 1 <= len(selections) <= 100
                 or any(not isinstance(value, str) for value in selections)
                 or len(set(selections)) != len(selections)):
             raise BoundaryError("decision_job", "invalid_dataset_selection")
-        parents = tuple(self.collections.artifact(identity) for identity in selections)
+        if request.get("curation", {}).get("purpose") == "gold":
+            # Trusted worker operation: Gold may compose only with other Gold. No
+            # raw rows are returned by this path to a browser or local worker.
+            parents = tuple(self.service.store.get_manifest(identity) for identity in selections)
+            if any(p.parameters.value().get("purpose") != "gold" for p in parents):
+                raise BoundaryError("curation", "gold_merge_requires_only_gold")
+        else:
+            parents = tuple(self.collections.artifact(identity) for identity in selections)
         if any(parent.kind != "dataset" or parent.parameters.value().get("schema")
-               not in {"stpd/decision-dataset-v1", UNION_SCHEMA} for parent in parents):
+               not in {"stpd/decision-dataset-v1", UNION_SCHEMA, CURATED_SCHEMA}
+               for parent in parents):
             raise BoundaryError("decision_job", "unsupported_dataset_schema")
         return parents
 
@@ -135,7 +163,7 @@ class DecisionJobs:
                     if row is None or row["kind"] != "dataset":
                         raise BoundaryError("decision_job", "dataset_not_available")
                     if json.loads(row["summary"])["metadata"].get("schema") not in {
-                        "stpd/decision-dataset-v1", UNION_SCHEMA,
+                        "stpd/decision-dataset-v1", UNION_SCHEMA, CURATED_SCHEMA,
                     }:
                         raise BoundaryError("decision_job", "unsupported_dataset_schema")
                     withdrawn = db.execute(
@@ -153,7 +181,13 @@ class DecisionJobs:
     def create(self, principal: ConsolePrincipal, body: object) -> dict[str, Any]:
         self.collections.require_member(principal)
         source_key = "datasets" if isinstance(body, dict) and "datasets" in body else "uploads"
-        obj = object_fields(body, {source_key, "rules", "preview_id", "name"}, "decision_job")
+        fields = {source_key, "rules", "preview_id", "name"}
+        if isinstance(body, dict) and "curation" in body:
+            fields.add("curation")
+        obj = object_fields(body, fields, "decision_job")
+        obj = {**obj, "curation": specification(obj.get("curation", {
+            "purpose": "training", "paired_training": None,
+        }))}
         self._check_inputs(obj)
         rules = SelectionRules.decode(obj["rules"])
         if not isinstance(obj["name"], str) or not 1 <= len(obj["name"]) <= 100:
@@ -166,6 +200,7 @@ class DecisionJobs:
                 or previous["request"]["preview_id"] is not None
                 or previous["request"].get(source_key) != obj[source_key]
                 or previous["request"]["rules"] != rules.to_dict()
+                or previous["request"].get("curation") != obj["curation"]
             ):
                 raise BoundaryError("decision_job", "preview_mismatch")
             expected = previous["result"]["logical_id"]
@@ -196,7 +231,7 @@ class DecisionJobs:
         request = json.loads(row["request"])
         self._check_inputs(request)
         result = json.loads(row["result"]) if row["result"] else None
-        if result and "runs" in result:
+        if result and isinstance(result.get("runs"), list):
             result = {**result, "runs": [_run_summary(run) for run in result["runs"]]}
         return {
             "id": identity,
@@ -208,6 +243,33 @@ class DecisionJobs:
             "recovery": "explicit_retry" if row["state"] == "failed" else "observe_existing_job",
             "error": row["error"],
         }
+
+    def materialize(self, principal: ConsolePrincipal, body: object) -> dict[str, Any]:
+        self.collections.require_member(principal)
+        obj = object_fields(body, {"dataset_id"}, "dataset.materialize")
+        source = self.collections.artifact(digest(obj["dataset_id"], "dataset.id"))
+        info = source.parameters.value()
+        if info.get("schema") != CURATED_SCHEMA:
+            raise BoundaryError("dataset", "materialization_not_required")
+        now = time.time()
+        with self.service.operations.transaction() as db:
+            previous = db.execute(
+                "SELECT id,state FROM decision_jobs WHERE owner=? AND "
+                "json_extract(request,'$.materialize')=? ORDER BY created DESC LIMIT 1",
+                (principal.subject, source.artifact_id),
+            ).fetchone()
+            if previous:
+                return {"id": previous["id"], "state": previous["state"]}
+            if db.execute("SELECT count(*) FROM decision_jobs WHERE state IN "
+                          "('pending','running')").fetchone()[0] >= 10:
+                raise BoundaryError("decision_job", "queue_full")
+            identity = uuid.uuid4().hex
+            request = {"datasets": [source.artifact_id], "rules": info["rules"],
+                       "preview_id": None, "name": "准备数据集下载", "expected": None,
+                       "materialize": source.artifact_id}
+            db.execute("INSERT INTO decision_jobs VALUES(?,?,?,'pending',NULL,NULL,?,?)",
+                       (identity, principal.subject, json.dumps(request), now, now))
+        return {"id": identity, "state": "pending"}
 
     def list(self, principal: ConsolePrincipal, *, archived: bool = False,
              limit: int = 50, offset: int = 0) -> dict[str, Any]:
@@ -236,7 +298,7 @@ class DecisionJobs:
         if body != {}:
             raise BoundaryError("decision_job", "unexpected_retry_fields")
         prior = self.read(principal, identity)
-        if prior["state"] != "failed":
+        if prior["state"] not in {"failed", "cancelled"}:
             raise BoundaryError("decision_job", "retry_requires_failed_job")
         with self.service.operations.transaction() as db:
             if (
@@ -246,18 +308,53 @@ class DecisionJobs:
                 >= 10
             ):
                 raise BoundaryError("decision_job", "queue_full")
-            old = db.execute(
-                "SELECT owner,request FROM decision_jobs WHERE id=?", (identity,)
-            ).fetchone()
-            new_id, now = uuid.uuid4().hex, time.time()
-            db.execute(
-                "INSERT INTO decision_jobs VALUES(?,?,?,'pending',NULL,NULL,?,?)",
-                (new_id, old["owner"], old["request"], now, now),
-            )
+            changed = db.execute(
+                "UPDATE decision_jobs SET state='pending',error=NULL,updated=? "
+                "WHERE id=? AND state IN ('failed','cancelled')", (time.time(), identity),
+            ).rowcount
+            if changed != 1:
+                raise BoundaryError("decision_job", "retry_requires_failed_job")
             self.service.operations._event(
-                db, principal.subject, "decision_job_retry", new_id, {"previous_job": identity}
+                db, principal.subject, "decision_job_retry", identity,
+                {"previous_state": prior["state"], "previous_error": prior["error"],
+                 "previous_updated_at": prior["updated_at"], "progress": prior["progress"]},
             )
-        return {"id": new_id, "state": "pending"}
+        return {"id": identity, "state": "pending"}
+
+    def cancel(self, principal: ConsolePrincipal, identity: str, body: object) -> dict[str, Any]:
+        if body != {}:
+            raise BoundaryError("decision_job", "unexpected_cancel_fields")
+        self.read(principal, identity)
+        with self.service.operations.transaction() as db:
+            row = db.execute("SELECT state,result FROM decision_jobs WHERE id=?",
+                             (identity,)).fetchone()
+            if row["state"] not in {"pending", "running"}:
+                raise BoundaryError("decision_job", "cancel_requires_active_job")
+            progress = json.loads(row["result"] or "{}").get("progress", {})
+            if row["state"] == "running" and progress.get("phase") == "publishing_dataset":
+                raise BoundaryError("decision_job", "publication_already_started")
+            db.execute("UPDATE decision_jobs SET state='cancelled',updated=? WHERE id=?",
+                       (time.time(), identity))
+            db.execute("UPDATE decision_job_execution SET attempt=attempt+1 WHERE id=?",
+                       (identity,))
+            self.service.operations._event(
+                db, principal.subject, "decision_job_cancel", identity, {})
+        return {"id": identity, "state": "cancelled"}
+
+    def next_attempt(self, identity: str) -> int:
+        with closing(self.service.console_index.read()) as db:
+            row = db.execute("SELECT attempt FROM decision_job_execution WHERE id=?",
+                             (identity,)).fetchone()
+        return int(row[0]) + 1 if row else 1
+
+    def should_stop(self, identity: str, attempt: int) -> bool:
+        with closing(self.service.console_index.read()) as db:
+            row = db.execute("SELECT j.state,e.attempt FROM decision_jobs j "
+                             "LEFT JOIN decision_job_execution e ON e.id=j.id WHERE j.id=?",
+                             (identity,)).fetchone()
+        return row is None or row["state"] == "cancelled" or (
+            row["attempt"] is not None and row["attempt"] > attempt
+        )
 
     def games(self, principal: ConsolePrincipal) -> dict[str, Any]:
         self.collections.require_member(principal)
@@ -365,12 +462,16 @@ class DecisionJobs:
             ).fetchone()
         return row[0] if row else None
 
-    def fail(self, identity: str, reason: str) -> None:
+    def fail(self, identity: str, reason: str, *, attempt: int | None = None) -> None:
         with self.service.operations.transaction() as db:
             db.execute(
                 "UPDATE decision_jobs SET state='failed',error=?,updated=? "
-                "WHERE id=? AND state IN ('pending','running')",
-                (reason, time.time(), identity),
+                "WHERE id=? AND state IN ('pending','running') AND (? IS NULL OR EXISTS "
+                "(SELECT 1 FROM decision_job_execution e "
+                "WHERE e.id=decision_jobs.id AND e.attempt=?) OR (state='pending' AND "
+                "COALESCE((SELECT attempt FROM decision_job_execution e "
+                "WHERE e.id=decision_jobs.id),0)=?-1))",
+                (reason, time.time(), identity, attempt, attempt, attempt),
             )
 
     def run(self, identity: str) -> None:
@@ -383,7 +484,13 @@ class DecisionJobs:
             if changed != 1:
                 return
             row = db.execute("SELECT * FROM decision_jobs WHERE id=?", (identity,)).fetchone()
+            db.execute("INSERT INTO decision_job_execution VALUES(?,1) ON CONFLICT(id) "
+                       "DO UPDATE SET attempt=attempt+1", (identity,))
+            attempt = db.execute("SELECT attempt FROM decision_job_execution WHERE id=?",
+                                 (identity,)).fetchone()[0]
         started = time.monotonic()
+        prior_elapsed = json.loads(row["result"] or "{}").get("progress", {}).get(
+            "elapsed_seconds", 0)
         cache = VerifiedSourceCache(
             self.service.operations.path, semantic_hash(self.service.producer.to_dict())
         )
@@ -391,14 +498,40 @@ class DecisionJobs:
         def progress(phase: str, completed: int, total: int) -> None:
             value = {"progress": {
                 "phase": phase, "completed": completed, "total": total,
-                "observed_at": time.time(), "elapsed_seconds": time.monotonic() - started,
+                "observed_at": time.time(),
+                "elapsed_seconds": prior_elapsed + time.monotonic() - started,
                 **cache.metrics(),
             }}
             with self.service.operations.transaction() as db:
-                db.execute(
-                    "UPDATE decision_jobs SET result=?,updated=? WHERE id=? AND state='running'",
-                    (json.dumps(value), time.time(), identity),
-                )
+                changed = db.execute(
+                    "UPDATE decision_jobs SET result=?,updated=? WHERE id=? AND state='running' "
+                    "AND EXISTS (SELECT 1 FROM decision_job_execution e "
+                    "WHERE e.id=decision_jobs.id AND e.attempt=?)",
+                    (json.dumps(value), time.time(), identity, attempt),
+                ).rowcount
+                if changed != 1:
+                    raise BoundaryError("decision_job", "job_cancelled_or_superseded")
+
+        stopped = threading.Event()
+
+        def heartbeat() -> None:
+            while not stopped.wait(15):
+                try:
+                    with self.service.operations.transaction() as db:
+                        changed = db.execute(
+                            "UPDATE decision_jobs SET updated=? WHERE id=? AND state='running' "
+                            "AND EXISTS (SELECT 1 FROM decision_job_execution e "
+                            "WHERE e.id=decision_jobs.id AND e.attempt=?)",
+                            (time.time(), identity, attempt),
+                        ).rowcount
+                    if changed != 1:
+                        return
+                except sqlite3.OperationalError:
+                    # Writer contention does not fabricate a fresh lease.
+                    continue
+
+        pulse = threading.Thread(target=heartbeat, name="dataset-heartbeat", daemon=True)
+        pulse.start()
 
         try:
             progress("checking_access", 0, 1)
@@ -410,12 +543,46 @@ class DecisionJobs:
             if not member and row["owner"] != "receiver":
                 raise BoundaryError("decision_job", "membership_not_authorized")
             request = json.loads(row["request"])
-            sources = self._inputs(request)
+            receiver_profile = (row["owner"] == "receiver"
+                                and request.get("profile_schema") == "stpd/run-coverage-v1"
+                                and request["expected"] is None
+                                and "datasets" not in request)
+            sources = self._inputs(request, receiver_profile=receiver_profile)
+            # A large cold selection is several bounded preparation invocations,
+            # then one warm selection. Requeue is an explicit checkpoint, never
+            # an automatic retry of unknown publication or failed evidence.
+            if "datasets" not in request and len(sources) > SOURCE_PREPARATION_BATCH:
+                missing = [s for s in sources if not index_ready(cache, s.payload("archive"))]
+                for source in missing[:SOURCE_PREPARATION_BATCH]:
+                    progress("preparing_sources", len(sources) - len(missing), len(sources))
+                    projection, _ = resolve_payload(
+                        cache, self.service.store, source.payload("archive"))
+                    self.curation.index_source(source.artifact_id, projection)
+                    del projection
+                    if not index_ready(cache, source.payload("archive")):
+                        raise BoundaryError("decision_job", "selection_index_capacity")
+                if missing:
+                    remaining = sum(not index_ready(cache, s.payload("archive")) for s in sources)
+                    if remaining >= len(missing):
+                        raise BoundaryError("decision_job", "selection_index_capacity")
+                    progress("preparing_sources", len(sources) - remaining, len(sources))
+                    with self.service.operations.transaction() as db:
+                        db.execute(
+                            "UPDATE decision_jobs SET state='pending',updated=? "
+                            "WHERE id=? AND state='running' AND EXISTS "
+                            "(SELECT 1 FROM decision_job_execution e WHERE e.id=decision_jobs.id "
+                            "AND e.attempt=?)", (time.time(), identity, attempt),
+                        )
+                    return
             rules = SelectionRules.decode(request["rules"])
             merging = "datasets" in request
             coverage: dict[str, Any] = {}
 
             def collect_coverage(projection: SourceProjection) -> None:
+                if "curation" not in request:
+                    source = next(s for s in sources
+                                  if s.payload("archive").sha256 == projection.source_sha256)
+                    self.curation.index_source(source.artifact_id, projection)
                 for run in summarize_run_coverage(projection)["runs"]:
                     prior = coverage.setdefault(run["run_id"], run)
                     if prior != run:
@@ -425,14 +592,24 @@ class DecisionJobs:
                             "boundary_status": "overlapping_exports_differ",
                             "recording_continuity": "unknown"}
 
-            if request["expected"] is None:
-                dataset = preview_union(
-                    self.service.store, sources, rules, cache=cache, progress=progress
-                ) if merging else preview(
-                    self.service.store, sources, rules, cache=cache, progress=progress,
-                    on_projection=collect_coverage,
-                )
+            if request.get("materialize"):
+                manifest = DatasetCuration(self.service, cache).materialize(sources[0], progress)
+                self.service.console_index.artifact_closure(self.service.store,
+                                                           (manifest.artifact_id,))
+                result = {"artifact_id": manifest.artifact_id, **manifest.parameters.value()}
+            elif request["expected"] is None:
+                if "curation" in request:
+                    dataset = DatasetCuration(self.service, cache).select(
+                        sources, request, progress, on_projection=collect_coverage)
+                elif merging:
+                    dataset = preview_union(self.service.store, sources, rules,
+                                            cache=cache, progress=progress)
+                else:
+                    dataset = preview(self.service.store, sources, rules,
+                                      cache=cache, progress=progress,
+                                      on_projection=collect_coverage)
                 report = dataset.report.value()
+                selected_runs = dataset.run_ids
                 if row["owner"] == "receiver":
                     from spireagent.hub.statistics import DIMENSIONS, _persist, decision_profile
 
@@ -456,28 +633,35 @@ class DecisionJobs:
                 result = {
                     "logical_id": dataset.logical_id,
                     "selected": len(dataset.records),
-                    "runs": report["runs"],
+                    "runs": [r for r in report["runs"] if r["run_id"] in selected_runs],
                     "selected_facets": report["selected_facets"],
                     "exclusion_counts": report["exclusion_counts"],
                     "exact_duplicate_decisions": report["exact_duplicate_decisions"],
                     "split_status": report["split_status"],
                     "non_claims": report["non_claims"],
+                    **({"purpose": request["curation"]["purpose"],
+                        "paired_training": request["curation"]["paired_training"]}
+                       if "curation" in request else {}),
                 }
             else:
-                manifest = (publish_union if merging else publish)(
-                    self.service.store, sources, rules, self.service.producer, request["expected"],
-                    cache=cache, progress=progress,
-                )
+                if "curation" in request:
+                    manifest = DatasetCuration(self.service, cache).publish(
+                        identity, sources, request, progress)
+                else:
+                    manifest = (publish_union if merging else publish)(
+                        self.service.store, sources, rules, self.service.producer,
+                        request["expected"], cache=cache, progress=progress)
                 self.service.console_index.artifact_closure(
                     self.service.store, (manifest.artifact_id,)
                 )
                 result = {"artifact_id": manifest.artifact_id, **manifest.parameters.value()}
             if request["expected"] is None and not merging:
                 result["run_coverage"] = list(coverage.values())
-            self._inputs(request)
+            self._inputs(request, receiver_profile=receiver_profile)
             result["progress"] = {
                 "phase": "completed", "completed": 1, "total": 1,
-                "observed_at": time.time(), "elapsed_seconds": time.monotonic() - started,
+                "observed_at": time.time(),
+                "elapsed_seconds": prior_elapsed + time.monotonic() - started,
                 **cache.metrics(),
             }
             with self.service.operations.transaction() as db:
@@ -491,10 +675,18 @@ class DecisionJobs:
                     raise BoundaryError("decision_job", "membership_not_authorized")
                 db.execute(
                     "UPDATE decision_jobs SET state='completed',result=?,updated=? "
-                    "WHERE id=? AND state='running'",
-                    (json.dumps(result), time.time(), identity),
+                    "WHERE id=? AND state='running' AND EXISTS "
+                    "(SELECT 1 FROM decision_job_execution e "
+                    "WHERE e.id=decision_jobs.id AND e.attempt=?)",
+                    (json.dumps(result), time.time(), identity, attempt),
                 )
         except (ValueError, OSError) as error:
             self.fail(
-                identity, error.code if isinstance(error, BoundaryError) else "processing_failed"
+                identity, error.code if isinstance(error, BoundaryError) else "processing_failed",
+                attempt=attempt,
             )
+        except MemoryError:
+            self.fail(identity, "worker_memory_limit", attempt=attempt)
+        finally:
+            stopped.set()
+            pulse.join(timeout=1)
