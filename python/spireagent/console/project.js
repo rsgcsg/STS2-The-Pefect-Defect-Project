@@ -215,6 +215,7 @@ window.SpireProject = (() => {
     const known = {
       authentication_required: "当前账号已过期或无权访问，请重新登录项目账号。",
       publication_already_started: "已进入最后保存阶段，请等待结果。完成后可以从列表移除。",
+      selection_index_capacity: "所选数据超出本机处理缓存容量，请减少本次选择；已有录制和数据集不会被删除。",
       worker_memory_limit: "处理时达到内存上限。已核验的来源会保留，重试会复用这些结果。",
       worker_timeout: "本次处理超时。已完成的来源会保留，可继续同一任务。",
       worker_cpu_limit: "本次处理达到计算时间上限。已完成的来源会保留。",
@@ -1878,7 +1879,7 @@ window.SpireProject = (() => {
     }
     const status = await request(ctx, member("collection-flow"));
     if (status.schema !== "stpd/local-collection-flow-v1") throw new Error("unsupported_collection_flow_schema");
-    const box = panel("真人采集", "在游戏里开始与结束录制。本机保留原始文件，后台封包并上传。");
+    const box = panel("真人采集", "在游戏里开始录制，本机保存原始记录，后台自动封包并上传。");
     if (status.device_id !== ctx.identity.device_id || (status.enrollment && status.enrollment.device_id !== ctx.identity.device_id)) throw new Error("collection_status_identity_mismatch");
     const enrollment = status.enrollment, preparation = enrollment?.preparation || {}, native = preparation.native_binding || {};
     const ready = native.bound === true && status.upload?.enabled === true && status.upload?.process === "running";
@@ -1888,7 +1889,7 @@ window.SpireProject = (() => {
       if (status.default && enrollment.template_id !== status.default.template_id)
         box.append(el("p", "继续使用当前已绑定设置；新的默认说明不会改写这份授权和已有记录。", "small muted"));
     }
-    if (ready) box.append(el("p", "打开游戏 → 真人采集 → 开始录制。完成后点“结束录制”，这里自动处理上传。"));
+    if (ready) box.append(el("p", "打开游戏 → 真人采集 → 开始录制。支持连续录制时，每局结束会自动保存并上传，退出游戏会保存未完部分；“结束录制”用于停止录制。"));
     if (status.error) box.append(el("p", failure({message: status.error}), "banner error"));
     if (status.consent_required && status.default) {
       box.append(el("p", status.default.template?.consent_text, "project-consent"));
