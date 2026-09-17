@@ -275,3 +275,36 @@ def test_receiver_can_index_sources_after_gold_without_public_access_bypass(tmp_
     assert CurationLedger(owner.operations).source_runs(source.artifact_id)
     with pytest.raises(BoundaryError, match="gold_reserved_data"):
         record_use(owner.operations, owner.store, source, "download")
+
+
+def test_legacy_report_cannot_export_unselected_gold_context(tmp_path: Path) -> None:
+    from spireagent.artifact_contracts import Manifest, Parent
+    from spireagent.json_boundary import FrozenObject
+
+    owner, _, source, _ = setup(tmp_path)
+    ledger = CurationLedger(owner.operations)
+    # A legacy manifest's selected set can be disjoint while its report retains
+    # unselected source context. Exercise the download guard with that registry state.
+    with owner.operations.transaction() as db:
+        db.execute("INSERT INTO curation_sources VALUES(?,?,1)",
+                   (source.artifact_id, source.payload("archive").sha256))
+        db.executemany("INSERT INTO curation_source_runs VALUES(?,?)",
+                       [(source.artifact_id, "training-run"), (source.artifact_id, "gold-run")])
+    legacy = Manifest("dataset", owner.producer, (Parent("source", source.artifact_id),),
+                      parameters=FrozenObject.of({"schema": "stpd/decision-dataset-v1"}))
+    owner.store.publish(legacy)
+    ledger.claim("old-selection", "training", {"training-run"})
+    ledger.bind("old-selection", legacy.artifact_id)
+    ledger.claim("gold-selection", "gold", {"gold-run"})
+    with pytest.raises(BoundaryError, match="gold_reserved_data"):
+        record_use(owner.operations, owner.store, legacy, "download")
+
+
+def test_test_merge_cannot_be_relabelled_training(tmp_path: Path) -> None:
+    _, upload, _, jobs = setup(tmp_path)
+    test = build(jobs, upload, "test")["result"]["artifact_id"]
+    first = jobs.create(MEMBER, {"name": "invalid training merge", "datasets": [test],
+        "rules": SelectionRules().to_dict(), "preview_id": None,
+        "curation": {"purpose": "training", "paired_training": None}})
+    jobs.run(first["id"])
+    assert jobs.read(MEMBER, first["id"])["error"] == "test_merge_requires_only_test"

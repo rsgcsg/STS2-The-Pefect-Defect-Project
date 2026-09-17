@@ -354,6 +354,8 @@ def publish_evaluation(
     if partition == "test" and protocol_id is None:
         raise BoundaryError("evaluation", "sealed_test_protocol_required")
     view, expected_samples = load_model_view(store, view_id)
+    if view_id != model.parent("model_view") and partition != "test":
+        raise BoundaryError("evaluation", "external_test_requires_sealed_partition")
     training_input = _validate_model_view_lineage(store, model, view_id, view)
     if partition == "test":
         assert protocol_id is not None
@@ -426,6 +428,8 @@ def load_evaluation(
         raise BoundaryError("evaluation", "payload_inventory_mismatch")
     model = store.get_manifest(manifest.parent("model"))
     view, samples = load_model_view(store, manifest.parent("model_view"))
+    if view.artifact_id != model.parent("model_view") and partition != "test":
+        raise BoundaryError("evaluation", "external_test_requires_sealed_partition")
     training_input = _validate_model_view_lineage(store, model, view.artifact_id, view)
     if partition == "test":
         assert isinstance(protocol_id, str)

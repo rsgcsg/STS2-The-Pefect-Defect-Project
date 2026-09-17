@@ -907,3 +907,7 @@ select, .onboarding input { font: inherit; color: inherit; background: transpare
 .dataset-workspace table td { vertical-align:top; }
 .dataset-workspace .project-form { margin-bottom:20px; }
 .dataset-workspace .project-form > details { flex-basis:100%; width:100%; }
+
+.dataset-tabs .dataset-secondary { font-size:.875rem; padding:.5rem .75rem; align-self:center; }
+.dataset-tabs .dataset-secondary:not(.primary) { background:transparent; border-color:transparent; color:var(--muted); }
+.dataset-tabs [data-action="dataset-tab-previews"] { margin-left:auto; }

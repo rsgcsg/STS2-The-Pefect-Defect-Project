@@ -244,3 +244,70 @@ def test_completed_return_rejects_missing_weights_and_evaluation_tamper(tmp_path
     (store.blobs.root / "objects" / "sha256" / index["chunks"][0]["sha256"]).unlink()
     with pytest.raises(BoundaryError, match="object_not_found"):
         execute(store, reporter, run.artifact_id, PRODUCER)
+
+
+def test_external_test_view_checks_actual_model_ancestry(tmp_path: Path) -> None:
+    import json
+
+    from stpd.fullrun.data import admit, publish_dataset, publish_source
+    from stpd.fullrun.evaluation import _validate_model_view_lineage
+    from stpd.fullrun.features import publish_model_view
+    from stpd.fullrun.fixtures import SyntheticSourceAdapter, synthetic_bundle
+    from stpd.fullrun.representation import FullRunSerializer
+
+    store, reporter, envelope, _ = training(tmp_path)
+    _, run = prepare_run(store, envelope.artifact_id, PRODUCER)
+    done = execute(store, reporter, run.artifact_id, PRODUCER)
+    model = store.get_manifest(store.get_manifest(done.result_id).parent("model"))
+    training_dataset = store.get_manifest(envelope.parent("dataset"))
+    overlapping = replace(
+        training_dataset,
+        parameters=FrozenObject.of({**training_dataset.parameters.value(), "purpose": "test"}),
+    )
+    store.publish(overlapping)
+    view = publish_model_view(store, overlapping.artifact_id, FullRunSerializer(), PRODUCER)
+    with pytest.raises(BoundaryError, match="training_test_overlap"):
+        _validate_model_view_lineage(store, model, view.artifact_id, view)
+    # Different IDs alone are insufficient; retain semantic duplicates under a new seed.
+    source, projection = publish_source(
+        store, synthetic_bundle(runs=6, seed=99), SyntheticSourceAdapter(), PRODUCER
+    )
+    duplicate = publish_dataset(store, admit((projection,)), (source,), PRODUCER)
+    duplicate = replace(
+        duplicate, parameters=FrozenObject.of({**duplicate.parameters.value(), "purpose": "test"})
+    )
+    store.publish(duplicate)
+    duplicate_view = publish_model_view(store, duplicate.artifact_id, FullRunSerializer(), PRODUCER)
+    with pytest.raises(BoundaryError, match="training_test_overlap"):
+        _validate_model_view_lineage(store, model, duplicate_view.artifact_id, duplicate_view)
+    raw = json.loads(synthetic_bundle(runs=6, seed=101))
+    for row in raw["records"]:
+        row["state"]["run"]["hp"] += 1000
+        row["successor"]["run"]["hp"] += 1000
+    source, projection = publish_source(
+        store, json.dumps(raw).encode(), SyntheticSourceAdapter(), PRODUCER
+    )
+    held_out = publish_dataset(store, admit((projection,)), (source,), PRODUCER)
+    held_out = replace(
+        held_out, parameters=FrozenObject.of({**held_out.parameters.value(), "purpose": "test"})
+    )
+    store.publish(held_out)
+    held_out_view = publish_model_view(store, held_out.artifact_id, FullRunSerializer(), PRODUCER)
+    assert (
+        _validate_model_view_lineage(
+            store, model, held_out_view.artifact_id, held_out_view
+        ).artifact_id
+        == envelope.artifact_id
+    )
+    with pytest.raises(BoundaryError, match="external_test_requires_sealed_partition"):
+        publish_evaluation(
+            store,
+            model,
+            held_out_view.artifact_id,
+            [],
+            {},
+            PRODUCER,
+            partition="dev",
+            seed=0,
+            bootstrap=0,
+        )

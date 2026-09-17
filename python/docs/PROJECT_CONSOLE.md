@@ -311,14 +311,14 @@ The game page shows the current available profiles, with incomplete/complete and
 separated. Failed profiles do not change receiver acceptance. It never calls uploads unique games.
 
 In **数据集**, select received recordings, keep permissive defaults or select optional filters,
-then **预览选定记录**. Refresh after background completion, inspect counts/exclusions/run facts,
+then **预览选定记录**. The task updates in place; inspect counts/exclusions/run facts,
 and use **按此预览生成固定数据集**. The resulting artifact ID identifies an immutable version.
-Use **数据下载** to select that artifact's Parquet and selection report. New uploads require a
+The generated list appears as soon as its fixed manifest is published. A normal dataset download prepares Parquet on demand; Gold stays sealed. New uploads require a
 new preview/build. Existing artifact detail links remain valid. Current project access is checked again; explicit withdrawal also blocks future downloads
 of the corresponding derived decision bytes.
 
 This candidate does not start training. The strict old Full-Run loader remains unchanged;
-training integration must explicitly select the new decision-dataset contract.
+training entry points consume supported purpose-bound selections and reject held-out ancestry.
 
 Member data calls have bounded transport deadlines (10 seconds for reads, 20 seconds
 for submissions), separate from the four-second login polling deadline. Export creation

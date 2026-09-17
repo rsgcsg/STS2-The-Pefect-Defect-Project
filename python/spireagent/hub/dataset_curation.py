@@ -82,6 +82,13 @@ class DatasetCuration:
         if parent.parameters.value().get("purpose") in {"test", "gold"}:
             raise BoundaryError("curation", "paired_training_required")
         training = self.load(parent)
+        # Legacy sets may predate the durable source index. Compare their actual
+        # records too, so a missing index never becomes a false isolation PASS.
+        from stpd.fullrun.representation import decision_fingerprint
+
+        facts = {decision_fingerprint(record) for record in training.records}
+        if any(decision_fingerprint(record) in facts for record in dataset.records):
+            raise BoundaryError("curation", "training_test_overlap")
         result = self.ledger.overlap(
             (r.run_id for r in dataset.records), (r.run_id for r in training.records)
         )
@@ -114,6 +121,8 @@ class DatasetCuration:
                 raise BoundaryError("curation", "gold_merge_requires_only_gold")
             if spec["purpose"] == "gold" and purposes != {"gold"}:
                 raise BoundaryError("curation", "gold_merge_requires_only_gold")
+            if "test" in purposes and (purposes != {"test"} or spec["purpose"] != "test"):
+                raise BoundaryError("curation", "test_merge_requires_only_test")
             base = union_decisions(
                 tuple((s.artifact_id, self.load(s)) for s in sources),
                 SelectionRules.decode(request["rules"]),

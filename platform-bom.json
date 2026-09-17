@@ -21,16 +21,16 @@
       "component_source_digest_sha256": "bf3d9f459c622b46094784ad19ca665535050a71566b5790a1f553587011d9bc"
     },
     "annotator": {
-      "version": "0.3.0-rc.7",
-      "source_revision": "b4a5cd92fa784a12aa6557ccc959c2d7a792422c",
-      "component_tree_revision": "6076cca4a769fd8482ea87e61a55b09488b071c2",
-      "component_source_digest_sha256": "a91d7777922906252fc9808fe5033995e5ac33f4ab8fe749379695c9fe1c69c7"
+      "version": "0.3.0-rc.8",
+      "source_revision": "712886fcefdd5e26722e12e048127da80b0e2f9b",
+      "component_tree_revision": "4af8afe065ad000f36773eb0cca06ab671d15417",
+      "component_source_digest_sha256": "d3da69760a8bf96d1dd7400dddbb79342935d5cfe398c07e09456cd7ce50e614"
     },
     "evidence": {
-      "source_revision": "2490dae5366df27cff668feb5860224ae4900182",
-      "component_tree_revision": "280e43a0308e64510e72cdd33fe2e201866ee01c",
-      "component_source_digest_sha256": "fb5f81ca2ef25c17c1a583362c16e2b669bae9237c30e6fe529c53a81463f4e2",
-      "version": "0.1.0-rc.11"
+      "version": "0.1.0-rc.12",
+      "source_revision": "712886fcefdd5e26722e12e048127da80b0e2f9b",
+      "component_tree_revision": "84afbb8b33b94de4bd3134b32a50f4fcc5228b7b",
+      "component_source_digest_sha256": "d6e6e2eec3d789315485e5ed2b09dbf34153e6cf746bfcbc3eec1be384fd2216"
     },
     "policy_runtime": {
       "version": "0.1.0-rc.4",
@@ -45,16 +45,16 @@
       "component_source_digest_sha256": "891de98722aa3ec20a260080eee0c44f94b124c4fc4b6892bf38777ba1878ffc"
     },
     "live_ui": {
-      "version": "0.1.0-rc.4",
-      "source_revision": "35cf5f410b56c1138103fbeb1da05be43136f5b3",
-      "component_tree_revision": "f205c1a6f3001b23c2633e86a4720cc8627810f6",
-      "component_source_digest_sha256": "29148fc0367e083556b5c6d4920b18456112da17e1eb07e1d1518097ae5aa1b9"
+      "version": "0.1.0-rc.5",
+      "source_revision": "712886fcefdd5e26722e12e048127da80b0e2f9b",
+      "component_tree_revision": "2868db81f3adfdcbe50539d8e89d903e70395a69",
+      "component_source_digest_sha256": "6708fe8fb86fa892e4a8e7c14daaa816cdcd2af84f43248e8253b2e4c3ae029f"
     },
     "game_mod": {
-      "source_revision": "398ab6a74204f8167a50376ffa358fd74579625a",
-      "component_tree_revision": "6c91952ec0fd6fba4fa5686aebd8d45452dd7ca4",
-      "component_source_digest_sha256": "553fb4003215e5d86611a1604413042ca5eba4aa5f4cedd449c95b7028ae02cb",
-      "version": "0.2.0-rc.7"
+      "version": "0.2.0-rc.8",
+      "source_revision": "712886fcefdd5e26722e12e048127da80b0e2f9b",
+      "component_tree_revision": "c002e840c01c9e9f20413a31a738dee62df978bf",
+      "component_source_digest_sha256": "faabf2c8b462102f9c4223cbef0ae28b8fc285c075f8a1f4e01d09933f9d3bf0"
     },
     "player_environment_protocol": "1.0.0",
     "typescript_sdk": "1.1.0-rc.1"

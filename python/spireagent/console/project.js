@@ -255,6 +255,7 @@ window.SpireProject = (() => {
       gold_reserved_data: "这些数据已封存为 Gold，只能用于受控评估或 Gold 合并。",
       gold_already_in_other_dataset: "这些数据已进入普通数据集，请为 Gold 选择独立数据。",
       gold_requires_gold_merge: "这些数据已属于 Gold，请在数据集列表合并已有 Gold。",
+      test_merge_requires_only_test: "测试集只能与测试集合并，并保持测试用途。",
       gold_merge_requires_only_gold: "Gold 只能与 Gold 合并，合并后仍为 Gold。",
       gold_previously_used_for_training: "这些数据已有训练使用记录，不能作为 Gold。",
       gold_source_inventory_pending: "正在建立来源隔离索引。完成后可继续同一任务。",
@@ -1223,6 +1224,7 @@ window.SpireProject = (() => {
       if (mergeSet.size < 2) throw new Error("minimum_two_decision_datasets_required");
       const purposes = new Set([...mergeSet].map(id => drafts.get("merge-purposes")?.[id] || "training"));
       if (purposes.has("gold") && purposes.size !== 1) throw new Error("gold_merge_requires_only_gold");
+      if (purposes.has("test") && purposes.size !== 1) throw new Error("test_merge_requires_only_test");
       const created = await request(ctx, member("datasets"), {name: "合并决策数据集", datasets: [...mergeSet].sort(),
         curation:{purpose:purposes.has("gold") ? "gold" : purposes.size === 1 && purposes.has("test") ? "test" : "training", paired_training:null},
         rules: {schema: "stpd/decision-selection-v1", complete_only: false, wins_only: false,
