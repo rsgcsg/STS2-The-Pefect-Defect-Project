@@ -1013,7 +1013,7 @@ test("dataset union explains an insufficient selection without submitting a job"
 
 test("dataset progress stays visible and selected parent union is exact", async () => {
   const rules = {schema:"stpd/decision-selection-v1",complete_only:false,wins_only:false,no_failures_only:false,filters:{},seed:0};
-  const job = {id:"b".repeat(32),state:"completed",request:{name:"union",datasets:[id("a"),id("b")],rules,preview_id:null},progress:{phase:"completed",completed:2,total:2,elapsed_seconds:1.5},result:{selected:7,exact_duplicate_decisions:2,split_status:"grouped"}};
+  const job = {id:"b".repeat(32),state:"completed",request:{name:"union",datasets:[id("a"),id("b")],rules,curation:{purpose:"training",paired_training:null},preview_id:null},progress:{phase:"completed",completed:2,total:2,elapsed_seconds:1.5},result:{selected:7,exact_duplicate_decisions:2,split_status:"grouped"}};
   const env = setup({view:"datasets",handler:(url, options) => {
     if (options.method === "POST") return {id:job.id,state:"pending"};
     if (url === `/api/member/datasets/${job.id}`) return job;
@@ -1030,7 +1030,7 @@ test("dataset progress stays visible and selected parent union is exact", async 
   const tasks = await env.render();
   assert.match(text(tasks), /保留决策/);
   await action(tasks,`build-${job.id}`).onclick();
-  assert.deepEqual(body(post(env.calls)[1]),{name:"union",datasets:[id("a"),id("b")],rules,preview_id:job.id});
+  assert.deepEqual(body(post(env.calls)[1]),{name:"union",datasets:[id("a"),id("b")],rules,curation:job.request.curation,preview_id:job.id});
 });
 
 
@@ -1268,4 +1268,19 @@ test("background denial removes previously displayed private dataset data", asyn
   denied=true; await h.ui.refresh("datasets");
   assert.doesNotMatch(text(page),/private dataset/);
   assert.match(text(page),/需要重新登录/);
+});
+
+
+test("legacy preview refresh creates a new selection instead of incompatible confirmation", async () => {
+  const job = {id:"b".repeat(32),state:"completed",request:{name:"old",uploads:[uploadId],rules:{seed:0},preview_id:null},result:{selected:7}};
+  const h = setup({view:"datasets",handler:(url, options) => {
+    if (options.method === "POST") return {id:"c".repeat(32),state:"pending"};
+    if (url.startsWith("/api/member/datasets?")) return {items:[job]};
+    return emptyList();
+  }});
+  await action(await h.render(),"dataset-tab-previews").onclick();
+  const button = action(await h.render(),`build-${job.id}`);
+  assert.match(button.textContent,/按新规则重新预览/);
+  await button.onclick();
+  assert.deepEqual(body(post(h.calls)[0]),{name:"old",uploads:[uploadId],rules:{seed:0},preview_id:null});
 });

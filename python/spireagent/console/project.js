@@ -1445,8 +1445,10 @@ window.SpireProject = (() => {
         if (job.result.exclusion_counts) report.append(table(["排除原因", "数量"], Object.entries(job.result.exclusion_counts)));
         report.append(technical(job.result, "精确身份与完整报告")); row.append(report);
       }
-      if (!archived && job.state === "completed" && !job.request.preview_id && !job.request.materialize) row.append(command(ctx, `build-${job.id}`, "确认生成数据集", async () => {
-        const created = await request(ctx, member("datasets"), {name:job.request.name, ...(job.request.datasets ? {datasets:job.request.datasets} : {uploads:job.request.uploads}), ...(job.request.curation ? {curation:job.request.curation} : {}), rules:job.request.rules, preview_id:job.id});
+      if (!archived && job.state === "completed" && !job.request.preview_id && !job.request.materialize) row.append(command(ctx, `build-${job.id}`, job.request.curation ? "确认生成数据集" : "按新规则重新预览", async () => {
+        // Historical previews predate immutable purpose/quality rules. Preserve
+        // them, and make a new preview instead of confirming a different identity.
+        const created = await request(ctx, member("datasets"), {name:job.request.name, ...(job.request.datasets ? {datasets:job.request.datasets} : {uploads:job.request.uploads}), ...(job.request.curation ? {curation:job.request.curation} : {}), rules:job.request.rules, preview_id:job.request.curation ? job.id : null});
         if (!live(ctx)) return;
         if (hex(created.id,32)) drafts.set("dataset-task-id",created.id);
         await reload(ctx);
