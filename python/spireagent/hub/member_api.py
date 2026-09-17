@@ -25,6 +25,7 @@ from spireagent.hub.decision_jobs import DecisionJobs
 from spireagent.hub.exports import ExportService
 from spireagent.hub.identity import IdentityService
 from spireagent.hub.live_evaluations import LiveEvaluations
+from spireagent.hub.quality import QualityAnnotations
 from spireagent.hub.statistics import refresh_decision_statistics
 from spireagent.hub.uploads import LocalStaging, S3Staging, UploadService
 from spireagent.json_boundary import BoundaryError, decode_json, digest, object_fields
@@ -39,6 +40,7 @@ class MemberApi:
         self.campaigns = Campaigns(service.operations, identity.membership)
         self.exports = ExportService(service)
         self.decisions = DecisionJobs(service)
+        self.quality = QualityAnnotations(service)
         self.live_evaluations = LiveEvaluations(service, identity.membership)
 
     def _principal(self, principal: ConsolePrincipal) -> ConsolePrincipal:
@@ -48,6 +50,12 @@ class MemberApi:
 
     def read(self, route: str, query: str, principal: ConsolePrincipal) -> dict[str, Any]:
         current = self._principal(principal)
+        quality = re.fullmatch(r"collections/([a-f0-9]{32})/decisions", route)
+        if quality:
+            limit, offset, status = pagination(query)
+            if status is not None:
+                raise BoundaryError("quality", "unexpected_status_filter")
+            return self.quality.read(current, quality[1], limit, offset)
         if route == "games" and not query:
             return self.decisions.games(current)
         if route in {"datasets", "datasets/archived"}:
@@ -87,6 +95,8 @@ class MemberApi:
 
     def write(self, route: str, body: object, principal: ConsolePrincipal) -> dict[str, Any]:
         current = self._principal(principal)
+        if route == "quality-annotations":
+            return self.quality.write(current, body)
         enrollment = re.fullmatch(r"campaigns/([a-f0-9]{64})/enroll", route)
         if enrollment:
             value = object_fields(body, {"device_id", "consent"}, "campaign.enroll")
@@ -99,6 +109,8 @@ class MemberApi:
             return self.exports.create(current, body)
         if route == "datasets":
             return self.decisions.create(current, body)
+        if route == "datasets/materialize":
+            return self.decisions.materialize(current, body)
         if route == "datasets/visibility":
             return self.decisions.set_archived(current, body)
         retry = re.fullmatch(r"datasets/([a-f0-9]{32})/retry", route)

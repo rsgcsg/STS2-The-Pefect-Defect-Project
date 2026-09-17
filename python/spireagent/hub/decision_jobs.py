@@ -12,10 +12,13 @@ from typing import Any
 
 from spireagent.hub.collections import CollectionAccess
 from spireagent.hub.console_auth import ConsolePrincipal
+from spireagent.hub.curation import CurationLedger
+from spireagent.hub.dataset_curation import DatasetCuration, specification
 from spireagent.hub.uploads import UploadService
 from spireagent.json_boundary import BoundaryError, digest, object_fields
 from stpd.canonical import semantic_hash
 from stpd.fullrun.contracts import SourceProjection
+from stpd.fullrun.curated_dataset import SCHEMA as CURATED_SCHEMA
 from stpd.fullrun.decision_cache import VerifiedSourceCache
 from stpd.fullrun.decision_dataset import SelectionRules
 from stpd.fullrun.decision_store import preview, preview_union, publish, publish_union
@@ -37,6 +40,7 @@ class DecisionJobs:
     def __init__(self, service: UploadService) -> None:
         self.service = service
         self.collections = CollectionAccess(service)
+        self.curation = CurationLedger(service.operations)
         with service.operations.transaction() as db:
             db.execute(
                 "CREATE TABLE IF NOT EXISTS decision_jobs("
@@ -93,17 +97,33 @@ class DecisionJobs:
             raise BoundaryError("decision_job", "source_not_verified")
         return sources
 
-    def _inputs(self, request: dict[str, Any]) -> tuple[Any, ...]:
+    def _inputs(
+        self, request: dict[str, Any], *, receiver_profile: bool = False
+    ) -> tuple[Any, ...]:
         if "datasets" not in request:
-            return self._sources(request["uploads"])
+            sources = self._sources(request["uploads"])
+            if "curation" not in request and not receiver_profile:
+                from spireagent.hub.curation_access import guarded_runs
+
+                for source in sources:
+                    guarded_runs(self.service.operations, self.service.store, source)
+            return sources
         selections = request["datasets"]
         if (not isinstance(selections, list) or not 1 <= len(selections) <= 100
                 or any(not isinstance(value, str) for value in selections)
                 or len(set(selections)) != len(selections)):
             raise BoundaryError("decision_job", "invalid_dataset_selection")
-        parents = tuple(self.collections.artifact(identity) for identity in selections)
+        if request.get("curation", {}).get("purpose") == "gold":
+            # Trusted worker operation: Gold may compose only with other Gold. No
+            # raw rows are returned by this path to a browser or local worker.
+            parents = tuple(self.service.store.get_manifest(identity) for identity in selections)
+            if any(p.parameters.value().get("purpose") != "gold" for p in parents):
+                raise BoundaryError("curation", "gold_merge_requires_only_gold")
+        else:
+            parents = tuple(self.collections.artifact(identity) for identity in selections)
         if any(parent.kind != "dataset" or parent.parameters.value().get("schema")
-               not in {"stpd/decision-dataset-v1", UNION_SCHEMA} for parent in parents):
+               not in {"stpd/decision-dataset-v1", UNION_SCHEMA, CURATED_SCHEMA}
+               for parent in parents):
             raise BoundaryError("decision_job", "unsupported_dataset_schema")
         return parents
 
@@ -140,7 +160,7 @@ class DecisionJobs:
                     if row is None or row["kind"] != "dataset":
                         raise BoundaryError("decision_job", "dataset_not_available")
                     if json.loads(row["summary"])["metadata"].get("schema") not in {
-                        "stpd/decision-dataset-v1", UNION_SCHEMA,
+                        "stpd/decision-dataset-v1", UNION_SCHEMA, CURATED_SCHEMA,
                     }:
                         raise BoundaryError("decision_job", "unsupported_dataset_schema")
                     withdrawn = db.execute(
@@ -158,7 +178,13 @@ class DecisionJobs:
     def create(self, principal: ConsolePrincipal, body: object) -> dict[str, Any]:
         self.collections.require_member(principal)
         source_key = "datasets" if isinstance(body, dict) and "datasets" in body else "uploads"
-        obj = object_fields(body, {source_key, "rules", "preview_id", "name"}, "decision_job")
+        fields = {source_key, "rules", "preview_id", "name"}
+        if isinstance(body, dict) and "curation" in body:
+            fields.add("curation")
+        obj = object_fields(body, fields, "decision_job")
+        obj = {**obj, "curation": specification(obj.get("curation", {
+            "purpose": "training", "paired_training": None,
+        }))}
         self._check_inputs(obj)
         rules = SelectionRules.decode(obj["rules"])
         if not isinstance(obj["name"], str) or not 1 <= len(obj["name"]) <= 100:
@@ -171,6 +197,7 @@ class DecisionJobs:
                 or previous["request"]["preview_id"] is not None
                 or previous["request"].get(source_key) != obj[source_key]
                 or previous["request"]["rules"] != rules.to_dict()
+                or previous["request"].get("curation") != obj["curation"]
             ):
                 raise BoundaryError("decision_job", "preview_mismatch")
             expected = previous["result"]["logical_id"]
@@ -201,7 +228,7 @@ class DecisionJobs:
         request = json.loads(row["request"])
         self._check_inputs(request)
         result = json.loads(row["result"]) if row["result"] else None
-        if result and "runs" in result:
+        if result and isinstance(result.get("runs"), list):
             result = {**result, "runs": [_run_summary(run) for run in result["runs"]]}
         return {
             "id": identity,
@@ -213,6 +240,33 @@ class DecisionJobs:
             "recovery": "explicit_retry" if row["state"] == "failed" else "observe_existing_job",
             "error": row["error"],
         }
+
+    def materialize(self, principal: ConsolePrincipal, body: object) -> dict[str, Any]:
+        self.collections.require_member(principal)
+        obj = object_fields(body, {"dataset_id"}, "dataset.materialize")
+        source = self.collections.artifact(digest(obj["dataset_id"], "dataset.id"))
+        info = source.parameters.value()
+        if info.get("schema") != CURATED_SCHEMA:
+            raise BoundaryError("dataset", "materialization_not_required")
+        now = time.time()
+        with self.service.operations.transaction() as db:
+            previous = db.execute(
+                "SELECT id,state FROM decision_jobs WHERE owner=? AND "
+                "json_extract(request,'$.materialize')=? ORDER BY created DESC LIMIT 1",
+                (principal.subject, source.artifact_id),
+            ).fetchone()
+            if previous:
+                return {"id": previous["id"], "state": previous["state"]}
+            if db.execute("SELECT count(*) FROM decision_jobs WHERE state IN "
+                          "('pending','running')").fetchone()[0] >= 10:
+                raise BoundaryError("decision_job", "queue_full")
+            identity = uuid.uuid4().hex
+            request = {"datasets": [source.artifact_id], "rules": info["rules"],
+                       "preview_id": None, "name": "准备数据集下载", "expected": None,
+                       "materialize": source.artifact_id}
+            db.execute("INSERT INTO decision_jobs VALUES(?,?,?,'pending',NULL,NULL,?,?)",
+                       (identity, principal.subject, json.dumps(request), now, now))
+        return {"id": identity, "state": "pending"}
 
     def list(self, principal: ConsolePrincipal, *, archived: bool = False,
              limit: int = 50, offset: int = 0) -> dict[str, Any]:
@@ -483,12 +537,20 @@ class DecisionJobs:
             if not member and row["owner"] != "receiver":
                 raise BoundaryError("decision_job", "membership_not_authorized")
             request = json.loads(row["request"])
-            sources = self._inputs(request)
+            receiver_profile = (row["owner"] == "receiver"
+                                and request.get("profile_schema") == "stpd/run-coverage-v1"
+                                and request["expected"] is None
+                                and "datasets" not in request)
+            sources = self._inputs(request, receiver_profile=receiver_profile)
             rules = SelectionRules.decode(request["rules"])
             merging = "datasets" in request
             coverage: dict[str, Any] = {}
 
             def collect_coverage(projection: SourceProjection) -> None:
+                if "curation" not in request:
+                    source = next(s for s in sources
+                                  if s.payload("archive").sha256 == projection.source_sha256)
+                    self.curation.index_source(source.artifact_id, projection)
                 for run in summarize_run_coverage(projection)["runs"]:
                     prior = coverage.setdefault(run["run_id"], run)
                     if prior != run:
@@ -498,14 +560,24 @@ class DecisionJobs:
                             "boundary_status": "overlapping_exports_differ",
                             "recording_continuity": "unknown"}
 
-            if request["expected"] is None:
-                dataset = preview_union(
-                    self.service.store, sources, rules, cache=cache, progress=progress
-                ) if merging else preview(
-                    self.service.store, sources, rules, cache=cache, progress=progress,
-                    on_projection=collect_coverage,
-                )
+            if request.get("materialize"):
+                manifest = DatasetCuration(self.service, cache).materialize(sources[0], progress)
+                self.service.console_index.artifact_closure(self.service.store,
+                                                           (manifest.artifact_id,))
+                result = {"artifact_id": manifest.artifact_id, **manifest.parameters.value()}
+            elif request["expected"] is None:
+                if "curation" in request:
+                    dataset = DatasetCuration(self.service, cache).select(
+                        sources, request, progress, on_projection=collect_coverage)
+                elif merging:
+                    dataset = preview_union(self.service.store, sources, rules,
+                                            cache=cache, progress=progress)
+                else:
+                    dataset = preview(self.service.store, sources, rules,
+                                      cache=cache, progress=progress,
+                                      on_projection=collect_coverage)
                 report = dataset.report.value()
+                selected_runs = {r.run_id for r in dataset.records}
                 if row["owner"] == "receiver":
                     from spireagent.hub.statistics import DIMENSIONS, _persist, decision_profile
 
@@ -529,25 +601,31 @@ class DecisionJobs:
                 result = {
                     "logical_id": dataset.logical_id,
                     "selected": len(dataset.records),
-                    "runs": report["runs"],
+                    "runs": [r for r in report["runs"] if r["run_id"] in selected_runs],
                     "selected_facets": report["selected_facets"],
                     "exclusion_counts": report["exclusion_counts"],
                     "exact_duplicate_decisions": report["exact_duplicate_decisions"],
                     "split_status": report["split_status"],
                     "non_claims": report["non_claims"],
+                    **({"purpose": request["curation"]["purpose"],
+                        "paired_training": request["curation"]["paired_training"]}
+                       if "curation" in request else {}),
                 }
             else:
-                manifest = (publish_union if merging else publish)(
-                    self.service.store, sources, rules, self.service.producer, request["expected"],
-                    cache=cache, progress=progress,
-                )
+                if "curation" in request:
+                    manifest = DatasetCuration(self.service, cache).publish(
+                        identity, sources, request, progress)
+                else:
+                    manifest = (publish_union if merging else publish)(
+                        self.service.store, sources, rules, self.service.producer,
+                        request["expected"], cache=cache, progress=progress)
                 self.service.console_index.artifact_closure(
                     self.service.store, (manifest.artifact_id,)
                 )
                 result = {"artifact_id": manifest.artifact_id, **manifest.parameters.value()}
             if request["expected"] is None and not merging:
                 result["run_coverage"] = list(coverage.values())
-            self._inputs(request)
+            self._inputs(request, receiver_profile=receiver_profile)
             result["progress"] = {
                 "phase": "completed", "completed": 1, "total": 1,
                 "observed_at": time.time(), "elapsed_seconds": time.monotonic() - started,

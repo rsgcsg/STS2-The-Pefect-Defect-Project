@@ -1132,6 +1132,11 @@ async function load(manual = false, forceIdentity = manual) {
       page.append(setup, content);
       content = page;
     }
+    if (view === "collections" && id && /^[a-f0-9]{32}$/.test(id)) {
+      const quality = await window.SpireProject.render("record-quality", identity);
+      if (serial !== state.serial || identityContext !== window.SpireIdentity.context()) return;
+      content.append(quality);
+    }
     $("content").replaceChildren(content);
     renderedContext = context;
     document.querySelectorAll("details[data-preserve]").forEach((item) => {

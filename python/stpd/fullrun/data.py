@@ -22,7 +22,7 @@ DATASET_SCHEMA = "stpd/fullrun-dataset-v1"
 
 @dataclass(frozen=True)
 class AdmittedDataset:
-    records: tuple[ResearchTransitionV1, ...]
+    records: Sequence[ResearchTransitionV1]
     splits: FrozenObject
     seed: int
     scope: str
@@ -257,7 +257,7 @@ def publish_received_source(
 
 
 def _projections_from_manifests(
-    store: ArtifactStore, records: tuple[ResearchTransitionV1, ...], sources: tuple[Manifest, ...]
+    store: ArtifactStore, records: Sequence[ResearchTransitionV1], sources: tuple[Manifest, ...]
 ) -> tuple[SourceProjection, ...]:
     by_source = {source.payload("source").sha256: source for source in sources}
     if not sources or len(by_source) != len(sources):
@@ -385,6 +385,18 @@ def load_dataset(store: ArtifactStore, artifact_id: str) -> tuple[Manifest, Admi
 
     manifest = store.get_manifest(artifact_id)
     parameters = manifest.parameters.value()
+    from .curated_dataset import SCHEMA as CURATED_SCHEMA
+    from .curated_dataset import load_selection
+
+    if manifest.kind == "dataset" and parameters.get("schema") == CURATED_SCHEMA:
+        selected = load_selection(store, manifest, cache=None)
+        report = selected.report.value()
+        if "unassigned" in report["splits"].values():
+            raise BoundaryError("dataset", "insufficient_independent_run_components")
+        return manifest, AdmittedDataset(
+            selected.records, FrozenObject.of(report["splits"]), parameters["rules"]["seed"],
+            "platform_verified", report["exact_duplicate_decisions"],
+        )
     if manifest.kind != "dataset" or parameters.get("schema") != DATASET_SCHEMA:
         raise BoundaryError("dataset", "unsupported_dataset_contract")
     if {p.role for p in manifest.payloads} != {"records", "splits"}:

@@ -368,6 +368,17 @@ Full original-byte validation remains in the background worker.
 
 ## Bounded dataset processing and stable refresh
 
+The curation candidate adds a purpose selector (training, test, Gold) and an optional
+paired training dataset dropdown. The library shows purpose alongside record counts.
+Gold has no ordinary raw download; only Gold parents may compose a new Gold version.
+Sealing cannot undo historical access. Original recording detail includes paged operation
+annotations: flag a problem, exclude from future selections, or restore, with a reason.
+
+New dataset publication fixes a compact selection. Download prepares Parquet in a durable
+background task and then exposes that derived artifact. Switching tabs reuses short-lived
+metadata scoped to account and viewing scope; mutations and authentication changes clear
+that cache. Cached metadata never authorizes bytes or bypasses server isolation checks.
+
 Dataset construction streams sources in archive-digest order and spools canonical rows to
 private temporary SQLite storage. The maximum expanded source remains an independent
 resource bound; this does not claim arbitrary archive sizes fit the worker. The private

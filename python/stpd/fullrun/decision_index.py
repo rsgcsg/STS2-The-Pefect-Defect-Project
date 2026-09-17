@@ -118,14 +118,12 @@ def _persist(cache: VerifiedSourceCache, key: str, header: dict[str, Any],
         old = db.execute("SELECT token FROM decision_source_writes WHERE key=? AND updated<?",
                          (key, time.time() - 1200)).fetchone()
         if old:
-            db.execute("DELETE FROM decision_source_rows WHERE source=?", (old[0],))
             db.execute("DELETE FROM decision_source_writes WHERE key=? AND token=?", (key, old[0]))
         claimed = db.execute("INSERT OR IGNORE INTO decision_source_writes VALUES(?,?,?)",
                              (key, token, time.time())).rowcount
         if not claimed:
             cache.bypassed += 1
             return
-    published = False
     try:
         digests = hashlib.sha256()
         size = len(json_bytes(header))
@@ -177,11 +175,8 @@ def _persist(cache: VerifiedSourceCache, key: str, header: dict[str, Any],
                     break
                 db.execute("DELETE FROM decision_source_index WHERE key=?", (stale,))
                 total -= count
-        published = True
     finally:
         with cache._connect() as db:
-            if not published:
-                db.execute("DELETE FROM decision_source_rows WHERE source=?", (token,))
             db.execute("DELETE FROM decision_source_writes WHERE key=? AND token=?", (key, token))
         _collect_orphans(cache)
 

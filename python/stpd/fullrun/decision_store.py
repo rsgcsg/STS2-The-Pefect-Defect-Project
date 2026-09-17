@@ -143,21 +143,10 @@ def publish_union(
                     dataset, UNION_SCHEMA, progress)
 
 
-def _publish(
-    store: ArtifactStore, sources: tuple[Manifest, ...], rules: SelectionRules,
-    producer: Producer, expected_preview: str, dataset: DecisionDataset,
-    schema_id: str, progress: Progress | None,
-) -> Manifest:
+def materialize_records(store: ArtifactStore, dataset: DecisionDataset) -> Payload:
     import pyarrow as pa
     import pyarrow.parquet as pq
 
-    logical_id = dataset.logical_id
-    if logical_id != expected_preview:
-        raise BoundaryError("decision_dataset", "preview_changed")
-    if not dataset.records:
-        raise BoundaryError("decision_dataset", "empty_selection")
-    if progress:
-        progress("publishing_dataset", 0, 1)
     splits = dataset.report.value()["splits"]
     schema = pa.schema(
         [
@@ -193,7 +182,22 @@ def _publish(
             if rows:
                 writer.write_table(pa.Table.from_pylist(rows, schema=schema))
         output.seek(0)
-        records = store.put_payload("records", output, "application/vnd.apache.parquet")
+        return store.put_payload("records", output, "application/vnd.apache.parquet")
+
+
+def _publish(
+    store: ArtifactStore, sources: tuple[Manifest, ...], rules: SelectionRules,
+    producer: Producer, expected_preview: str, dataset: DecisionDataset,
+    schema_id: str, progress: Progress | None,
+) -> Manifest:
+    logical_id = dataset.logical_id
+    if logical_id != expected_preview:
+        raise BoundaryError("decision_dataset", "preview_changed")
+    if not dataset.records:
+        raise BoundaryError("decision_dataset", "empty_selection")
+    if progress:
+        progress("publishing_dataset", 0, 1)
+    records = materialize_records(store, dataset)
     report = store.put_payload(
         "selection", io.BytesIO(json_bytes(dataset.report.value())), "application/json"
     )
@@ -222,6 +226,12 @@ def _publish(
 def load(
     store: ArtifactStore, artifact_id: str, *, cache: VerifiedSourceCache | None = None,
 ) -> tuple[Manifest, DecisionDataset]:
+    from .curated_dataset import SCHEMA as CURATED_SCHEMA
+    from .curated_dataset import load_selection
+
+    manifest = store.get_manifest(artifact_id)
+    if manifest.parameters.value().get("schema") == CURATED_SCHEMA:
+        return manifest, load_selection(store, manifest, cache=cache)
     return _load(store, artifact_id, cache, {}, set(), 0, {}, 0)
 
 

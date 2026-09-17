@@ -206,6 +206,36 @@ receipt lineage; it does not become research admission authority.
 
 ## Fixed decision datasets (candidate)
 
+The curation candidate adds `stpd/curated-decision-dataset-v1`. New jobs carry
+`curation: {purpose: training|test|gold, paired_training: artifact_id|null}`.
+Confirmation retains the exact preview selection and quality snapshot. The immutable
+artifact contains a compact selection receipt and a commitment to its internal report;
+unselected observation/action context and quality comments are not downloadable receipts.
+`POST datasets/materialize` queues the existing durable worker to create a derived
+`stpd/dataset-materialization-v1` artifact only when complete records are requested.
+Repeated requests return the same task; retry remains explicit.
+
+Hub owns the transactional curation ledger in its Operations database. Whole-run and
+transitive duplicate groups protect Gold across original archives and derivatives.
+Publication reserves before writing an artifact; interruption retains the reservation.
+Only Gold parents can merge into Gold. Hiding tasks/artifacts never releases protection.
+Member download and training preparation recheck current reservations; wrappers and model
+ancestry cannot relabel held-out datasets. Paired train/test selection and actual external
+evaluation check overlap independently. Offline checks cover available immutable ancestry
+and exact duplicates; they cannot discover copies outside that store.
+
+Gold sealing is a managed-system restriction, not proof of zero historical exposure.
+The manifest records historical external exposure as unknown. Existing immutable datasets
+and recorded training uses are reconciled before sealing. Already downloaded bytes cannot
+be recalled. After the first seal, rollback must retain the reservation-aware reader and
+download/training guards, or enter maintenance mode; an older unguarded Hub is unsafe.
+
+`GET collections/{upload_id}/decisions?limit=25&offset=0` reads the bounded operation index.
+`POST quality-annotations` accepts upload_id, occurrence, action (flag/exclude/restore),
+and a nonempty reason up to 500 characters. Changes append to private history. Excluding
+a parent excludes dependent child selections; old raw evidence and dataset versions remain
+unchanged. An annotation change between preview and publication requires a new preview.
+
 `fullrun.decision_dataset.SelectionRules` is `stpd/decision-selection-v1`.
 `fullrun.decision_store` publishes/loads `stpd/decision-dataset-v1` from independently verified
 received bundle artifacts. The strict `fullrun.data` contract remains separate. See

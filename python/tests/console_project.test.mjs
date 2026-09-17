@@ -901,6 +901,39 @@ test("decision dataset defaults preview selected uploads without complete-run re
   assert.equal(body.rules.wins_only, false);
   assert.equal(body.rules.no_failures_only, false);
   assert.deepEqual(body.uploads, [uploadId]);
+  assert.deepEqual(body.curation, {purpose:"training",paired_training:null});
+});
+
+test("test selection keeps the paired training identity and Gold has no ordinary download", async () => {
+  const env = setup({view:"datasets", handler: async url => {
+    if (url.includes("collections?")) return {items:[{upload_id:uploadId,status:"verified"}],total:1};
+    if (url.includes("datasets?")) return {items:[
+      {artifact_id:id("a"),metadata:{schema:"stpd/curated-decision-dataset-v1",purpose:"training",materialization:"on_demand"}},
+      {artifact_id:id("b"),metadata:{schema:"stpd/curated-decision-dataset-v1",purpose:"gold",materialization:"on_demand"}},
+    ],total:2};
+    return {id:uploadId,items:[]};
+  }});
+  const library = await env.render();
+  assert.equal(action(library, `download-dataset-${id("b")}`).disabled, true);
+  await action(library, "dataset-tab-create").onclick();
+  const page = await env.render();
+  const purpose = field(page,"dataset-purpose"); purpose.value="test"; purpose.onchange();
+  const paired = field(page,"paired-training"); paired.value=id("a"); paired.oninput();
+  const source = field(page,`source-${uploadId}`); source.checked=true; source.onchange();
+  await action(page,"preview-dataset").onclick();
+  assert.deepEqual(body(post(env.calls)[0]).curation,{purpose:"test",paired_training:id("a")});
+});
+
+test("quality annotation saves an immutable operation identity and reason", async () => {
+  const env = setup({view:"record-quality",query:`&id=${uploadId}`,handler:async () => ({
+    items:[{id:id("a"),sequence:7,run:"run",family:"play_card",action:{kind:"play_card"},annotations:[]}],total:1,
+  })});
+  const page=await env.render();
+  field(page,`reason-${id("a")}`).value="点错了";
+  field(page,`quality-${id("a")}`).value="exclude";
+  await action(page,`annotate-${id("a")}`).onclick();
+  assert.deepEqual(body(post(env.calls)[0]),{upload_id:uploadId,occurrence:id("a"),action:"exclude",reason:"点错了"});
+  assert.ok(post(env.calls)[0].url.endsWith("/quality-annotations"));
 });
 
 test("game page reads derived summaries without submitting work", async () => {
@@ -1132,7 +1165,7 @@ test("dataset shell selects a new tab before delayed data arrives and ignores ol
 test("late select-all does not undo an explicit clear or changed date range", async () => {
   for(const change of ["clear","date"]) {
     let finish; const pending=new Promise(resolve=>{finish=resolve;});
-    const h=setup({view:"datasets",handler:url=>url.includes("limit=100")?pending:emptyList()});
+    const h=setup({view:"datasets",handler:url=>url.includes("collections?")&&url.includes("limit=100")?pending:emptyList()});
     await action(await h.render(),"dataset-tab-create").onclick(); const page=await h.render();
     const selecting=action(page,"select-all-dataset-sources").onclick();
     if(change==="clear") await action(page,"clear-dataset-selection").onclick();

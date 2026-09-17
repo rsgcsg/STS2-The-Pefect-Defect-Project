@@ -144,7 +144,8 @@ class ConsoleIndex:
             "parents": [parent.to_dict() for parent in manifest.parents],
             "metadata": {
                 key: parameters[key]
-                for key in ("schema", "scope", "records", "runs", "partition", "split_status")
+                for key in ("schema", "scope", "records", "runs", "partition", "split_status",
+                            "purpose", "materialization")
                 if key in parameters and isinstance(parameters[key], (str, int))
             },
             "payload_bytes": sum(payload.size for payload in manifest.payloads),
@@ -168,11 +169,17 @@ class ConsoleIndex:
                 "FROM console_artifact_policy WHERE sealed=1 UNION SELECT child "
                 "FROM console_lineage JOIN blocked ON parent=id) "
             )
-            db.execute(sealed + "DELETE FROM console_artifacts WHERE artifact_id IN blocked")
+            db.execute(sealed + "DELETE FROM console_artifacts WHERE artifact_id IN blocked "
+                       "AND COALESCE(json_extract(summary,'$.metadata.purpose'),'')!='gold'")
             blocked = db.execute(
                 sealed + "SELECT 1 FROM blocked WHERE id=?", (manifest.artifact_id,)
             ).fetchone()
-            if blocked or not discoverable(manifest):
+            is_gold = manifest.kind == "dataset" and parameters.get("purpose") == "gold"
+            if is_gold:
+                summary["parents"] = []
+                summary["payloads"] = []
+                summary["payload_bytes"] = 0
+            if (blocked or not discoverable(manifest)) and not is_gold:
                 return
             db.execute(
                 "INSERT OR REPLACE INTO console_artifacts VALUES(?,?,?,?)",

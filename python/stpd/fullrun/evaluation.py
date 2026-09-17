@@ -238,13 +238,23 @@ def _validate_model_view_lineage(
 ) -> Manifest:
     if model.kind != "model" or model.parameters.value().get("schema") != MODEL_SCHEMA:
         raise BoundaryError("evaluation", "model_contract_mismatch")
-    if model.parent("model_view") != view_id:
-        raise BoundaryError("evaluation", "model_view_identity_mismatch")
+    external_test = model.parent("model_view") != view_id
+    if external_test:
+        held_out = store.get_manifest(view.parent("dataset"))
+        if held_out.parameters.value().get("purpose") not in {"test", "gold"}:
+            raise BoundaryError("evaluation", "model_view_identity_mismatch")
     from ..workers.contracts import load_training_input
 
     training_input, config, features = load_training_input(
         store, model.parent("training_input"), model.producer
     )
+    if external_test:
+        from .dataset_policy import check_dataset_pair, training_sources
+
+        # Include initialization/checkpoint ancestors, not just the latest named
+        # training set. Separate held-out views never weaken the model's own lineage.
+        for source in training_sources(store, model.artifact_id):
+            check_dataset_pair(store, source.artifact_id, view.parent("dataset"))
     run = store.get_manifest(model.parent("run"))
     checkpoint = store.get_manifest(model.parent("checkpoint"))
     if (
@@ -263,7 +273,7 @@ def _validate_model_view_lineage(
     view_parameters = view.parameters.value()
     if (
         training_input.kind != "training_input"
-        or training_input.parent("model_view") != view_id
+        or training_input.parent("model_view") != model.parent("model_view")
         or training_input.parameters.value().get("qwen") != model_parameters.get("qwen")
         or model_parameters.get("scope") != view_parameters.get("scope")
         or model_parameters.get("serializer") != view_parameters.get("serializer")

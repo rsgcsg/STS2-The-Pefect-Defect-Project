@@ -205,7 +205,7 @@ def test_concurrent_worker_claim_runs_once(tmp_path: Path) -> None:
         },
     )
     with (
-        patch("spireagent.hub.decision_jobs.preview", wraps=preview) as call,
+        patch("spireagent.hub.dataset_curation.preview", wraps=preview) as call,
         ThreadPoolExecutor(max_workers=2) as pool,
     ):
         list(pool.map(jobs.run, [job["id"], job["id"]]))
@@ -516,7 +516,7 @@ def test_cancel_and_resume_use_one_task_and_fence_old_workers(tmp_path: Path) ->
             return result
         return real_preview(*args, **kwargs)
 
-    with patch("spireagent.hub.decision_jobs.preview", side_effect=interleaved):
+    with patch("spireagent.hub.dataset_curation.preview", side_effect=interleaved):
         jobs.run(job["id"])
     assert jobs.read(MEMBER, job["id"])["state"] == "completed"
     with owner.operations.transaction() as db:
