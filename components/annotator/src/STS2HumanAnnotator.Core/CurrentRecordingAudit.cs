@@ -26,6 +26,8 @@ public static class RecordingSessionAuditor
             Add(errors, "manifest_capture_profile_mismatch");
         if (manifest?.DispositionSchemaVersion is not (null or 1))
             Add(errors, "invalidation_disposition_schema_mismatch");
+        if (manifest?.ContinuousSchemaVersion is not (null or 1))
+            Add(errors, "continuous_recording_schema_invalid");
         if (manifest?.CloseSchemaVersion is not (null or 1))
             Add(errors, "session_close_schema_invalid");
         if (profile != null)
@@ -92,6 +94,13 @@ public static class RecordingSessionAuditor
             }
         }
 
+        if (manifest != null)
+        {
+            try { InterruptedRecordingRecovery.Validate(directory, manifest); }
+            catch (Exception exception) when (exception is IOException or InvalidDataException or JsonException or InvalidOperationException
+                or ArgumentException or KeyNotFoundException or UnauthorizedAccessException)
+            { Add(errors, "recording_recovery_invalid"); }
+        }
         ValidateJournal(directory, manifest, errors);
         IReadOnlyList<SemanticBoundaryTraceEvent> semanticEvents = ValidateSemanticBoundaryTrace(
             directory,
@@ -107,7 +116,8 @@ public static class RecordingSessionAuditor
             ValidateProofProjectionCoverage(directory, profile!, semanticEvents, errors);
         if (decisionPaths.Length == 0
             && (errors.Count != 0 || !(HasOnlyOmittedLegacyProjections(directory)
-                || HasOnlyNonCanonicalOccurrences(directory, manifest, semanticEvents))))
+                || HasOnlyNonCanonicalOccurrences(directory, manifest, semanticEvents)
+                || IsEmptyContinuousSession(directory, manifest, semanticEvents))))
             Add(errors, "decision_file_missing");
         return new RecordingAuditResult(
             errors.Count == 0 && invalid == 0 ? "pass" : "fail",
@@ -183,6 +193,20 @@ public static class RecordingSessionAuditor
         return File.Exists(path) && Lines(path).Any(line =>
             JsonSerializer.Deserialize<InvalidationRecord>(line.Line, EvidenceJson.Options)
                 ?.HumanOccurrence?.Disposition == "failed_closed");
+    }
+
+    private static bool IsEmptyContinuousSession(string directory, CurrentRecordingManifest? manifest,
+        IReadOnlyList<SemanticBoundaryTraceEvent> events)
+    {
+        // Continuous recording can be armed and stopped entirely in the menu.
+        // Explicit empty streams are required; missing promised rows still fail.
+        return manifest?.ContinuousSchemaVersion == 1 && manifest.DispositionSchemaVersion == 1
+            && events.Count == 0
+            && new[] { "canonical-transitions.jsonl", "semantic-boundary-trace.jsonl", "invalidations.jsonl" }
+                .All(name => File.Exists(Path.Combine(directory, name)) && !Lines(Path.Combine(directory, name)).Any())
+            && !Lines(Path.Combine(directory, "run-journal.jsonl")).Any(line =>
+                JsonSerializer.Deserialize<RunJournalEvent>(line.Line, EvidenceJson.Options)!.Kind is
+                    "canonical_transition_recorded" or "current_decision_projection_omitted" or "decision_recorded");
     }
 
     private static bool HasOnlyOmittedLegacyProjections(string directory)
@@ -644,7 +668,7 @@ public static class RecordingSessionAuditor
                     || !DateTimeOffset.TryParse(receipt?["closed_at"]?.GetValue<string>(), out _))
                     Add(errors, "session_close_receipt_invalid_or_missing");
             }
-            catch (Exception exception) when (exception is IOException or JsonException or InvalidOperationException)
+            catch (Exception exception) when (exception is IOException or InvalidDataException or JsonException or InvalidOperationException)
             {
                 Add(errors, "session_close_receipt_invalid_or_missing");
             }
@@ -860,7 +884,7 @@ public static class RecordingSessionAuditor
             return frame;
         }
         catch (Exception exception) when (
-            exception is IOException or JsonException or InvalidDataException)
+            exception is IOException or InvalidDataException or JsonException or InvalidDataException)
         {
             Add(errors, "semantic_frame_invalid");
             return null;
@@ -921,7 +945,7 @@ public static class RecordingSessionAuditor
         {
             return JsonSerializer.Deserialize<T>(File.ReadAllText(path), EvidenceJson.Options);
         }
-        catch (Exception exception) when (exception is IOException or JsonException)
+        catch (Exception exception) when (exception is IOException or InvalidDataException or JsonException)
         {
             Add(errors, error);
             return default;

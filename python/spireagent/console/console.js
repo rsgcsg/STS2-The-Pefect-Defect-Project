@@ -614,7 +614,7 @@ function detail(data) {
         ["原生恢复次数", number(run.native_resumes)],
         [
           "结果",
-          { victory: "胜利", defeat: "自然败北", natural_defeat: "自然败北" }[
+          { victory: "胜利", defeat: "失败", natural_defeat: "自然败北", abandoned: "放弃" }[
             run.outcome
           ] ||
             run.outcome ||

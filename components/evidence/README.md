@@ -106,3 +106,14 @@ not certify uninterrupted Full-Run coverage or research admission.
 The [delivery status projection](DELIVERY.md#application-status-projection)
 publishes bounded local lists, exact remote IDs, parsed receipts and global
 quality counts without exposing local paths, raw data or transport credentials.
+
+
+### Interrupted recording delivery
+
+Collection tools that declare `interrupted_recovery_schema` can recover unlocked,
+explicitly versioned sessions into `outbox/recovered-recordings`. Original files
+remain unchanged. Hidden staging directories never enter delivery. The independent
+bundle verifier checks the original inventory/prefix hashes and unknown-only
+closure; corrupt or torn input remains an incident. Completed-generation checks
+also bind the retained original to its recovered copy. Recovery does not establish
+Human origin, a native terminal or complete sequence coverage.

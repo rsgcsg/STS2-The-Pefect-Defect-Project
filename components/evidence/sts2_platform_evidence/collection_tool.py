@@ -93,6 +93,28 @@ class CollectionTool:
         """Inspect the current native destination through the fixed Game Mod owner."""
         return self._setup("status", recordings_root, game_directory, mod_provenance, node)
 
+    def recover_interrupted(self, recordings: Path, recovered: Path) -> dict[str, Any]:
+        """The fixed recorder owner acquires the original session lease and seals a copy."""
+        manifest = self.verify()
+        schema = "sts2.human-annotator/interrupted-recovery-1"
+        if manifest["identity"].get("interrupted_recovery_schema") != schema:
+            return {"schema": schema, "status": "unsupported"}
+        try:
+            result = subprocess.run(
+                [self.dotnet, str(self.directory / manifest["identity"]["entrypoint"]),
+                 "recover-interrupted", str(recordings), str(recovered)],
+                capture_output=True, text=True, timeout=120, check=False,
+            )
+        except subprocess.TimeoutExpired:
+            raise CollectionFailure("interrupted recovery exceeded bounded runtime") from None
+        if result.returncode != 0:
+            raise CollectionFailure("interrupted recovery requires review", result.stderr[-16384:])
+        value = json.loads(result.stdout)
+        if (not isinstance(value, dict) or value.get("schema") != schema
+                or value.get("status") not in {"recovered", "incident", "idle"}):
+            raise CollectionFailure("invalid interrupted recovery result")
+        return value
+
     def bind_recording_root(self, *, recordings_root: str | Path, game_directory: str | Path | None = None,
                             mod_provenance: str | Path | None = None, node: str = "node") -> dict[str, Any]:
         """Bind only while STS2 is stopped; preserve old evidence and unrelated config."""

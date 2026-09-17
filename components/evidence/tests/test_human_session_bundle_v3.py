@@ -200,6 +200,57 @@ class HumanSessionBundleV3Tests(unittest.TestCase):
         self._change_catalog(bundle, "human_native_action_key", "wrong-input")
         self.assertEqual(verify_human_session_bundle(bundle).findings[0].code, "native_input_binding_mismatch")
 
+    def _recover_bundle(self, bundle: Path) -> None:
+        raw = bundle / "raw"
+        recording = json.loads((raw / "recording-manifest.json").read_text())
+        recording.update(recovery_schema_version=1, close_schema_version=1)
+        self._write(raw / "recording-manifest.json", recording)
+        trace = self._rows(raw / "semantic-boundary-trace.jsonl")[:1]
+        journal = self._rows(raw / "run-journal.jsonl")[:1]
+        self._stream(raw / "semantic-boundary-trace.jsonl", trace)
+        self._stream(raw / "run-journal.jsonl", journal)
+        (raw / "session-close-receipt.json").unlink(missing_ok=True)
+        inventory = {p.relative_to(raw).as_posix(): {"bytes": p.stat().st_size, "sha256": sha_file(p)}
+                     for p in raw.rglob("*") if p.is_file()}
+        identity = sha_bytes(canonical(inventory).encode())
+        from sts2_platform_evidence.interrupted_recovery import SCHEMA
+        self._write(raw / "recording-recovery.json", {
+            "schema": SCHEMA, "original_inventory_sha256": identity, "original_files": inventory,
+            "disposition": "interrupted_partial", "unknowns_added": 1})
+        self._write(raw / "session-close-receipt.json", {
+            "schema": "sts2.human-annotator/session-close-1", "session_id": recording["session_id"],
+            "timeline_id": recording["timeline_id"], "closed_at": "2026-09-17T01:00:00Z",
+            "status": "closed", "recovery": SCHEMA})
+        self._stream(raw / "semantic-boundary-trace.jsonl", trace + [trace[0] | {
+            "sequence": 2, "kind": "transition_unknown", "proof_status": "process_interrupted"}])
+        self._stream(raw / "run-journal.jsonl", journal + [journal[0] | {
+            "sequence": 2, "kind": "recording_interrupted",
+            "detail": "Offline recovery of immutable source inventory " + identity},
+            journal[0] | {"sequence": 3, "kind": "session_closed"}])
+        self._reseal(bundle)
+
+    def test_recovered_unknown_only_bundle_preserves_prefix_and_rejects_tampering(self) -> None:
+        bundle = self._bundle(failed_only=True)
+        raw = bundle / "raw"
+        self._recover_bundle(bundle)
+        result = verify_human_session_bundle(bundle)
+        self.assertEqual(result.status, "pass", result.findings)
+        self.assertEqual(result.require_value().summary["recovery"]["disposition"], "interrupted_partial")
+        # Rehashing the outer bundle must not launder changed original bytes.
+        with (raw / "capture-profile.json").open("a") as file:
+            file.write(" ")
+        self._reseal(bundle)
+        self.assertEqual(verify_human_session_bundle(bundle).findings[0].code, "recording_recovery_invalid")
+
+    def test_recovery_marker_without_provenance_is_rejected(self) -> None:
+        bundle = self._bundle(failed_only=True)
+        path = bundle / "raw" / "semantic-boundary-trace.jsonl"
+        trace = self._rows(path)
+        trace[-1]["proof_status"] = "process_interrupted"
+        self._stream(path, trace)
+        self._reseal(bundle)
+        self.assertEqual(verify_human_session_bundle(bundle).findings[0].code, "recording_recovery_invalid")
+
     def _change_catalog(self, bundle: Path, key: str, value: Any) -> None:
         raw = bundle / "raw"
         path = next((raw / "semantic-action-spaces").rglob("*.json"))

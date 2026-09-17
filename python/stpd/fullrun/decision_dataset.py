@@ -181,6 +181,12 @@ def _runs(projection: SourceProjection) -> list[dict[str, Any]]:
                 "RunManager.OnEnded(isVictory=true)": "win",
                 "RunManager.OnEnded(isVictory=false)": "loss",
             }.get(ends[0].get("detail"), "unknown")
+            if outcome == "loss" and any(
+                e["kind"] == "run_abandoned_native"
+                and e.get("detail") == "RunManager.OnEnded observed IsAbandoned=true."
+                for e in journal
+            ):
+                outcome = "abandoned"
         failures = {
             o["action"]["action_witness_id"]
             for o in ledger

@@ -166,6 +166,23 @@ internal sealed class PlatformLiveActionAggregation
 /// </summary>
 internal static class PlatformLiveActionFeed
 {
+    internal static string FormatRun(RecordingApplicationStatus status)
+    {
+        ContinuousRecordingStatus? run = status.Continuous;
+        if (run == null) return status.Lifecycle.State.ToString();
+        string outcome = run.Outcome switch
+        {
+            "victory" => "胜利", "defeat" => "失败", "abandoned" => "放弃", _ => "未完"
+        };
+        if (run.SealState == "sealed")
+            return $"{(run.Armed ? "等待下一局" : "已停止")} · {outcome} · {(run.BoundaryComplete ? "起止齐全" : "片段")} · 已封存 {run.SealedSegments} 段";
+        if (run.SealState == "sealing") return "正在封存本局";
+        if (status.Lifecycle.State == RecordingLifecycleState.Paused) return "录制已暂停 · 本局有缺口";
+        if (run.NativeStartObserved) return "本局录制中 · 已记录开局";
+        if (run.Resumed) return "继续存档 · 录制本段";
+        return run.Armed ? "录制已开启 · 等待开局 / 记录当前片段" : "录制未开启";
+    }
+
     internal const int MaxEntries = 24;
 
     internal static string FormatCounters(RecordingCounters counters)

@@ -1084,7 +1084,7 @@ window.SpireProject = (() => {
     const data = await request(ctx, member("games"));
     const box = panel("对局与片段", `已整理 ${data.profiled_recordings ?? "未知"} / ${data.shared_recordings ?? "未知"} 份共享录制。待整理 ${data.pending_profiles ?? "未知"}，整理失败 ${data.failed_profiles ?? "未知"}。上传次数不等于独立局数；跨录制只按已证明身份归并。`);
     box.append(el("p", "完整局：原生开局到胜利或失败终局都有记录，且中途没有已知录制间断。胜负、技术失败与严格训练序列条件分别判断。Close 只封存录制，不是游戏终局。", "banner"));
-    box.append(table(["局身份", "对局边界", "录制连续性", "游戏结果", "严格序列条件", "录入 / 接受", "来源数"], (data.items || []).map(r => [r.run_id, boundaryLabel(r.coverage), continuityLabel(r.coverage), r.outcome === "win" ? "胜利" : r.outcome === "loss" ? "失败" : "未知", r.complete ? "满足" : "未满足", `${r.canonical} / ${r.accepted}`, r.uploads.length])));
+    box.append(table(["局身份", "对局边界", "录制连续性", "游戏结果", "严格序列条件", "录入 / 接受", "来源数"], (data.items || []).map(r => [r.run_id, boundaryLabel(r.coverage), continuityLabel(r.coverage), r.outcome === "win" ? "胜利" : r.outcome === "loss" ? "失败" : r.outcome === "abandoned" ? "放弃" : "未知", r.complete ? "满足" : "未满足", `${r.canonical} / ${r.accepted}`, r.uploads.length])));
     for (const failed of data.failures || []) {
       box.append(el("p", `整理失败：${failed.error}`), command(ctx, `retry-profile-${failed.id}`, "重试此整理任务", async () => {
         await request(ctx, member(`datasets/${failed.id}/retry`), {}); await reload(ctx);
@@ -1436,7 +1436,7 @@ window.SpireProject = (() => {
         if (categories.length) report.append(table(["分类", "内容与决策数", "未知"], categories));
         if (Array.isArray(job.result.runs)) report.append(table(["对局 / 片段", "对局边界", "录制连续性", "游戏结果", "严格序列条件", "录入 / 接受"], job.result.runs.map(r => {
           const coverage = (job.result.run_coverage || []).find(c => c.run_id === r.run_id);
-          return [r.run_id, boundaryLabel(coverage), continuityLabel(coverage), r.outcome === "win" ? "胜利" : r.outcome === "loss" ? "失败" : "未知", r.complete ? "满足" : "未满足", `${r.canonical} / ${r.accepted}`];
+          return [r.run_id, boundaryLabel(coverage), continuityLabel(coverage), r.outcome === "win" ? "胜利" : r.outcome === "loss" ? "失败" : r.outcome === "abandoned" ? "放弃" : "未知", r.complete ? "满足" : "未满足", `${r.canonical} / ${r.accepted}`];
         })));
 
         if (job.result.exclusion_counts) report.append(table(["排除原因", "数量"], Object.entries(job.result.exclusion_counts)));

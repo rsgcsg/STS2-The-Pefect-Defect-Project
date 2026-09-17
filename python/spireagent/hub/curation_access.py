@@ -50,8 +50,10 @@ def guarded_runs(
                     "curation", "held_out_data_cannot_train" if training else "gold_reserved_data"
                 )
             runs.update(selected_runs)
-            # Exact registered selections do not expose their unselected source rows.
-            continue
+            # Only the compact current receipt omits unselected source context.
+            # Legacy reports can contain complete source accounting.
+            if info.get("schema") == "stpd/curated-decision-dataset-v1":
+                continue
         if info.get("schema") == "stpd/received-bundle-v1":
             if sources is not None:
                 sources.add(item.artifact_id)
