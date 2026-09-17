@@ -44,6 +44,40 @@ def test_immutable_publication_and_reprojection(tmp_path: Path) -> None:
         publish(owner.store, (source,), rules, owner.producer, "f" * 64)
 
 
+def test_selection_statistics_and_manifest_do_not_redecode_game_payloads(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from dataclasses import replace
+
+    from stpd.fullrun.contracts import ResearchTransitionV2
+    from stpd.fullrun.curated_dataset import curate, publish_selection
+    from stpd.fullrun.data import split_run_fingerprints, split_whole_runs
+    from stpd.fullrun.decision_dataset import _facets
+    from stpd.fullrun.decision_spool import SpoolSelection
+
+    owner, _, source, _ = setup(tmp_path)
+    rules = SelectionRules()
+    selected = preview(owner.store, (source,), rules)
+    materialized = replace(selected, records=tuple(selected.records))
+    expected = curate(materialized, "training", {"revision": 0, "items": {}})
+    assert isinstance(selected.records, SpoolSelection)
+    assert split_whole_runs(materialized.records, 0) == split_run_fingerprints(
+        ((r["run_id"], r["fingerprint"]) for r in selected.records.summaries()), 0,
+    )
+    expected_id = expected.logical_id
+    source_id = materialized.logical_id
+    facets = _facets(materialized.records, selected.report.value()["environments"])
+    monkeypatch.setattr(ResearchTransitionV2, "decode",
+                        lambda *args: pytest.fail("full game payload decoded again"))
+    assert selected.logical_id == source_id
+    assert _facets(selected.records, selected.report.value()["environments"]) == facets
+    curated = curate(selected, "training", {"revision": 0, "items": {}})
+    assert curated.logical_id == expected_id
+    manifest = publish_selection(owner.store, (source,), rules, owner.producer, curated,
+                                 merging=False, expected=expected_id, paired_training=None)
+    assert manifest.parameters.value()["logical_id"] == expected_id
+
+
 def test_preview_then_build_job_and_revocation(tmp_path: Path) -> None:
     owner, upload, _, jobs = setup(tmp_path)
     body = {

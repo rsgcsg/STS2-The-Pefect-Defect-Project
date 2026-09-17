@@ -84,13 +84,11 @@ class DatasetCuration:
         training = self.load(parent)
         # Legacy sets may predate the durable source index. Compare their actual
         # records too, so a missing index never becomes a false isolation PASS.
-        from stpd.fullrun.representation import decision_fingerprint
-
-        facts = {decision_fingerprint(record) for record in training.records}
-        if any(decision_fingerprint(record) in facts for record in dataset.records):
+        facts = set(training.fingerprints())
+        if any(fingerprint in facts for fingerprint in dataset.fingerprints()):
             raise BoundaryError("curation", "training_test_overlap")
         result = self.ledger.overlap(
-            (r.run_id for r in dataset.records), (r.run_id for r in training.records)
+            dataset.run_ids, training.run_ids
         )
         if result["overlap"]:
             raise BoundaryError("curation", "training_test_overlap")
@@ -151,7 +149,7 @@ class DatasetCuration:
             ),
         )
         with self.service.operations.transaction() as db:
-            related = self.ledger._groups(db, (r.run_id for r in selected.records))
+            related = self.ledger._groups(db, selected.run_ids)
             protected = any(
                 purpose == "gold" and claim != reservation
                 for claim, (purpose, _) in self.ledger._claims(db, related).items()
@@ -211,11 +209,11 @@ class DatasetCuration:
                                 "SELECT run FROM curation_claim_runs WHERE claim=?", (reservation,)
                             )
                         }
-                    if not held or held[0] != "gold" or runs != {r.run_id for r in dataset.records}:
+                    if not held or held[0] != "gold" or runs != dataset.run_ids:
                         raise BoundaryError("curation", "gold_ledger_recovery_required")
                     self.ledger.bind(reservation, identity)
                     continue
-                self.ledger.claim(identity, purpose, (r.run_id for r in dataset.records))
+                self.ledger.claim(identity, purpose, dataset.run_ids)
                 self.ledger.bind(identity, identity)
             elif schema == "stpd/fullrun-dataset-v1":
                 from stpd.fullrun.data import load_dataset
@@ -253,7 +251,7 @@ class DatasetCuration:
         self.ledger.claim(
             identity,
             spec["purpose"],
-            (r.run_id for r in dataset.records),
+            dataset.run_ids,
             gold_parents=self.gold_parents(sources)
             if "datasets" in request and spec["purpose"] == "gold"
             else (),

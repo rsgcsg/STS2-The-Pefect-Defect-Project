@@ -12,7 +12,7 @@ from .contracts import ResearchTransitionV2
 from .decision_cache import MAX_ENTRY_BYTES, VerifiedSourceCache
 from .decision_dataset import DecisionDataset, _identity
 from .decision_index import INDEX_SCHEMA
-from .decision_spool import DecisionSpool
+from .decision_spool import DecisionSpool, SpoolSelection, row_summary
 
 
 class PreviewCache:
@@ -35,9 +35,12 @@ class PreviewCache:
         refs = []
         source_keys: dict[str, str] = {}
         with self.cache._connect() as db:
-            for record in dataset.records:
+            summaries = (dataset.records.summaries()
+                         if isinstance(dataset.records, SpoolSelection)
+                         else (row_summary(_identity(r), r) for r in dataset.records))
+            for summary in summaries:
                 source = hashlib.sha256(json_bytes([
-                    INDEX_SCHEMA, self.cache.owner, record.provenance.bundle_sha256,
+                    INDEX_SCHEMA, self.cache.owner, summary["source"],
                 ])).hexdigest()
                 if source not in source_keys:
                     header = db.execute("SELECT rows_key FROM decision_source_index WHERE key=?",
@@ -48,7 +51,7 @@ class PreviewCache:
                 source = source_keys[source]
                 row = db.execute(
                     "SELECT ordinal,body FROM decision_source_rows "
-                    "WHERE source=? AND transition_id=?", (source, record.transition_id),
+                    "WHERE source=? AND transition_id=?", (source, summary["transition_id"]),
                 ).fetchone()
                 if row is None:
                     return  # Bounded source index eviction never removes source eligibility.

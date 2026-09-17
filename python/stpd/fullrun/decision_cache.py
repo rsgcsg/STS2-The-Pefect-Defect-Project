@@ -40,7 +40,11 @@ def implementation_identity() -> str:
         "decision_cache.py", "decision_index.py", "decision_dataset.py",
         "decision_preview.py", "decision_spool.py", "decision_store.py",
         "decision_union.py", "data.py",
-        "platform_bundle3.py", "contracts.py",
+        "platform_bundle3.py", "contracts.py", "representation.py",
+    ))
+    app = root.parents[1] / "spireagent"
+    files.extend(("app/" + name, app / name) for name in (
+        "encoding.py", "json_boundary.py",
     ))
     return hashlib.sha256(json_bytes([
         [name, hashlib.sha256(path.read_bytes()).hexdigest()]

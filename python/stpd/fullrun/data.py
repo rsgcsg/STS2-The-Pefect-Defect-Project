@@ -6,7 +6,7 @@ import hashlib
 import io
 import tempfile
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
 from spireagent.artifact_contracts import Manifest, Parent, Producer
@@ -43,8 +43,15 @@ class AdmittedDataset:
 
 def split_whole_runs(records: Sequence[ResearchTransitionV1], seed: int) -> FrozenObject:
     """Keep entire runs and repeated semantic decision components in a single partition."""
+    return split_run_fingerprints(
+        ((record.run_id, decision_fingerprint(record)) for record in records), seed,
+    )
+
+
+def split_run_fingerprints(rows: Iterable[tuple[str, str]], seed: int) -> FrozenObject:
+    """The same whole-run algorithm over the trusted selector's compact row index."""
     unsigned(seed, "split.seed")
-    parent = {record.run_id: record.run_id for record in records}
+    parent: dict[str, str] = {}
 
     def root(value: str) -> str:
         while parent[value] != value:
@@ -53,10 +60,10 @@ def split_whole_runs(records: Sequence[ResearchTransitionV1], seed: int) -> Froz
         return value
 
     first: dict[str, str] = {}
-    for record in records:
-        fingerprint = decision_fingerprint(record)
-        previous = first.setdefault(fingerprint, record.run_id)
-        left, right = root(previous), root(record.run_id)
+    for run_id, fingerprint in rows:
+        parent.setdefault(run_id, run_id)
+        previous = first.setdefault(fingerprint, run_id)
+        left, right = root(previous), root(run_id)
         if left != right:
             parent[max(left, right)] = min(left, right)
     groups: dict[str, list[str]] = defaultdict(list)

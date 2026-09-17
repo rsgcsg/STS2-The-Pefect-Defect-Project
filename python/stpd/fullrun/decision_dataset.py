@@ -19,7 +19,7 @@ from spireagent.json_boundary import BoundaryError, FrozenObject, object_fields,
 
 from ..canonical import canonical_json, semantic_hash
 from .contracts import ResearchTransitionV2, SourceProjection
-from .data import split_whole_runs
+from .data import split_run_fingerprints
 from .platform_bundle3 import PlatformBundle3SourceAdapter, _extract
 
 if TYPE_CHECKING:
@@ -99,14 +99,35 @@ class DecisionDataset:
     report: FrozenObject
 
     @property
+    def run_ids(self) -> set[str]:
+        from .decision_spool import SpoolSelection
+
+        if isinstance(self.records, SpoolSelection):
+            return {row["run_id"] for row in self.records.summaries()}
+        return {record.run_id for record in self.records}
+
+    def fingerprints(self) -> Iterator[str]:
+        from .decision_spool import SpoolSelection
+        from .representation import decision_fingerprint
+
+        if isinstance(self.records, SpoolSelection):
+            yield from (row["fingerprint"] for row in self.records.summaries())
+        else:
+            yield from (decision_fingerprint(record) for record in self.records)
+
+    @property
     def logical_id(self) -> str:
         # Emit the exact sorted-key canonical object one record at a time. Building
         # every decoded record and another canonical tree exhausts bounded workers.
+        from .decision_spool import SpoolSelection
+
+        rows = (self.records.canonical_rows() if isinstance(self.records, SpoolSelection)
+                else (canonical_json(r.to_dict()).encode("utf-8") for r in self.records))
         digest = hashlib.sha256(b'{"records":[')
-        for index, record in enumerate(self.records):
+        for index, row in enumerate(rows):
             if index:
                 digest.update(b",")
-            digest.update(canonical_json(record.to_dict()).encode("utf-8"))
+            digest.update(row)
         digest.update(b'],"report":')
         digest.update(self.report.encoded.encode("utf-8"))
         digest.update(b',"schema":')
@@ -360,9 +381,15 @@ def _metadata(record: ResearchTransitionV2, versions: dict[str, Any]) -> dict[st
 
 
 def _facets(records: Sequence[ResearchTransitionV2], versions: dict[str, Any]) -> dict[str, Any]:
+    from .decision_spool import SpoolSelection
+
     counters: dict[str, Counter[Any]] = {key: Counter() for key in sorted(FILTERS)}
-    for record in records:
-        metadata = _metadata(record, versions)
+    metadata_rows = (
+        (_summary_metadata(row, versions) for row in records.summaries())
+        if isinstance(records, SpoolSelection)
+        else (_metadata(record, versions) for record in records)
+    )
+    for metadata in metadata_rows:
         for key, counts in counters.items():
             value = metadata[key]
             if (key == "difficulty" and type(value) is int and value >= 0) or (
@@ -375,6 +402,14 @@ def _facets(records: Sequence[ResearchTransitionV2], versions: dict[str, Any]) -
                         for value, count in sorted(counts.items(), key=lambda x: str(x[0]))]}
         for key, counts in counters.items()
     }
+
+
+def _summary_metadata(row: dict[str, Any], versions: dict[str, Any]) -> dict[str, Any]:
+    metadata = dict(row["metadata"])
+    environment = versions.get(metadata["environment_identity"], {})
+    for component in ("game", "connector", "annotator"):
+        metadata[component + "_version"] = environment.get(component, {}).get("version")
+    return metadata
 
 
 def _select(
@@ -477,17 +512,18 @@ def _select(
             aliases[identity].append(
                 {"source_sha256": projection.source_sha256, "transition_id": record.transition_id}
             )
-            records.setdefault(identity, record)
+            if identity not in records:
+                records[identity] = record
     if seen_sources:
         del projection  # Do not retain the last expanded archive while selecting disk rows.
-    canonical_counts = Counter(r.run_id for r in records.values())
+    canonical_counts = Counter(row["run_id"] for row in records.summaries())
     for run_id, run in runs.items():
         run["accepted"] = len(accepted_ids[run_id])
         run["canonical"] = canonical_counts[run_id]
-    for identity in records:
-        record = records[identity]
-        run = runs[record.run_id]
-        metadata = _metadata(record, versions)
+    for row in records.summaries():
+        identity = row["id"]
+        run = runs[row["run_id"]]
+        metadata = _summary_metadata(row, versions)
         reason = None
         if rules.complete_only and not run["complete"]:
             reason = "incomplete_run"
@@ -506,12 +542,14 @@ def _select(
             records.select(identity)
     chosen = records.selected()
     try:
-        splits = split_whole_runs(chosen, rules.seed).value()
+        splits = split_run_fingerprints(
+            ((r["run_id"], r["fingerprint"]) for r in chosen.summaries()), rules.seed,
+        ).value()
         split_status = "assigned"
     except BoundaryError as error:
         if error.code != "insufficient_independent_run_components":
             raise
-        splits = {r.run_id: "unassigned" for r in chosen}
+        splits = {r["run_id"]: "unassigned" for r in chosen.summaries()}
         split_status = error.code
     report = {
         "schema": SCHEMA,

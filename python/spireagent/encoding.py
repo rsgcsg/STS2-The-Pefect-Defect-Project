@@ -15,6 +15,25 @@ class CanonicalizationError(ValueError):
 def to_json_value(value: Any) -> Any:
     """Convert supported immutable Python values to a JSON-compatible tree."""
 
+    # Most verified recording payloads already consist of plain JSON values.
+    # Avoid dataclass and abstract-base-class introspection on every scalar;
+    # exact types preserve the historical handling of enums and custom containers.
+    kind = type(value)
+    if value is None or kind in (str, int, bool):
+        return value
+    if kind is float:
+        if value != value or value in (float("inf"), float("-inf")):
+            raise CanonicalizationError("non-finite floats are not canonical JSON")
+        return value
+    if kind is dict:
+        converted_plain: dict[str, Any] = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise CanonicalizationError("JSON object keys must be strings")
+            converted_plain[key] = to_json_value(item)
+        return converted_plain
+    if kind is list:
+        return [to_json_value(item) for item in value]
     if is_dataclass(value) and not isinstance(value, type):
         return to_json_value(asdict(value))
     if isinstance(value, Enum):

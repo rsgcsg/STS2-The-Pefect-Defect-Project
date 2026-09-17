@@ -23,7 +23,7 @@ from spireagent.storage.store import ArtifactStore
 from ..canonical import semantic_hash
 from .decision_cache import VerifiedSourceCache
 from .decision_dataset import DecisionDataset, SelectionRules, _facets, _identity
-from .decision_spool import DecisionSpool
+from .decision_spool import DecisionSpool, SpoolSelection, row_summary
 
 SCHEMA = "stpd/curated-decision-dataset-v1"
 PURPOSES = frozenset({"training", "test", "gold"})
@@ -58,14 +58,16 @@ def curate(base: DecisionDataset, purpose: str, annotations: dict[str, Any]) -> 
     report = base.report.value()
     spool = DecisionSpool()
     excluded = list(report["excluded"])
-    for record in base.records:
-        key = _identity(record)
-        evidence = record.source_evidence.value()
+    summaries = (base.records.summaries() if isinstance(base.records, SpoolSelection)
+                 else (row_summary(_identity(r), r) for r in base.records))
+    retained: set[str] = set()
+    for row in summaries:
+        key = row["id"]
         parents = {
             semantic_hash(
                 [
-                    evidence["session_id"],
-                    evidence["native_run_id"],
+                    row["session_id"],
+                    row["native_run_id"],
                     parent["action"]["decision"]["decision_id"],
                 ]
             )
@@ -81,10 +83,17 @@ def curate(base: DecisionDataset, purpose: str, annotations: dict[str, Any]) -> 
                 }
             )
         else:
-            spool[key] = record
-            spool.select(key)
+            retained.add(key)
+    if isinstance(base.records, SpoolSelection):
+        spool.copy_selected(base.records, retained)
+    else:
+        for record in base.records:
+            key = _identity(record)
+            if key in retained:
+                spool[key] = record
+                spool.select(key)
     records = spool.selected()
-    selected_runs = {record.run_id for record in records}
+    selected_runs = {row["run_id"] for row in records.summaries()}
     if purpose in {"test", "gold"}:
         splits = {run: "test" if purpose == "test" else "gold_test" for run in selected_runs}
         split_status = "purpose_assigned"
@@ -157,7 +166,7 @@ def publish_selection(
                 "merging": merging,
                 "paired_training": paired_training,
                 "records": len(dataset.records),
-                "runs": len({r.run_id for r in dataset.records}),
+                "runs": len(report["splits"]),
                 "scope": "platform_verified",
                 "split_status": report["split_status"],
                 "materialization": "on_demand",

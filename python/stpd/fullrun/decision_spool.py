@@ -7,11 +7,13 @@ import sqlite3
 import tempfile
 from collections.abc import Iterator, MutableMapping, Sequence
 from pathlib import Path
-from typing import overload
+from typing import Any, overload
 
 from spireagent.json_boundary import BoundaryError
+from stpd.canonical import canonical_json
 
 from .contracts import ResearchTransitionV2
+from .representation import decision_fingerprint
 
 
 class DecisionSpool(MutableMapping[str, ResearchTransitionV2]):
@@ -27,7 +29,8 @@ class DecisionSpool(MutableMapping[str, ResearchTransitionV2]):
         self.db.execute("PRAGMA cache_size=-2048")
         self.db.execute("PRAGMA temp_store=FILE")
         self.db.execute("CREATE TABLE records(id TEXT PRIMARY KEY,run TEXT,sequence INTEGER,"
-                        "body TEXT NOT NULL,selected INTEGER NOT NULL DEFAULT 0)")
+                        "body TEXT NOT NULL,summary TEXT NOT NULL,"
+                        "selected INTEGER NOT NULL DEFAULT 0)")
 
     def __getitem__(self, key: str) -> ResearchTransitionV2:
         row = self.db.execute("SELECT body FROM records WHERE id=?", (key,)).fetchone()
@@ -36,9 +39,24 @@ class DecisionSpool(MutableMapping[str, ResearchTransitionV2]):
         return ResearchTransitionV2.decode(json.loads(row[0]))
 
     def __setitem__(self, key: str, value: ResearchTransitionV2) -> None:
-        self.db.execute("INSERT OR REPLACE INTO records(id,run,sequence,body) VALUES(?,?,?,?)",
+        self.db.execute("INSERT OR REPLACE INTO records(id,run,sequence,body,summary) "
+                        "VALUES(?,?,?,?,?)",
                         (key, value.run_id, value.source_evidence.value()["action_sequence"],
-                         json.dumps(value.to_dict(), separators=(",", ":"))))
+                         canonical_json(value.to_dict()), json.dumps(row_summary(key, value))))
+
+    def summaries(self, *, selected: bool = False) -> Iterator[dict[str, Any]]:
+        clause = " WHERE selected=1" if selected else ""
+        for row in self.db.execute("SELECT summary FROM records" + clause +
+                                   " ORDER BY run,sequence,id"):
+            yield json.loads(row[0])
+
+    def copy_selected(self, source: SpoolSelection, keys: set[str]) -> None:
+        """Copy already validated private rows without decoding their full game states."""
+        for row in source.owner.db.execute(
+            "SELECT id,run,sequence,body,summary FROM records WHERE selected=1"
+        ):
+            if row[0] in keys:
+                self.db.execute("INSERT INTO records VALUES(?,?,?,?,?,1)", row)
 
     def __delitem__(self, key: str) -> None:
         if not self.db.execute("DELETE FROM records WHERE id=?", (key,)).rowcount:
@@ -50,6 +68,11 @@ class DecisionSpool(MutableMapping[str, ResearchTransitionV2]):
 
     def __len__(self) -> int:
         return int(self.db.execute("SELECT count(*) FROM records").fetchone()[0])
+
+    def __contains__(self, key: object) -> bool:
+        return isinstance(key, str) and self.db.execute(
+            "SELECT 1 FROM records WHERE id=?", (key,),
+        ).fetchone() is not None
 
     def select(self, key: str) -> None:
         self.db.execute("UPDATE records SET selected=1 WHERE id=?", (key,))
@@ -75,6 +98,15 @@ class SpoolSelection(Sequence[ResearchTransitionV2]):
 
     def __len__(self) -> int:
         return self.size
+
+    def summaries(self) -> Iterator[dict[str, Any]]:
+        return self.owner.summaries(selected=True)
+
+    def canonical_rows(self) -> Iterator[bytes]:
+        for row in self.owner.db.execute(
+            "SELECT body FROM records WHERE selected=1 ORDER BY run,sequence,id"
+        ):
+            yield row[0].encode("utf-8")
 
     def __iter__(self) -> Iterator[ResearchTransitionV2]:
         for row in self.owner.db.execute(
@@ -108,3 +140,21 @@ class SpoolSelection(Sequence[ResearchTransitionV2]):
     def __eq__(self, other: object) -> bool:
         return (isinstance(other, Sequence) and len(self) == len(other)
                 and all(a == b for a, b in zip(self, other, strict=True)))
+
+
+def row_summary(key: str, record: ResearchTransitionV2) -> dict[str, Any]:
+    """Derived only from a typed row, never accepted from a request or artifact."""
+    evidence = record.source_evidence.value()
+    return {
+        "id": key, "run_id": record.run_id, "transition_id": record.transition_id,
+        "source": record.provenance.bundle_sha256,
+        "session_id": evidence["session_id"], "native_run_id": evidence["native_run_id"],
+        "fingerprint": decision_fingerprint(record),
+        "metadata": {
+            "environment_identity": record.provenance.environment_identity,
+            "character": record.state.run.value().get("character"),
+            "difficulty": record.state.run.value().get("ascension"),
+            "family": record.family, "surface": record.surface,
+            "decision_kind": record.occurrence.value()["decision_kind"],
+        },
+    }
