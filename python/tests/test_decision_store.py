@@ -570,3 +570,88 @@ def test_cancel_is_not_allowed_during_manifest_publication(tmp_path: Path) -> No
     with pytest.raises(BoundaryError, match="publication_already_started"):
         jobs.cancel(MEMBER, job["id"], {})
     assert jobs.read(MEMBER, job["id"])["state"] == "running"
+
+
+def test_large_cold_selection_checkpoints_without_restarting_verified_sources(
+    tmp_path, monkeypatch
+):
+    from unittest.mock import patch
+
+    from stpd.fullrun.platform_bundle3 import PlatformBundle3SourceAdapter
+
+    owner, upload, source, jobs = setup(tmp_path)
+    uploads = [upload]
+    for number in (2, 3):
+        bundle = bundle3(tmp_path / str(number), runs=number + 3)
+        new, _ = received(
+            owner,
+            archive_bundle(bundle),
+            number=number,
+            content_id=load_json(bundle / "session-bundle-manifest.json")["bundle_content_id"],
+        )
+        uploads.append(new)
+    monkeypatch.setattr("spireagent.hub.decision_jobs.SOURCE_PREPARATION_BATCH", 1)
+    identity = jobs.create(
+        MEMBER,
+        {
+            "uploads": uploads,
+            "rules": SelectionRules().to_dict(),
+            "preview_id": None,
+            "name": "checkpoint",
+        },
+    )["id"]
+    original = PlatformBundle3SourceAdapter.project
+    with patch.object(
+        PlatformBundle3SourceAdapter, "project", autospec=True, side_effect=original
+    ) as verify:
+        for completed in (1, 2, 3):
+            jobs.run(identity)
+            status = jobs.read(MEMBER, identity)
+            assert status["state"] == "pending"
+            assert status["progress"]["completed"] == completed
+            assert verify.call_count == completed
+        jobs.run(identity)
+        assert jobs.read(MEMBER, identity)["state"] == "completed"
+        assert verify.call_count == 3
+    with owner.operations.transaction() as db:
+        assert not db.execute(
+            "SELECT 1 FROM sqlite_master WHERE name='decision_source_rows'"
+        ).fetchone()
+    # All duplicate exports remain governed by the normal deduplication algorithm.
+    assert jobs.read(MEMBER, identity)["result"]["selected"] == 12
+
+
+@pytest.mark.parametrize("change", ["cancel", "revoke"])
+def test_checkpoint_rechecks_authority_before_next_batch(tmp_path, monkeypatch, change):
+    owner, upload, _, jobs = setup(tmp_path)
+    bundle = bundle3(tmp_path / "second", runs=4)
+    second, _ = received(
+        owner,
+        archive_bundle(bundle),
+        number=2,
+        content_id=load_json(bundle / "session-bundle-manifest.json")["bundle_content_id"],
+    )
+    monkeypatch.setattr("spireagent.hub.decision_jobs.SOURCE_PREPARATION_BATCH", 1)
+    identity = jobs.create(
+        MEMBER,
+        {
+            "uploads": [upload, second],
+            "rules": SelectionRules().to_dict(),
+            "preview_id": None,
+            "name": "checkpoint",
+        },
+    )["id"]
+    jobs.run(identity)
+    assert jobs.read(MEMBER, identity)["state"] == "pending"
+    if change == "cancel":
+        jobs.cancel(MEMBER, identity, {})
+    else:
+        with owner.operations.transaction() as db:
+            db.execute(
+                "UPDATE identity_members SET status='disabled' WHERE subject=?", (MEMBER.subject,)
+            )
+    jobs.run(identity)
+    status = jobs.read(MEMBER, identity)
+    assert status["state"] == ("cancelled" if change == "cancel" else "failed")
+    if change == "revoke":
+        assert status["error"] == "membership_not_authorized"

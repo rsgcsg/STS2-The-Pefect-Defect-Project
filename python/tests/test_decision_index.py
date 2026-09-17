@@ -18,7 +18,7 @@ def test_warm_source_index_skips_archive_download_but_rechecks_rows(tmp_path: Pa
     with patch.object(owner.store, "read_payload", side_effect=AssertionError("downloaded again")):
         assert preview(owner.store, (source,), SelectionRules(), cache=cache) == original
     assert cache.hits == 1
-    with owner.operations.transaction() as db:
+    with cache._connect() as db:
         db.execute("DELETE FROM decision_source_rows WHERE ordinal=1")
     project = PlatformBundle3SourceAdapter.project
     with patch.object(PlatformBundle3SourceAdapter, "project", autospec=True,
@@ -31,14 +31,14 @@ def test_failed_index_transaction_never_reuses_partial_rows(tmp_path: Path) -> N
     owner, _, source, _ = setup(tmp_path)
     cache = VerifiedSourceCache(owner.operations.path, "owner")
     original = preview(owner.store, (source,), SelectionRules(), cache=cache)
-    with owner.operations.transaction() as db:
+    with cache._connect() as db:
         db.execute("DELETE FROM decision_source_index")
     project = PlatformBundle3SourceAdapter.project
     with patch.object(PlatformBundle3SourceAdapter, "project", autospec=True,
                       side_effect=project) as verify:
         assert preview(owner.store, (source,), SelectionRules(), cache=cache) == original
     assert verify.call_count == 1 and cache.hits == 0
-    with owner.operations.transaction() as db:
+    with cache._connect() as db:
         assert db.execute("SELECT count(*) FROM decision_source_rows").fetchone()[0] == 6
 
 
@@ -57,7 +57,7 @@ def test_confirmation_reuses_fixed_selection_without_reprojecting_or_selecting(
     assert cache.preview_hits == 1
     assert load(owner.store, manifest.artifact_id)[1] == selected
     # Deletion of disposable acceleration is a fallback, not a new selection identity.
-    with owner.operations.transaction() as db:
+    with cache._connect() as db:
         db.execute("DELETE FROM decision_source_rows")
     manifest2 = publish(owner.store, (source,), rules, owner.producer,
                         selected.logical_id, cache=cache)

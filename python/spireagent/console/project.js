@@ -1408,7 +1408,7 @@ window.SpireProject = (() => {
       row.dataset.refreshKey = job.id;
       datasetSnapshots.set(row, JSON.stringify(job));
       if (job.progress && ["pending", "running"].includes(job.state)) {
-        const phases = {checking_access:"核对来源", reading_sources:"读取来源", verifying_sources:"校验并整理", loading_selected_datasets:"读取已选数据", union_selected_decisions:"合并与去重", publishing_dataset:"保存固定版本", preparing_isolation:"建立隔离索引", preparing_download:"准备完整下载文件"};
+        const phases = {checking_access:"核对来源", preparing_sources:"分批准备来源", reading_sources:"读取来源", verifying_sources:"校验并整理", loading_selected_datasets:"读取已选数据", union_selected_decisions:"合并与去重", publishing_dataset:"保存固定版本", preparing_isolation:"建立隔离索引", preparing_download:"准备完整下载文件"};
         row.append(el("p", `${phases[job.progress.phase] || show(job.progress.phase)} · ${count(job.progress.completed)} / ${count(job.progress.total)} 个来源 · ${Number(job.progress.elapsed_seconds || 0).toFixed(1)} 秒`));
       }
       if (job.error) row.append(el("p", failure({message:job.error}), "banner error"));

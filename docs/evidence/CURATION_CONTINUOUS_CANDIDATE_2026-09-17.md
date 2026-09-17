@@ -60,3 +60,28 @@ keep affected data access paused until a compatible enforcing image is restored.
 Raw recordings, old artifacts, reservations and pending delivery identities stay
 intact. No GPU, paid training, Windows/Linux native installation, complete-game
 policy result or scientific qualification is claimed.
+
+## Linux capacity finding and follow-up
+
+An isolated existing-VPS container (one CPU, 1536 MiB address-space and memory
+limits, 600 CPU seconds) read 37 verified archives totaling 86,053,480 compressed
+bytes. The first cold preview did not complete: 34 sources were indexed before
+the process reached its CPU resource limit. Observed RSS stayed below 600 MiB.
+This is a failed capacity qualification, not a passing production measurement.
+
+The follow-up prepares at most four cold source indexes per worker invocation,
+then checkpoints the same job back to pending. Each continuation rechecks member
+and source access. A warm invocation performs selection/publication; failed or
+unknown publication is never automatically retried. Cancellation/attempt fencing
+stays in force. The private source index now has a 1 GiB logical quota in a
+separate mode-0600 disposable SQLite file, avoiding authority-database backup
+bloat and long cache readers blocking account/heartbeat writers. If a selection
+cannot make forward progress within that quota, it fails explicitly rather than
+looping indefinitely. Full large-selection qualification must be repeated.
+
+The local `427c646` kit passed install, cold-loaded identity and collection-upgrade
+activation with the existing enrollment and device. Fourteen predecessor sessions
+were sealed and delivery-complete; their originals and outbox remain unchanged.
+The prior activation failure was a stale Evidence pin in combination-v1, corrected
+to the pyproject/uv.lock pin with a regression. Native gameplay has not been
+performed by the agent and fresh Human recording remains a separate gate.

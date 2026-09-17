@@ -21,9 +21,12 @@ from stpd.fullrun.contracts import SourceProjection
 from stpd.fullrun.curated_dataset import SCHEMA as CURATED_SCHEMA
 from stpd.fullrun.decision_cache import VerifiedSourceCache
 from stpd.fullrun.decision_dataset import SelectionRules
+from stpd.fullrun.decision_index import index_ready, resolve_payload
 from stpd.fullrun.decision_store import preview, preview_union, publish, publish_union
 from stpd.fullrun.decision_union import UNION_SCHEMA
 from stpd.fullrun.run_coverage import summarize_run_coverage
+
+SOURCE_PREPARATION_BATCH = 4
 
 
 def _run_summary(run: dict[str, Any]) -> dict[str, Any]:
@@ -486,6 +489,8 @@ class DecisionJobs:
             attempt = db.execute("SELECT attempt FROM decision_job_execution WHERE id=?",
                                  (identity,)).fetchone()[0]
         started = time.monotonic()
+        prior_elapsed = json.loads(row["result"] or "{}").get("progress", {}).get(
+            "elapsed_seconds", 0)
         cache = VerifiedSourceCache(
             self.service.operations.path, semantic_hash(self.service.producer.to_dict())
         )
@@ -493,7 +498,8 @@ class DecisionJobs:
         def progress(phase: str, completed: int, total: int) -> None:
             value = {"progress": {
                 "phase": phase, "completed": completed, "total": total,
-                "observed_at": time.time(), "elapsed_seconds": time.monotonic() - started,
+                "observed_at": time.time(),
+                "elapsed_seconds": prior_elapsed + time.monotonic() - started,
                 **cache.metrics(),
             }}
             with self.service.operations.transaction() as db:
@@ -542,6 +548,32 @@ class DecisionJobs:
                                 and request["expected"] is None
                                 and "datasets" not in request)
             sources = self._inputs(request, receiver_profile=receiver_profile)
+            # A large cold selection is several bounded preparation invocations,
+            # then one warm selection. Requeue is an explicit checkpoint, never
+            # an automatic retry of unknown publication or failed evidence.
+            if "datasets" not in request and len(sources) > SOURCE_PREPARATION_BATCH:
+                missing = [s for s in sources if not index_ready(cache, s.payload("archive"))]
+                for source in missing[:SOURCE_PREPARATION_BATCH]:
+                    progress("preparing_sources", len(sources) - len(missing), len(sources))
+                    projection, _ = resolve_payload(
+                        cache, self.service.store, source.payload("archive"))
+                    self.curation.index_source(source.artifact_id, projection)
+                    del projection
+                    if not index_ready(cache, source.payload("archive")):
+                        raise BoundaryError("decision_job", "selection_index_capacity")
+                if missing:
+                    remaining = sum(not index_ready(cache, s.payload("archive")) for s in sources)
+                    if remaining >= len(missing):
+                        raise BoundaryError("decision_job", "selection_index_capacity")
+                    progress("preparing_sources", len(sources) - remaining, len(sources))
+                    with self.service.operations.transaction() as db:
+                        db.execute(
+                            "UPDATE decision_jobs SET state='pending',updated=? "
+                            "WHERE id=? AND state='running' AND EXISTS "
+                            "(SELECT 1 FROM decision_job_execution e WHERE e.id=decision_jobs.id "
+                            "AND e.attempt=?)", (time.time(), identity, attempt),
+                        )
+                    return
             rules = SelectionRules.decode(request["rules"])
             merging = "datasets" in request
             coverage: dict[str, Any] = {}
@@ -577,7 +609,7 @@ class DecisionJobs:
                                       cache=cache, progress=progress,
                                       on_projection=collect_coverage)
                 report = dataset.report.value()
-                selected_runs = {r.run_id for r in dataset.records}
+                selected_runs = dataset.run_ids
                 if row["owner"] == "receiver":
                     from spireagent.hub.statistics import DIMENSIONS, _persist, decision_profile
 
@@ -628,7 +660,8 @@ class DecisionJobs:
             self._inputs(request, receiver_profile=receiver_profile)
             result["progress"] = {
                 "phase": "completed", "completed": 1, "total": 1,
-                "observed_at": time.time(), "elapsed_seconds": time.monotonic() - started,
+                "observed_at": time.time(),
+                "elapsed_seconds": prior_elapsed + time.monotonic() - started,
                 **cache.metrics(),
             }
             with self.service.operations.transaction() as db:

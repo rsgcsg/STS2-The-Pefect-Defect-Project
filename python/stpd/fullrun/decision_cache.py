@@ -9,7 +9,9 @@ membership remain outside this cache and must be checked on every operation.
 from __future__ import annotations
 
 import hashlib
+import os
 import sqlite3
+import stat
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -61,7 +63,18 @@ class VerifiedSourceCache:
     """
 
     def __init__(self, database: Path, producer_identity: str) -> None:
-        self.database = database
+        # Disposable large projections must not inflate the backed-up authority DB
+        # or contend with its membership/lease writer during a long cache read.
+        self.database = database.with_name(database.stem + ".decision-cache.sqlite")
+        if self.database.is_symlink():
+            raise BoundaryError("decision_cache", "private_regular_cache_required")
+        fd = os.open(self.database, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        try:
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode) or (os.name != "nt" and info.st_mode & 0o077):
+                raise BoundaryError("decision_cache", "private_regular_cache_required")
+        finally:
+            os.close(fd)
         self.owner = hashlib.sha256(json_bytes([
             CACHE_SCHEMA, ADAPTER_ID, implementation_identity(), producer_identity,
         ])).hexdigest()

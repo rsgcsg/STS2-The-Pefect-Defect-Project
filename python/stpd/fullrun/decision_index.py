@@ -24,7 +24,28 @@ if TYPE_CHECKING:
     from .decision_cache import VerifiedSourceCache
 
 INDEX_SCHEMA = "stpd/private-verified-source-index-v1"
-MAX_INDEX_BYTES = 512 * 1024**2
+MAX_INDEX_BYTES = 1024**3
+
+
+def index_ready(cache: VerifiedSourceCache, payload: Payload) -> bool:
+    """Scheduling hint only; resolve_payload still verifies every cached row."""
+    key = hashlib.sha256(json_bytes([INDEX_SCHEMA, cache.owner, payload.sha256])).hexdigest()
+    with cache._connect() as db:
+        if not db.execute(
+            "SELECT 1 FROM sqlite_master WHERE name='decision_source_index'"
+        ).fetchone():
+            return False
+        row = db.execute(
+            "SELECT body,sha256 FROM decision_source_index WHERE key=?", (key,),
+        ).fetchone()
+        if row is None or hashlib.sha256(row[0]).hexdigest() != row[1]:
+            return False
+        try:
+            header = json.loads(row[0])
+            return (header["schema"] == INDEX_SCHEMA and header["owner"] == cache.owner
+                    and header["source"] == payload.sha256 and header["size"] == payload.size)
+        except (ValueError, KeyError, TypeError):
+            return False
 
 
 def resolve_payload(

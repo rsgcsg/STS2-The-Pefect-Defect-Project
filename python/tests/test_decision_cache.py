@@ -47,7 +47,7 @@ def test_cache_reverifies_on_changed_owner_bytes_or_corruption(tmp_path: Path) -
         repacked = gzip.compress(gzip.decompress(raw), mtime=12)
         assert len(select_decisions((repacked,), cache=cache).records) == 6
         assert call.call_count == 3
-        with owner.operations.transaction() as db:
+        with cache._connect() as db:
             db.execute("UPDATE decision_source_cache SET body=?", (b'{"forged":true}',))
         assert select_decisions((raw,), cache=cache) == original
         assert call.call_count == 4 and cache.corrupt == 1
@@ -77,3 +77,22 @@ def test_installed_owner_code_change_misses_even_with_same_producer(tmp_path: Pa
         assert next_owner.owner != first.owner
         assert preview(owner.store, (source,), SelectionRules(), cache=next_owner) == expected
         assert next_owner.hits == 0 and next_owner.misses == 1
+
+
+def test_cache_is_disposable_private_file_not_backed_up_authority(tmp_path):
+    import os
+    import sqlite3
+
+    owner, _, _, _ = setup(tmp_path)
+    cache = VerifiedSourceCache(owner.operations.path, 'owner')
+    assert cache.database != owner.operations.path
+    if os.name != 'nt':
+        assert cache.database.stat().st_mode & 0o077 == 0
+    with owner.operations.transaction() as db:
+        assert not db.execute(
+            "SELECT 1 FROM sqlite_master WHERE name='decision_source_cache'"
+        ).fetchone()
+    cache.database.unlink()
+    reopened = VerifiedSourceCache(owner.operations.path, 'owner')
+    with sqlite3.connect(reopened.database) as db:
+        assert db.execute('SELECT count(*) FROM decision_source_cache').fetchone()[0] == 0
