@@ -36,7 +36,9 @@ def test_supervisor_reaps_actual_child_on_deadline_or_shutdown(cancel: bool) -> 
             "spireagent.hub.verification_worker.filesystem_capacity", return_value={"status": "ok"}
         ),
     ):
-        assert not run_verifier([], timeout=0.15, shutdown=shutdown)
+        failures = []
+        assert not run_verifier([], timeout=0.15, shutdown=shutdown, on_failure=failures.append)
+    assert failures == ["worker_interrupted" if cancel else "worker_timeout"]
     assert time.monotonic() - started < 5
     assert len(children) == 1 and children[0].poll() is not None
     assert all(not path.exists() for path in scratches)

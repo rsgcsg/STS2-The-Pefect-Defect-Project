@@ -9,6 +9,7 @@ import signal
 import threading
 import time
 from dataclasses import asdict
+from functools import partial
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -340,11 +341,16 @@ def main() -> int:
                                          "--staging", args.staging, "--public-url", args.public_url,
                                          "--decision-job", job]
                             try:
+                                failures: list[str] = []
+                                attempt = jobs.next_attempt(job)
                                 completed = run_verifier(
                                     arguments, shutdown=shutdown, timeout=DATASET_TIMEOUT_SECONDS,
+                                    on_failure=failures.append,
+                                    should_stop=partial(jobs.should_stop, job, attempt),
                                 )
                                 if not completed and not shutdown.is_set():
-                                    jobs.fail(job, "worker_resource_or_process_limit")
+                                    reason = failures[-1] if failures else "worker_exit_failed"
+                                    jobs.fail(job, reason, attempt=attempt)
                             except VerifierCapacityDeferred:
                                 pass
                         shutdown.wait(5)

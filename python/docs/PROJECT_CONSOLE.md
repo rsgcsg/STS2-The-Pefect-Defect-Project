@@ -311,14 +311,14 @@ The game page shows the current available profiles, with incomplete/complete and
 separated. Failed profiles do not change receiver acceptance. It never calls uploads unique games.
 
 In **数据集**, select received recordings, keep permissive defaults or select optional filters,
-then **预览选定记录**. Refresh after background completion, inspect counts/exclusions/run facts,
+then **预览选定记录**. The task updates in place; inspect counts/exclusions/run facts,
 and use **按此预览生成固定数据集**. The resulting artifact ID identifies an immutable version.
-Use **数据下载** to select that artifact's Parquet and selection report. New uploads require a
+The generated list appears as soon as its fixed manifest is published. A normal dataset download prepares Parquet on demand; Gold stays sealed. New uploads require a
 new preview/build. Existing artifact detail links remain valid. Current project access is checked again; explicit withdrawal also blocks future downloads
 of the corresponding derived decision bytes.
 
 This candidate does not start training. The strict old Full-Run loader remains unchanged;
-training integration must explicitly select the new decision-dataset contract.
+training entry points consume supported purpose-bound selections and reject held-out ancestry.
 
 Member data calls have bounded transport deadlines (10 seconds for reads, 20 seconds
 for submissions), separate from the four-second login polling deadline. Export creation
@@ -365,3 +365,42 @@ directly; failed previews offer **修改录制选择** while retaining the origi
 Dataset tabs show their own loading state immediately; slower old replies cannot replace the
 selected tab. Task reads use indexed access rather than fetching remote source manifests.
 Full original-byte validation remains in the background worker.
+
+## Bounded dataset processing and stable refresh
+
+The curation candidate adds a purpose selector (training, test, Gold) and an optional
+paired training dataset dropdown. The library shows purpose alongside record counts.
+Gold has no ordinary raw download; only Gold parents may compose a new Gold version.
+Sealing cannot undo historical access. Original recording detail includes paged operation
+annotations: flag a problem, exclude from future selections, or restore, with a reason.
+
+New dataset publication fixes a compact selection. Download prepares Parquet in a durable
+background task and then exposes that derived artifact. Switching tabs reuses short-lived
+metadata scoped to account and viewing scope; mutations and authentication changes clear
+that cache. Cached metadata never authorizes bytes or bypasses server isolation checks.
+
+Dataset construction streams sources in archive-digest order and spools canonical rows to
+private temporary SQLite storage. The maximum expanded source remains an independent
+resource bound; this does not claim arbitrary archive sizes fit the worker. The private
+verified index binds receipt archive digest/size and installed projection/code/lock identity.
+Rows commit in small batches, with a checksum-bound completion header last; an incomplete
+index never admits a source. Damaged or evicted derivatives reverify original bytes.
+No HTTP endpoint accepts imported index rows or grants access from cached membership.
+
+A fixed preview checkpoint references exact verified rows, source manifests and rules.
+Confirmation checks its logical content identity and current access before publication;
+it can skip repeated source download, verification and selection. Existing v1 manifests
+and their independent reprojection retain their meanings. Deferred materialization and
+new dataset purposes are separate work under root ADR-0010, not claims of this checkpoint.
+
+Cancelled and failed jobs continue under the same ID when explicitly retried, retaining
+the previous failure/progress in events. Attempt fences prevent an old worker from
+changing a later attempt. A heartbeat is separate from observable work progress.
+Cancellation is allowed before the final publication phase; after publication starts,
+the UI waits for its outcome instead of claiming already-published bytes were undone.
+
+Automatic dataset refresh retains the mounted panel and unchanged task cards. It does
+not reconstruct a creation form. Navigation remains active while a status request is
+pending, and a late response cannot update a different page/account. An authentication
+denial clears private displayed data; an ordinary transient failure leaves the last
+observation with an explicit notice. These are presentation changes, not cached access grants.

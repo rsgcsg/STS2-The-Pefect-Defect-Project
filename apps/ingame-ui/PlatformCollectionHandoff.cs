@@ -6,9 +6,9 @@ namespace STS2PlatformLiveUi;
 public static class PlatformCollectionHandoff
 {
     public static bool Ready(RecordingApplicationStatus status) =>
-        status.Lifecycle.State == RecordingLifecycleState.Ready
+        status.Continuous?.Armed != true && (status.Lifecycle.State == RecordingLifecycleState.Ready
         || (status.Lifecycle.State == RecordingLifecycleState.Closed
-            && status.Closeout.State == "closed");
+            && status.Closeout.State == "closed"));
 
     public static RecordingApplicationStatus Prepare(
         string? expectedSessionId,
@@ -21,7 +21,8 @@ public static class PlatformCollectionHandoff
             throw new InvalidOperationException("recording_session_changed");
         if (Ready(before))
             return before;
-        if (before.Lifecycle.State is RecordingLifecycleState.Recording or RecordingLifecycleState.Paused)
+        if (before.Lifecycle.State is RecordingLifecycleState.Recording or RecordingLifecycleState.Paused
+            || before.Continuous?.Armed == true)
         {
             RecordingCommandResult result = execute(new RecordingCommand(commandId, RecordingCommandKind.Close), expectedSessionId);
             if (!result.Accepted)

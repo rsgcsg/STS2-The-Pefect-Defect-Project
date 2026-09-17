@@ -88,6 +88,10 @@ def summarize_run_coverage(projection: SourceProjection) -> dict[str, Any]:
         else:
             boundary = "complete"
         gaps: Counter[str] = Counter()
+        # An offline seal cannot establish continuous capture up to process loss.
+        for event in events:
+            if event["kind"] == "recording_interrupted":
+                gaps["recording_interrupted"] += 1
         uncertain_gap = False
         if boundary == "complete" and start_time is not None and end_time is not None:
             # Recorder lifecycle is session-wide, even when its event names a
@@ -121,7 +125,13 @@ def summarize_run_coverage(projection: SourceProjection) -> dict[str, Any]:
             "native_boundary_complete": boundary == "complete", "boundary_status": boundary,
             "recording_continuity": continuity, "lifecycle_gaps": dict(sorted(gaps.items())),
             "sequence_complete": run_id in proofs,
-            "outcome": {
+            "outcome": "abandoned" if (
+                end and end.get("detail") == "RunManager.OnEnded(isVictory=false)" and any(
+                    event["kind"] == "run_abandoned_native"
+                    and event.get("detail") == "RunManager.OnEnded observed IsAbandoned=true."
+                    for event in events
+                )
+            ) else {
                 "RunManager.OnEnded(isVictory=true)": "win",
                 "RunManager.OnEnded(isVictory=false)": "loss",
             }.get(end.get("detail", "") if end else "", "unknown"),

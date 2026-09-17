@@ -118,6 +118,12 @@ class Scheduler:
             if run.kind != "run" or run.producer != target.producer:
                 raise BoundaryError("scheduler", "run_source_or_kind_mismatch")
             load_training_input(self.store, run.parent("training_input"), target.producer)
+        from spireagent.hub.curation_access import record_use
+
+        # Also reserve feature preparation: exported frozen features can disclose test
+        # examples. This durable intent prevents a later Gold seal racing submission.
+        record_use(self.operations, self.store,
+                   self.store.get_manifest(request.input_id), "training")
         return request
 
     def _submit(self, row: dict[str, Any], now: float) -> dict[str, Any]:

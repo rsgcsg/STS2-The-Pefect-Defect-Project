@@ -67,6 +67,12 @@ def _current_summary(recording: dict[str, Any], trace: list[dict[str, Any]],
         outcome = {"RunManager.OnEnded(isVictory=true)": "victory",
                    "RunManager.OnEnded(isVictory=false)": "defeat"}.get(
                        None if terminal is None else terminal.get("detail"))
+        if outcome == "defeat" and any(
+            event["kind"] == "run_abandoned_native"
+            and event.get("detail") == "RunManager.OnEnded observed IsAbandoned=true."
+            for event in events
+        ):
+            outcome = "abandoned"
         runs.append({"run_id": run_id,
             "assigned": run_id != "run-unassigned",
             "started_at": _timestamp(starts[0].get("recorded_at")) if len(starts) == 1 else None,

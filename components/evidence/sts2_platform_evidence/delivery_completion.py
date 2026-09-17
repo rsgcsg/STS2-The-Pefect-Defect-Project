@@ -131,7 +131,8 @@ def _archive_matches(path: Path, transfer: DirectoryTransferManifest) -> None:
 def _session(config: DeliveryConfig, tool: CollectionTool, row: dict[str, Any]) -> dict[str, Any]:
     key, source = row["id"], Path(row["source"])
     if (not isinstance(key, str) or not re.fullmatch(r"[0-9a-f]{64}", key)
-            or source.parent != config.recordings_root or row["source"] != str(source)
+            or source.parent not in {config.recordings_root, config.outbox_root / "recovered-recordings"}
+            or row["source"] != str(source)
             or key != digest({"source": str(source)})):
         raise ValueError("completion_enrolled_source_mismatch")
     if row["status"] != "verified":
@@ -191,11 +192,34 @@ def _snapshot(config: DeliveryConfig) -> tuple[DeliveryCompletion, object]:
     guards = tuple(_tree(root) for root in (config.recordings_root, config.outbox_root, config.tool_directory))
     tool = CollectionTool(config.tool_directory, config.tool_release_id, dotnet=config.dotnet)
     rows = _rows(config)
-    sources = sorted(str(path) for path in config.recordings_root.iterdir())
-    if sources != sorted(row["source"] for row in rows) or any(not Path(source).is_dir() for source in sources):
+    originals = {str(path): path for path in config.recordings_root.iterdir()}
+    remaining = set(originals)
+    recovered_files: set[str] = set()
+    for row in rows:
+        source = Path(row["source"])
+        if str(source) in remaining:
+            remaining.remove(str(source))
+            continue
+        if source.parent != config.outbox_root / "recovered-recordings":
+            raise ValueError("completion_recording_inventory_mismatch")
+        recovery = read_json(source / "recording-recovery.json")
+        manifest = read_json(source / "recording-manifest.json")
+        original = config.recordings_root / manifest["session_id"]
+        if str(original) not in remaining or (original / "session-close-receipt.json").exists():
+            raise ValueError("completion_recovery_origin_mismatch")
+        inventory = {name: {"bytes": size, "sha256": sha} for name, size, sha in _inventory(original)
+                     if name != "recording-owner.lock"}
+        if (inventory != recovery.get("original_files")
+                or digest(inventory) != recovery.get("original_inventory_sha256")):
+            raise ValueError("completion_recovery_origin_changed")
+        remaining.remove(str(original))
+        recovered_files.update(path.relative_to(config.outbox_root).as_posix()
+                               for path in source.rglob("*") if path.is_file())
+    if remaining:
         raise ValueError("completion_recording_inventory_mismatch")
     sessions = [_session(config, tool, row) for row in rows]
     expected_files = {"outbox.sqlite3", "outbox.sqlite3-wal", "outbox.sqlite3-shm", "worker.lock"}
+    expected_files.update(recovered_files)
     for session in sessions:
         key, transfer_id = session["delivery_id"], session["transfer_manifest_sha256"]
         expected_files.update(f"{area}/{key}.json" for area in ("transfers", "metadata", "receipts", "projections"))

@@ -186,11 +186,15 @@ class ExportService:
         manifest = (
             self.collections.collection(item["upload_id"])
             if item["upload_id"]
-            else self.collections.artifact(item["artifact_id"])
+            else self.collections.artifact(item["artifact_id"], use="download")
         )
         observed = self._file(manifest, item["role"], item["upload_id"])
         if item != observed:
             raise BoundaryError("export", "file_identity_mismatch")
+        from spireagent.hub.curation_access import record_use
+
+        if item["upload_id"]:
+            record_use(self.service.operations, self.service.store, manifest, "download")
         if item["type"] == "manifest":
             return item, iter((manifest.to_bytes(),))
         # The ArtifactStore verifies every bounded chunk and the final size/hash. The

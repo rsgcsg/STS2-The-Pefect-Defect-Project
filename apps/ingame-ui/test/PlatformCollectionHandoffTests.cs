@@ -35,6 +35,25 @@ public sealed class PlatformCollectionHandoffTests
     }
 
     [Fact]
+    public void ArmedWaitingRecorderMustBeDisarmedBeforeModelHandoff()
+    {
+        ContinuousRecording recorder = new(); recorder.Arm();
+        recorder.BeginSession(); recorder.MarkSealed();
+        var current = Status(RecordingLifecycleState.Closed, "closed") with { Continuous = recorder.Snapshot() };
+        Assert.False(PlatformCollectionHandoff.Ready(current));
+        var result = PlatformCollectionHandoff.Prepare("recording-a", "stop-armed", () => current,
+            (command, expected) => {
+                Assert.Equal(RecordingCommandKind.Close, command.Kind);
+                recorder.Disarm();
+                current = current with { Continuous = recorder.Snapshot() };
+                return new(true, false, "already_closed", "stopped", current.Lifecycle);
+            });
+        Assert.True(PlatformCollectionHandoff.Ready(result));
+        Assert.Contains("已停止", PlatformLiveActionFeed.FormatRun(result));
+        Assert.Contains("片段", PlatformLiveActionFeed.FormatRun(result));
+    }
+
+    [Fact]
     public void SessionChangeCannotCloseAReplacementRecording()
     {
         Assert.Throws<InvalidOperationException>(() => PlatformCollectionHandoff.Prepare(

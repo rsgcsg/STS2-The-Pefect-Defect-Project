@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import subprocess
 import sys
 import tempfile
 import threading
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -39,6 +40,8 @@ def constrain_worker(*, dataset: bool = False) -> None:
 def run_verifier(
     arguments: Sequence[str], *, timeout: float = 150, shutdown: threading.Event | None = None,
     required_inodes: int = RESERVE_INODES,
+    on_failure: Callable[[str], None] | None = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> bool:
     # A single production verifier needs its bounded scratch reserve before any claim.
     # Capacity shortages leave the upload pending; they are not verification failures.
@@ -50,7 +53,7 @@ def run_verifier(
             raise VerifierCapacityDeferred
     # The parent owns temporary storage so a killed child cannot leak expanded bundles.
     with tempfile.TemporaryDirectory(prefix="stpd-verifier-") as scratch:
-        return _run_verifier(arguments, timeout, shutdown, scratch)
+        return _run_verifier(arguments, timeout, shutdown, scratch, on_failure, should_stop)
 
 
 def supervise_pending_upload(
@@ -87,8 +90,15 @@ def supervise_pending_upload(
 
 
 def _run_verifier(
-    arguments: Sequence[str], timeout: float, shutdown: threading.Event | None, scratch: str
+    arguments: Sequence[str], timeout: float, shutdown: threading.Event | None, scratch: str,
+    on_failure: Callable[[str], None] | None = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> bool:
+    def failed(reason: str) -> bool:
+        if on_failure:
+            on_failure(reason)
+        return False
+
     try:
         process = subprocess.Popen(
             [sys.executable, "-m", "spireagent.hub", "verify", "--isolated", *arguments],
@@ -98,15 +108,24 @@ def _run_verifier(
             env={**os.environ, "TMPDIR": scratch, "TEMP": scratch, "TMP": scratch},
         )
     except OSError:
-        return False
+        return failed("worker_start_failed")
     deadline = time.monotonic() + timeout
     try:
         while time.monotonic() < deadline and not (shutdown and shutdown.is_set()):
+            if should_stop and should_stop():
+                return failed("worker_cancelled")
             try:
-                return process.wait(timeout=min(0.2, max(0.01, deadline - time.monotonic()))) == 0
+                code = process.wait(timeout=min(0.2, max(0.01, deadline - time.monotonic())))
+                if code == 0:
+                    return True
+                if code == -getattr(signal, "SIGXCPU", 9999):
+                    return failed("worker_cpu_limit")
+                if code < 0:
+                    return failed("worker_killed")
+                return failed("worker_exit_failed")
             except subprocess.TimeoutExpired:
                 pass
-        return False
+        return failed("worker_interrupted" if shutdown and shutdown.is_set() else "worker_timeout")
     finally:
         if process.poll() is None:
             process.terminate()

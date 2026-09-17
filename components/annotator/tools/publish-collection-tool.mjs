@@ -84,6 +84,7 @@ export function publishCollectionTool(componentRoot, output, { dotnet = "dotnet"
       entrypoint: "sts2-human-annotator.dll",
       supported_recording_schema: "sts2.human-annotator/recording-manifest-2",
       output_schema: "sts2.human-annotator/session-bundle-3",
+      interrupted_recovery_schema: "sts2.human-annotator/interrupted-recovery-1",
       collection_setup_entrypoint: "setup/apps/game-mod/collection-setup.mjs",
       ...(modProvenance ? { collection_setup_provenance: "game-mod/build-provenance.json" } : {}),
       files: inventory(staging)

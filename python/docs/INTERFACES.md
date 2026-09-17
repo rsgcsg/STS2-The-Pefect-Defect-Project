@@ -206,6 +206,36 @@ receipt lineage; it does not become research admission authority.
 
 ## Fixed decision datasets (candidate)
 
+The curation candidate adds `stpd/curated-decision-dataset-v1`. New jobs carry
+`curation: {purpose: training|test|gold, paired_training: artifact_id|null}`.
+Confirmation retains the exact preview selection and quality snapshot. The immutable
+artifact contains a compact selection receipt and a commitment to its internal report;
+unselected observation/action context and quality comments are not downloadable receipts.
+`POST datasets/materialize` queues the existing durable worker to create a derived
+`stpd/dataset-materialization-v1` artifact only when complete records are requested.
+Repeated requests return the same task; retry remains explicit.
+
+Hub owns the transactional curation ledger in its Operations database. Whole-run and
+transitive duplicate groups protect Gold across original archives and derivatives.
+Publication reserves before writing an artifact; interruption retains the reservation.
+Only Gold parents can merge into Gold. Hiding tasks/artifacts never releases protection.
+Member download and training preparation recheck current reservations; wrappers and model
+ancestry cannot relabel held-out datasets. Paired train/test selection and actual external
+evaluation check overlap independently. Offline checks cover available immutable ancestry
+and exact duplicates; they cannot discover copies outside that store.
+
+Gold sealing is a managed-system restriction, not proof of zero historical exposure.
+The manifest records historical external exposure as unknown. Existing immutable datasets
+and recorded training uses are reconciled before sealing. Already downloaded bytes cannot
+be recalled. After the first seal, rollback must retain the reservation-aware reader and
+download/training guards, or enter maintenance mode; an older unguarded Hub is unsafe.
+
+`GET collections/{upload_id}/decisions?limit=25&offset=0` reads the bounded operation index.
+`POST quality-annotations` accepts upload_id, occurrence, action (flag/exclude/restore),
+and a nonempty reason up to 500 characters. Changes append to private history. Excluding
+a parent excludes dependent child selections; old raw evidence and dataset versions remain
+unchanged. An annotation change between preview and publication requires a new preview.
+
 `fullrun.decision_dataset.SelectionRules` is `stpd/decision-selection-v1`.
 `fullrun.decision_store` publishes/loads `stpd/decision-dataset-v1` from independently verified
 received bundle artifacts. The strict `fullrun.data` contract remains separate. See
@@ -213,7 +243,8 @@ received bundle artifacts. The strict `fullrun.data` contract remains separate. 
 
 Authenticated member BFF routes: `GET games`, `GET datasets`, `GET datasets/{job_id}`,
 `POST datasets` (name, explicit uploads, typed rules, nullable preview_id), and
-`POST datasets/{job_id}/retry` (empty body; failed tasks only, new attempt identity). Browser requests
+`POST datasets/{job_id}/retry` (empty body; failed/cancelled tasks, same task and a new fenced attempt),
+and `POST datasets/{job_id}/cancel` (empty body; before final publication). Browser requests
 retain Origin/CSRF enforcement; personal tokens and device credentials are not interchangeable.
 POST queues CPU work. A completed preview's logical ID must match a reproduced publication.
 Game/profile reads use persisted summaries, not archive extraction. Artifact downloads reuse
@@ -223,7 +254,9 @@ The same POST also accepts `datasets` in place of `uploads` for selected-set uni
 input kind is allowed; a completed preview must match inputs and rules during publication.
 `stpd/decision-union-v1` parents retain the original selected datasets. Its owner loader rechecks
 parent selection and lineage; it does not expand excluded rows. Job reads expose durable phase,
-work-unit counts, elapsed/observed times and explicit-retry status. These are observations, not
-resumable checkpoints. Game summaries cover all available shared profiles and report missing
+work-unit counts, elapsed/observed times and explicit-retry status. Retrying continues the same
+task ID, retaining prior failures in events. Private source indices and fixed preview selections
+can reuse completed work; eviction falls back to verified reproduction. These checkpoints never
+resume unknown gameplay commands. Game summaries cover all available shared profiles and report missing
 coverage; they do not claim globally deduplicated independent games. See
 [ADR-0008](adr/0008-selected-decision-unions.md) for cache trust, immutable contracts and limits.

@@ -334,7 +334,7 @@ predecessor data; schema1 is archive-only. Internal normalized trace2 is a
 validator representation, not another production append authority. Current
 bundle3 exports canonical rows; record2/bundle2 are explicit compatibility.
 
-Recording status4/event batch2 separate Pending, Recorded, Unresolved,
+Recording status5/event batch2 separate Pending, Recorded, Unresolved,
 Cancelled, Aborted, Failed closed, Diagnostic and Unsupported. Session totals
 come from successfully appended authoritative facts, not retained UI rows.
 `RealFailures` counts unique in-scope failed decision witness IDs: trace unknown,
@@ -362,3 +362,38 @@ Compatibility adapter failure after canonical append is diagnostic and cannot
 undo canonical success or strand the decision presentation. A damaged current
 stream still fails audit. Structural validity and a deliverable bundle do not
 assert Human origin, full coverage or research admission.
+
+
+## Continuous recording and interrupted copies (2026-09-17)
+
+Status 5 adds `continuous`: armed, observed fresh/resumed start, interruption,
+terminal/outcome, native boundary completeness and sealed/finished counts. These
+are lifecycle facts, not complete Human or sequence qualification. Start/Resume
+arms; Pause interrupts and disarms; manual Close disarms even between sessions.
+A native terminal seals the current session without disarming. The next exact
+Launch opens the next session. `IsAbandoned` at OnEnded distinguishes abandonment
+from defeat. Cleanup/exit seals a partial segment without inventing a terminal.
+Packing and upload remain asynchronous Workbench/Evidence operations.
+
+`continuous_schema_version=1` permits explicitly empty current streams when a
+recording was armed and stopped without any Human decisions. It does not permit
+missing canonical/projection rows or unknown schema versions.
+
+`recovery_schema_version=1` declares a process-owned exclusive `recording-owner.lock`.
+The collection tool's `recover-interrupted` runs only after that lease is available.
+It preserves the original directory and builds a separate staged copy. A receipt
+`sts2.human-annotator/interrupted-recovery-1` binds every original relative file's
+byte length and SHA-256, their canonical inventory digest, and an interrupted
+partial disposition. Only missing accepted-action terminals may be appended, as
+`transition_unknown` / `process_interrupted`; no successor or native completion
+is invented. The journal gains `recording_interrupted` and one final close.
+The normal auditor and independent Evidence verifier check original byte prefixes,
+unchanged other files, exact inventory and unknown-only suffix. Only a passing
+copy is atomically published for delivery. Torn/corrupt streams remain incidents.
+A live lease, duplicate recovery or historical session without this ownership
+contract is never automatically repaired. Session-local run IDs remain unchanged.
+
+Recovery is not a native event or full-run proof. Existing immutable canonical
+rows remain available for separately admitted decision views; interrupted
+recordings cannot qualify as uninterrupted sequence evidence. A completed delivery
+generation includes both the verified recovered copy and unchanged original bytes.

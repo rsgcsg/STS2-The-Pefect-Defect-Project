@@ -10,6 +10,7 @@ import subprocess
 import sys
 import threading
 import time
+import tomllib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
 from pathlib import Path
@@ -51,6 +52,20 @@ def project(tmp_path):
     path = tmp_path / "project.json"
     setup(path, state_dir=tmp_path / "state", install=False)
     return path, ProjectConfig.load(path)
+
+
+def test_shipped_combination_pins_the_locked_evidence_reader() -> None:
+    """A green package test must not ship a profile rejected by the real doctor."""
+    from spireagent.source import REPOSITORY_URLS
+
+    pin = combination()["evidence_source_revision"]
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text())
+    lock = tomllib.loads((ROOT / "uv.lock").read_text())
+    assert any(f"{url}@{pin}#" in dep for url in REPOSITORY_URLS
+               for dep in project["project"]["dependencies"])
+    installed = [p for p in lock["package"] if p["name"] == "rsgcsg-sts2-platform-evidence"]
+    assert len(installed) == 1
+    assert installed[0]["source"]["git"].endswith("#" + pin)
 
 
 def test_setup_combination_schema_and_idempotency(project, tmp_path):

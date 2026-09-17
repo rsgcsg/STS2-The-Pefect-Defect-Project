@@ -332,11 +332,11 @@ print(json.dumps(paths))
     assert set(loaded) == set(ADAPTER_SOURCE_CLOSURE) - {"tools/policy_adapter.py"}
 
 
-def test_v5_preserves_trained_policy_and_versions_monorepo_identity() -> None:
+def test_v6_preserves_trained_policy_and_versions_encoder_implementation() -> None:
     root = DEFAULT_MANIFEST.parents[1]
     current = json.loads(DEFAULT_MANIFEST.read_text())
-    old = json.loads((root / "policy-manifests/s1-policy-adapter-v4.json").read_text())
-    assert DEFAULT_MANIFEST.name == "s1-policy-adapter-v5.json"
+    old = json.loads((root / "policy-manifests/s1-policy-adapter-v5.json").read_text())
+    assert DEFAULT_MANIFEST.name == "s1-policy-adapter-v6.json"
     assert current["manifest_id"] != old["manifest_id"]
     assert current["adapter"]["code_sha256"] == adapter_code_sha256()
     assert "code_digest_scope" not in current["adapter"]

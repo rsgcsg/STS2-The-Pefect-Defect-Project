@@ -21,6 +21,7 @@ from .human_session_bundle_v1 import (
 )
 from .human_session_bundle_v2 import _capture_profile_hash, _validate_profile, _validate_journal, _required_reads
 from .human_summary import _current_summary
+from .interrupted_recovery import verify_recovery
 
 BUNDLE_SCHEMA = "sts2.human-annotator/session-bundle-3"
 AUDIT_SCHEMA = "sts2.human-annotator/session-bundle-audit-3"
@@ -184,6 +185,8 @@ class HumanSessionBundleV3Verifier:
         _require(journal[-1].get("kind") == "session_closed"
                  and sum(row.get("kind") == "session_closed" for row in journal) == 1,
                  "session_not_closed", "one final native Recorder close is required")
+        _require(recording.get("continuous_schema_version") in (None, 1),
+                 "continuous_recording_schema_invalid", "unsupported continuous schema")
         _require(recording.get("close_schema_version") in (None, 1),
                  "session_close_schema_invalid", "unsupported close schema")
         if recording.get("close_schema_version") == 1:
@@ -211,6 +214,7 @@ class HumanSessionBundleV3Verifier:
                      and row.get("session_id") == session,
                      "invalidation_identity_mismatch", "invalidation envelope differs")
         trace = [row for _, row in _jsonl(raw / "semantic-boundary-trace.jsonl")]
+        recovery = verify_recovery(raw, recording, journal, trace)
         dispositions = _verify_references(raw, recording, profile, trace, rows)
         accepted_ids = {event["action"]["action_witness_id"] for event in trace
                         if event.get("kind") == "action_accepted"}
@@ -255,6 +259,8 @@ class HumanSessionBundleV3Verifier:
         summary = _current_summary(recording, trace, rows, failed, journal, run_ids)
         if recording.get("close_schema_version") == 1:
             summary["closed_at"] = receipt["closed_at"]
+        summary["recovery"] = None if recovery is None else {
+            "disposition": recovery["disposition"], "original_inventory_sha256": recovery["original_inventory_sha256"]}
         summary["counts"]["compatibility_valid"] = compatibility_count
         summary["counts"]["compatibility_invalid"] = audit["invalid_records"]
         return HumanSessionBundleV3(directory, manifest, profile, session, timeline,

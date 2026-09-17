@@ -901,6 +901,39 @@ test("decision dataset defaults preview selected uploads without complete-run re
   assert.equal(body.rules.wins_only, false);
   assert.equal(body.rules.no_failures_only, false);
   assert.deepEqual(body.uploads, [uploadId]);
+  assert.deepEqual(body.curation, {purpose:"training",paired_training:null});
+});
+
+test("test selection keeps the paired training identity and Gold has no ordinary download", async () => {
+  const env = setup({view:"datasets", handler: async url => {
+    if (url.includes("collections?")) return {items:[{upload_id:uploadId,status:"verified"}],total:1};
+    if (url.includes("datasets?")) return {items:[
+      {artifact_id:id("a"),metadata:{schema:"stpd/curated-decision-dataset-v1",purpose:"training",materialization:"on_demand"}},
+      {artifact_id:id("b"),metadata:{schema:"stpd/curated-decision-dataset-v1",purpose:"gold",materialization:"on_demand"}},
+    ],total:2};
+    return {id:uploadId,items:[]};
+  }});
+  const library = await env.render();
+  assert.equal(action(library, `download-dataset-${id("b")}`).disabled, true);
+  await action(library, "dataset-tab-create").onclick();
+  const page = await env.render();
+  const purpose = field(page,"dataset-purpose"); purpose.value="test"; purpose.onchange();
+  const paired = field(page,"paired-training"); paired.value=id("a"); paired.oninput();
+  const source = field(page,`source-${uploadId}`); source.checked=true; source.onchange();
+  await action(page,"preview-dataset").onclick();
+  assert.deepEqual(body(post(env.calls)[0]).curation,{purpose:"test",paired_training:id("a")});
+});
+
+test("quality annotation saves an immutable operation identity and reason", async () => {
+  const env = setup({view:"record-quality",query:`&id=${uploadId}`,handler:async () => ({
+    items:[{id:id("a"),sequence:7,run:"run",family:"play_card",action:{kind:"play_card"},annotations:[]}],total:1,
+  })});
+  const page=await env.render();
+  field(page,`reason-${id("a")}`).value="点错了";
+  field(page,`quality-${id("a")}`).value="exclude";
+  await action(page,`annotate-${id("a")}`).onclick();
+  assert.deepEqual(body(post(env.calls)[0]),{upload_id:uploadId,occurrence:id("a"),action:"exclude",reason:"点错了"});
+  assert.ok(post(env.calls)[0].url.endsWith("/quality-annotations"));
 });
 
 test("game page reads derived summaries without submitting work", async () => {
@@ -980,7 +1013,7 @@ test("dataset union explains an insufficient selection without submitting a job"
 
 test("dataset progress stays visible and selected parent union is exact", async () => {
   const rules = {schema:"stpd/decision-selection-v1",complete_only:false,wins_only:false,no_failures_only:false,filters:{},seed:0};
-  const job = {id:"b".repeat(32),state:"completed",request:{name:"union",datasets:[id("a"),id("b")],rules,preview_id:null},progress:{phase:"completed",completed:2,total:2,elapsed_seconds:1.5},result:{selected:7,exact_duplicate_decisions:2,split_status:"grouped"}};
+  const job = {id:"b".repeat(32),state:"completed",request:{name:"union",datasets:[id("a"),id("b")],rules,curation:{purpose:"training",paired_training:null},preview_id:null},progress:{phase:"completed",completed:2,total:2,elapsed_seconds:1.5},result:{selected:7,exact_duplicate_decisions:2,split_status:"grouped"}};
   const env = setup({view:"datasets",handler:(url, options) => {
     if (options.method === "POST") return {id:job.id,state:"pending"};
     if (url === `/api/member/datasets/${job.id}`) return job;
@@ -997,7 +1030,7 @@ test("dataset progress stays visible and selected parent union is exact", async 
   const tasks = await env.render();
   assert.match(text(tasks), /保留决策/);
   await action(tasks,`build-${job.id}`).onclick();
-  assert.deepEqual(body(post(env.calls)[1]),{name:"union",datasets:[id("a"),id("b")],rules,preview_id:job.id});
+  assert.deepEqual(body(post(env.calls)[1]),{name:"union",datasets:[id("a"),id("b")],rules,curation:job.request.curation,preview_id:job.id});
 });
 
 
@@ -1132,7 +1165,7 @@ test("dataset shell selects a new tab before delayed data arrives and ignores ol
 test("late select-all does not undo an explicit clear or changed date range", async () => {
   for(const change of ["clear","date"]) {
     let finish; const pending=new Promise(resolve=>{finish=resolve;});
-    const h=setup({view:"datasets",handler:url=>url.includes("limit=100")?pending:emptyList()});
+    const h=setup({view:"datasets",handler:url=>url.includes("collections?")&&url.includes("limit=100")?pending:emptyList()});
     await action(await h.render(),"dataset-tab-create").onclick(); const page=await h.render();
     const selecting=action(page,"select-all-dataset-sources").onclick();
     if(change==="clear") await action(page,"clear-dataset-selection").onclick();
@@ -1185,4 +1218,69 @@ test("retry follows the new task instead of keeping the focused failed preview",
   await action(page,`retry-dataset-${uploadId}`).onclick(); page=await h.render();
   assert.ok(h.calls.some(c=>c.url.endsWith(`/datasets/${nextId}`)));
   assert.doesNotMatch(text(page),/环境身份存在冲突/);
+});
+
+test("dataset background refresh retains unchanged cards and keeps navigation usable", async () => {
+  let delayed = false, finish;
+  const job = {id:uploadId,state:"pending",request:{name:"durable work",uploads:[uploadId],rules:{},preview_id:null}};
+  const h = setup({view:"datasets",handler:url => {
+    if(url.includes("/member/datasets?")) return delayed ? new Promise(resolve => {finish=resolve;}) : {items:[job],total:1};
+    return emptyList();
+  }});
+  await action(await h.render(),"dataset-tab-previews").onclick();
+  const page = await h.render(), card = find(page, node => node.dataset.refreshKey === uploadId);
+  assert.equal(await h.ui.refresh("datasets"), true);
+  assert.equal(find(page,node => node.dataset.refreshKey === uploadId),card);
+  delayed = true; const refreshing = h.ui.refresh("datasets");
+  await action(page,"dataset-tab-create").onclick();
+  const next = await h.render();
+  finish({items:[],total:0}); await refreshing;
+  assert.equal(action(next,"dataset-tab-create").attributes["aria-current"],"page");
+  assert.equal(find(page,node => node.dataset.refreshKey === uploadId),card);
+  const calls = h.calls.length;
+  field(next,"dataset-name").value = "unfinished draft";
+  assert.equal(await h.ui.refresh("datasets"),true);
+  assert.equal(h.calls.length,calls);
+  assert.equal(field(next,"dataset-name").value,"unfinished draft");
+});
+
+test("background refresh updates changed task cards without a loading shell", async () => {
+  let state = "pending";
+  const h=setup({view:"datasets",handler:url=>url.includes("/member/datasets?") ? {
+    items:[{id:uploadId,state,request:{name:"task",uploads:[uploadId],rules:{},preview_id:null}}],total:1,
+  }:emptyList()});
+  await action(await h.render(),"dataset-tab-previews").onclick();
+  const page=await h.render(), card=find(page,node=>node.dataset.refreshKey===uploadId);
+  // This fixture has no details; the production branch also preserves open details by key.
+  card.querySelectorAll=()=>[];
+  const make=h.context.document.createElement;
+  h.context.document.createElement=tag=>{const n=make(tag);n.querySelectorAll=()=>[];return n;};
+  state="running"; await h.ui.refresh("datasets");
+  assert.notEqual(find(page,node=>node.dataset.refreshKey===uploadId),card);
+  assert.match(text(page),/正在处理/);
+  assert.doesNotMatch(text(page),/正在读取/);
+});
+
+test("background denial removes previously displayed private dataset data", async () => {
+  let denied=false;
+  const h=setup({view:"datasets",handler:()=>denied?{httpStatus:403}:{items:[{artifact_id:id("b"),display_name:"private dataset"}],total:1}});
+  const page=await h.render(); assert.match(text(page),/private dataset/);
+  denied=true; await h.ui.refresh("datasets");
+  assert.doesNotMatch(text(page),/private dataset/);
+  assert.match(text(page),/需要重新登录/);
+});
+
+
+test("legacy preview refresh creates a new selection instead of incompatible confirmation", async () => {
+  const job = {id:"b".repeat(32),state:"completed",request:{name:"old",uploads:[uploadId],rules:{seed:0},preview_id:null},result:{selected:7}};
+  const h = setup({view:"datasets",handler:(url, options) => {
+    if (options.method === "POST") return {id:"c".repeat(32),state:"pending"};
+    if (url.startsWith("/api/member/datasets?")) return {items:[job]};
+    return emptyList();
+  }});
+  await action(await h.render(),"dataset-tab-previews").onclick();
+  const button = action(await h.render(),`build-${job.id}`);
+  assert.match(button.textContent,/按新规则重新预览/);
+  await button.onclick();
+  assert.deepEqual(body(post(h.calls)[0]),{name:"old",uploads:[uploadId],rules:{seed:0},preview_id:null});
 });

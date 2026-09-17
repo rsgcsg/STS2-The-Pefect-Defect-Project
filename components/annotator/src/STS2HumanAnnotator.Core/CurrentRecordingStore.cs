@@ -20,6 +20,7 @@ public sealed class RecordingSessionStore : IDisposable
         _executionSemanticActionSpacesByDigest = new(StringComparer.Ordinal);
     private readonly RecordingPerformanceProfiler _performance = new();
     private readonly FileStream _invalidations;
+    private readonly FileStream? _ownerLease;
     private readonly FileStream _journal;
     private readonly FileStream _semanticBoundaryTrace;
     private readonly FileStream _canonicalTransitions;
@@ -53,21 +54,33 @@ public sealed class RecordingSessionStore : IDisposable
         Manifest = manifest;
         CaptureProfile = captureProfile;
         Directory.CreateDirectory(directory);
-        WriteCreateNew(
-            Path.Combine(directory, "recording-manifest.json"),
-            JsonSerializer.Serialize(manifest, EvidenceJson.IndentedOptions));
-        WriteCreateNew(
-            Path.Combine(directory, "capture-profile.json"),
-            JsonSerializer.Serialize(captureProfile, EvidenceJson.IndentedOptions));
-        _invalidations = OpenBufferedAppend(Path.Combine(directory, "invalidations.jsonl"));
-        _journal = OpenBufferedAppend(Path.Combine(directory, "run-journal.jsonl"));
-        _semanticBoundaryTrace = OpenRecoverableAppend(
-            Path.Combine(directory, "semantic-boundary-trace.jsonl"));
-        _canonicalTransitions = OpenBufferedAppend(
-            Path.Combine(directory, "canonical-transitions.jsonl"));
-        _nativeSemanticDiscriminator = OpenBufferedAppend(
-            Path.Combine(directory, "native-semantic-discriminator.jsonl"));
-        WriteCoverage();
+        if (manifest.RecoverySchemaVersion == 1)
+            _ownerLease = new FileStream(Path.Combine(directory, "recording-owner.lock"),
+                FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
+        try
+        {
+            WriteCreateNew(
+                Path.Combine(directory, "recording-manifest.json"),
+                JsonSerializer.Serialize(manifest, EvidenceJson.IndentedOptions));
+            WriteCreateNew(
+                Path.Combine(directory, "capture-profile.json"),
+                JsonSerializer.Serialize(captureProfile, EvidenceJson.IndentedOptions));
+            _invalidations = OpenBufferedAppend(Path.Combine(directory, "invalidations.jsonl"));
+            _journal = OpenBufferedAppend(Path.Combine(directory, "run-journal.jsonl"));
+            _semanticBoundaryTrace = OpenRecoverableAppend(
+                Path.Combine(directory, "semantic-boundary-trace.jsonl"));
+            _canonicalTransitions = OpenBufferedAppend(
+                Path.Combine(directory, "canonical-transitions.jsonl"));
+            _nativeSemanticDiscriminator = OpenBufferedAppend(
+                Path.Combine(directory, "native-semantic-discriminator.jsonl"));
+            WriteCoverage();
+        }
+        catch
+        {
+            _invalidations?.Dispose(); _journal?.Dispose(); _semanticBoundaryTrace?.Dispose();
+            _canonicalTransitions?.Dispose(); _nativeSemanticDiscriminator?.Dispose(); _ownerLease?.Dispose();
+            throw;
+        }
     }
 
     public string DirectoryPath { get; }
@@ -569,6 +582,7 @@ public sealed class RecordingSessionStore : IDisposable
                 }
                 _closed = true;
                 _appendHealth = "closed";
+                _ownerLease?.Dispose();
             }
             catch (Exception exception)
             {
