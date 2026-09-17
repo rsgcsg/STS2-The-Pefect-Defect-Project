@@ -63,3 +63,24 @@ def test_confirmation_reuses_fixed_selection_without_reprojecting_or_selecting(
                         selected.logical_id, cache=cache)
     assert load(owner.store, manifest2.artifact_id)[1] == selected
     assert cache.corrupt == 1
+
+
+def test_fixed_preview_copies_verified_bytes_without_decoding_game_states(tmp_path: Path) -> None:
+    from stpd.fullrun.contracts import ResearchTransitionV2
+    from stpd.fullrun.decision_preview import PreviewCache
+
+    owner, _, source, _ = setup(tmp_path)
+    cache = VerifiedSourceCache(owner.operations.path, "owner")
+    selected = preview(owner.store, (source,), SelectionRules(), cache=cache)
+    key = {"test": "fixed selection"}
+    fixed = PreviewCache(cache)
+    fixed.put(key, selected)
+    with patch.object(ResearchTransitionV2, "decode", side_effect=AssertionError("decoded")):
+        restored = fixed.get(key, selected.logical_id)
+        assert restored is not None
+        assert restored.logical_id == selected.logical_id
+        assert list(restored.records.summaries()) == list(selected.records.summaries())
+    assert restored == selected
+    with cache._connect() as db:
+        db.execute("UPDATE decision_source_rows SET body=? WHERE ordinal=0", (b"{}",))
+    assert fixed.get(key, selected.logical_id) is None

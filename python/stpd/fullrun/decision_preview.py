@@ -8,7 +8,6 @@ from typing import Any
 
 from spireagent.json_boundary import BoundaryError, FrozenObject, json_bytes
 
-from .contracts import ResearchTransitionV2
 from .decision_cache import MAX_ENTRY_BYTES, VerifiedSourceCache
 from .decision_dataset import DecisionDataset, _identity
 from .decision_index import INDEX_SCHEMA
@@ -55,7 +54,9 @@ class PreviewCache:
                 ).fetchone()
                 if row is None:
                     return  # Bounded source index eviction never removes source eligibility.
-                refs.append([source, row[0], hashlib.sha256(row[1]).hexdigest()])
+                sequence = json.loads(row[1])["source_evidence"]["action_sequence"]
+                refs.append([source, row[0], hashlib.sha256(row[1]).hexdigest(),
+                             sequence, summary])
             body = json_bytes({"logical_id": dataset.logical_id,
                                "report": dataset.report.value(), "rows": refs})
             if len(body) > MAX_ENTRY_BYTES:
@@ -79,17 +80,22 @@ class PreviewCache:
                 if value["logical_id"] != expected:
                     raise ValueError("preview identity")
                 spool = DecisionSpool()
-                for source, ordinal, checksum in value["rows"]:
+                for source, ordinal, checksum, sequence, summary in value["rows"]:
                     record_row = db.execute(
                         "SELECT body FROM decision_source_rows WHERE source=? AND ordinal=?",
                         (source, ordinal),
                     ).fetchone()
                     if record_row is None or hashlib.sha256(record_row[0]).hexdigest() != checksum:
                         raise ValueError("preview row missing or corrupt")
-                    record = ResearchTransitionV2.decode(json.loads(record_row[0]))
-                    identity = _identity(record)
-                    spool[identity] = record
-                    spool.select(identity)
+                    # These canonical bytes and their compact summary were produced
+                    # together from a typed owner-verified row. Both are bound by
+                    # this private preview checksum and the implementation identity.
+                    # Re-decoding/re-encoding a full game state is not an additional
+                    # trust boundary; check the row bytes and final logical identity.
+                    spool.db.execute("INSERT INTO records VALUES(?,?,?,?,?,1)", (
+                        summary["id"], summary["run_id"], sequence,
+                        record_row[0].decode("utf-8").removesuffix("\n"), json.dumps(summary),
+                    ))
                 result = DecisionDataset(spool.selected(), FrozenObject.of(value["report"]))
                 if result.logical_id != expected:
                     raise ValueError("preview changed")
