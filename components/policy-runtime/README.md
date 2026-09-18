@@ -18,7 +18,7 @@ field drift fails closed before Snapshot observation or policy scoring.
 
 ## Standalone consumer package
 
-Version `0.1.0-rc.4` provides a candidate package for external consumers. Build
+Version `0.1.0-rc.6` provides a candidate package for external consumers. Build
 from a committed component checkout with the checked-in lockfile:
 
 ```bash
@@ -27,7 +27,7 @@ npm --prefix components/policy-runtime run check
 npm --prefix components/policy-runtime run package -- --output /absolute/package-output
 ```
 
-The last command creates `rsgcsg-sts2-policy-runtime-0.1.0-rc.4.tgz`,
+The last command creates `rsgcsg-sts2-policy-runtime-0.1.0-rc.6.tgz`,
 `policy-runtime-package.json` and `checksums.sha256`. It requires committed
 component source and does not publish anything. The package contains compiled
 JavaScript/declarations, CLI entries, license, a component identity record and

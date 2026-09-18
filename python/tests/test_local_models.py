@@ -550,9 +550,13 @@ def test_start_uses_fixed_command_human_and_rejects_foreign_attestation(service,
 
     monkeypatch.setattr(local_models.subprocess, "Popen", Process)
     monkeypatch.setenv("STPD_HUB_TOKEN", "must-not-reach-inference-child")
+    service.state.update(startup=startup(), evaluation={"old": True}, status="stopped")
     service.start("s1-human-combat-v4")
     result = finished(service)
     assert result["error_code"] == "runtime_load_or_attestation_failed"
+    assert result["status"] == "failed"
+    assert "startup" not in result and "evaluation" not in result
+    assert LocalModelService(service.config).state["status"] == "idle"
     command, options = calls[0]
     assert command[-2:] == ["--mode", "human"]
     assert "--adapter-arg=tools/policy_adapter.py" in command

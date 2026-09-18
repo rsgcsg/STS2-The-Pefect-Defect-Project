@@ -692,6 +692,10 @@ class LocalModelService:
                     stderr=log,
                 )
             self.process = process
+            # A new Human-mode child must not inherit a prior run's attestation
+            # or evaluation if its own startup fails.
+            for key in ("startup", "runtime", "evaluation", "recovery_evidence"):
+                self.state.pop(key, None)
             self.state.update(status="loading", loaded=False, connector_endpoint=connector)
             self._save()
         lines: queue.Queue[bytes] = queue.Queue(maxsize=1)
@@ -747,7 +751,7 @@ class LocalModelService:
             if (
                 self.process is not None
                 and self.process.poll() is not None
-                and self.state["status"] != "stopped"
+                and self.state["status"] == "loaded"
             ):
                 self.state.update(status="runtime_exited", loaded=False)
         if client is not None:

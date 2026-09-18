@@ -257,3 +257,21 @@ using synthetic finalized Evidence bytes pass, covering old/removed registration
 retained taint, missing/tampered/mismatched evidence, absence of terminal Stop and
 occupied port; mypy (218 source files) and changed-file Ruff pass. This does not
 claim recovery from unsealed unknown delivery or native continuous-game acceptance.
+
+### Installed version mismatch found and corrected
+
+The explicit sealed-Stop recovery succeeded on the original 22-event native log,
+retaining `tainted=true` and creating a separate passing integrity report. The
+next Human-only load rejected rc.5: its package version was new, but the exported
+Runtime version still said rc.4. No model action was enabled. The failed startup
+and incomplete run directory remain retained. rc.5 must not be recommended for
+Workbench loading and its published bytes are not replaced.
+
+The replacement rc.6 synchronizes the exported Runtime version and Connector
+product identity, with an installed-package assertion against package.json (the
+previous smoke compared two copies of the same stale constant). Runtime's 69
+tests, type/build checks and installed CLI start/seal/exit smoke passed. The
+Workbench also clears a prior run's startup/evaluation when creating a new
+Human-mode child, and does not mislabel a failed attestation as a running-session
+recovery problem. Its focused failure/recovery regressions pass; application and
+native integration still require the subsequent gates.

@@ -5,7 +5,7 @@ import {
   type EnvironmentControlClient,
   type EnvironmentControllerSession as ControllerSession
 } from "@rsgcsg/sts2-connector-client";
-import type { ConnectorAdapterClient, DecisionBundle, PolicyConnector } from "./contracts.js";
+import { POLICY_RUNTIME_VERSION, type ConnectorAdapterClient, type DecisionBundle, type PolicyConnector } from "./contracts.js";
 
 export class StaleWholeBundleError extends Error {
   readonly code = "stale_state" as const;
@@ -33,7 +33,7 @@ export class ConnectorPolicyClient implements PolicyConnector {
     this.options = {
       productId: options.productId ?? "sts2-policy-runtime",
       productName: options.productName ?? "STS2 Policy Runtime",
-      productVersion: options.productVersion ?? "0.1.0-rc.4",
+      productVersion: options.productVersion ?? POLICY_RUNTIME_VERSION,
       clientInstanceId: options.clientInstanceId
     };
   }

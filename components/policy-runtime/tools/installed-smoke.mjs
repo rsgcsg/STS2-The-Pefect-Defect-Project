@@ -62,6 +62,8 @@ await writeFile("artifact.bin", "synthetic");
 await writeFile("manifest.json", JSON.stringify(manifest));
 await writeFile("adapter.mjs", `process.stdout.write(JSON.stringify({schema:'sts2.policy-runtime/policy-port-1',message_type:'ready',adapter:${JSON.stringify(manifest.adapter)}})+'\\n'); process.stdin.resume();`);
 const installedEntry = fileURLToPath(import.meta.resolve("@rsgcsg/sts2-policy-runtime"));
+const installedPackage = JSON.parse(await readFile(new URL("../package.json", import.meta.resolve("@rsgcsg/sts2-policy-runtime")), "utf8"));
+assert.equal(POLICY_RUNTIME_VERSION, installedPackage.version, "runtime and package versions differ");
 const cli = new URL("../bin/policy-runtime.mjs", import.meta.resolve("@rsgcsg/sts2-policy-runtime"));
 const reservation = createServer();
 await new Promise((resolve) => reservation.listen(0, "127.0.0.1", resolve));
