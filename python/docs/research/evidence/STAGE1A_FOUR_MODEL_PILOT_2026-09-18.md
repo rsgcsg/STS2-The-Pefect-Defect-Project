@@ -86,3 +86,29 @@ Private failed attempts: `stage1a-integration-check-20260918-214945`,
 `stage1a-integration-retry-20260918-215115`, and
 `stage1a-python-env-check-20260918-220513`. The last directory retains the successful
 new-environment real-export contract receipt as well as the failed overall status.
+
+### Repaired full Python gate and local registration preparation
+
+Source `e5f925b101256ec584ebb90e35a0c86b2cbe36c4` passed the complete Python
+portable gate from its own locked environment: 1,122 tests passed, three skipped,
+21 subtests passed; lint, typecheck, engineering checks and wheel/sdist packaging
+also completed. Total job time was 133.421 seconds. The private receipt is
+`stage1a-python-gate-20260918-221415/status.json`, SHA-256
+`4cd716f1b771dcfd6ebc3eb72478c5d5744cb10a5a5101e12ca12bd0cc33ac7e`.
+The earlier Platform pass remains bound to `c69d59c`; this is not hosted CI or
+native-game qualification.
+
+Four private token registrations now point to the verified exports and current
+observed native environment. The loaded Mod SHA/MVID match the retained curation
+acceptance artifact (`52bcd795…ae0e`, `9db537ec-840b-4e2e-aa85-bea9fab6f4f1`).
+Registration admits only whole `combat_turn` decisions containing `play`, `use`
+and `end_turn`; no candidates are removed to fit this scope. Broader game surfaces
+remain unsupported by these registrations. No full-run support is claimed.
+
+The current game process reports `artifact_unqualified` and
+`execution_available=false`: passive observation is available, model actions are
+not. Its recorder is Ready with no open session. A cold launch through the owning
+Game Mod lifecycle is needed for explicit exact-source execution admission. Do
+not weaken compatibility checks or rebuild an unchanged Mod to hide this state.
+The running released Workbench has not yet been switched to Stage 1a source;
+pinned Runtime installation/readiness, Workbench load and game controls are next.
