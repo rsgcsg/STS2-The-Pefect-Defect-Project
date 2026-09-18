@@ -219,3 +219,13 @@ One `python/uv.lock` governs the Python environment. Hub installs cloud/data dep
 worker images additionally install training dependencies. These are explicit build
 profiles of the same source, not two product backends. Image digest and profile remain
 part of deployment identity. The CPU Hub cannot be submitted as a GPU worker.
+
+## Unified workbench delivery direction
+
+The accepted UI target is one local/cloud/in-game workbench with the Mod as the
+default entry for all functions, including login. Independent local/cloud services
+retain their responsibilities and run without the game where appropriate. External
+windows are alternate presentations of the same task/data/account system, not a
+second product. See [UI specification](UI_INTERACTION_SPEC.md#accepted-direction-complete-in-game-workbench-2026-09-18)
+for the target and phased implementation; the currently installed Mod is not yet
+the complete workbench. No gameplay, credential or research authority moves into UI.

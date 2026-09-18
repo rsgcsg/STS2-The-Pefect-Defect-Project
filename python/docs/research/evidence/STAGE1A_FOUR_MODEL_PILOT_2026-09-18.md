@@ -164,3 +164,33 @@ Required follow-up is owned by Runtime/Connector lifecycle, Evidence contract
 compatibility and Workbench restart handling respectively. The in-game interaction
 requirements are recorded in the root UI specification. No new training, release,
 UI deployment or full-game support is claimed by this follow-up.
+
+### Source repair candidate, not yet deployed
+
+The Evidence failure was reproduced on the unchanged native log. Public Connector
+SDK `readSchema` permits omitted/null `target_referent_id`; the Python Agent-run
+reader incorrectly required it. The corrected reader preserves strict required and
+unknown-field checks and target referent validation. Its nine focused tests pass,
+including omitted/null/invalid targets and extra keys. Reading the unchanged native
+run with the source candidate now passes evidence integrity verification. This
+does not remove its recorded rejected action or taint, nor prove causal settlement.
+
+Runtime now re-observes and re-scores only after a correlated explicit stale,
+retry-allowed non-delivery, with a three-consecutive-rejection bound. Unknowns and
+other failures still stop. Successor observation uses a fixed 250 ms interval,
+41 samples by default (10 seconds of scheduled waiting plus HTTP), rather than
+the old 375 ms scheduled wait. Polling is interruptible by Human/Stop and does not
+nest stale retry budgets. Focused regressions cover a six-second animation,
+exhaustion, recovery during waiting and fresh request/action identity; 69 Runtime
+tests passed. No polling result is promoted into a causal Human transition.
+
+Workbench's port check now matches reusable closed TCP connection semantics on
+POSIX while rejecting a live listener. The real-socket regression passes. An
+additional test-isolation defect was found: a catalog test inherited the operator's
+private registrations. It now reads only the shipped registry; both focused tests
+pass. The initial broader run retained one failure and 86 passes before that fix.
+
+Full gates, versioned Runtime/Evidence package pins, live restart and repeat native
+acceptance remain pending. Existing installed packages and prior failed reports
+are not overwritten by source-only verification. In-game one-click load/takeover
+is the subsequent implementation step, not a delivered feature in this candidate.

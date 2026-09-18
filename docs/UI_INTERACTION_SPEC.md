@@ -5,7 +5,24 @@ owns native legality, input delivery, causal proof or research admission.
 
 ## Accepted direction: complete in-game workbench (2026-09-18)
 
-The owner requires an in-game primary workbench, with an optional external window.
+The owner requires one unified local/cloud/in-game workbench, with the Mod as its
+default entry and an optional external window. All local and cloud-backed functions,
+including account login, device binding, recording, datasets, training, models,
+evaluation and jobs, must be accessible from the in-game workspace. Cloud is not a
+separate user product requiring a disconnected workflow. Local/remote execution
+and authority remain explicit, but navigation, task identity and progress are shared.
+
+UI hosting and background services need not run inside the game process. Independent
+training/upload tasks survive game exit; game-bound inference stops when its exact
+game disappears. The in-game host may use separately hosted pages or native views;
+no particular embedded browser implementation is selected by this requirement.
+Keep the entry simple, with contextual primary controls and progressive navigation.
+
+Persist login securely on trusted devices with normal refresh/expiry/revocation;
+reuse existing enrollment rather than asking for repeated binding. Keep logout,
+account switching and device revocation available. Shared identity does not mean
+copying a browser cookie or device credential to every surface; each authenticated
+entry uses the existing account/session authority and explicit access checks.
 This is the delivery target, not a claim about the currently installed UI. An
 external-browser shortcut alone does not satisfy it. Today the Mod only presents
 Recorder and Runtime controls and tells the user to prepare models elsewhere.

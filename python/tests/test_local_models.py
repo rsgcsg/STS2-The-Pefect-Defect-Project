@@ -1075,7 +1075,7 @@ def test_local_token_registry_adds_models_without_commands_or_runtime_override(s
     root = tmp_path / "registered"
     registry = root / "configs/developer/local-policies-v1.json"
     registry.parent.mkdir(parents=True)
-    shipped = service.registry()
+    shipped = json.loads((service.root / "configs/developer/local-policies-v1.json").read_text())
     registry.write_text(json.dumps(shipped))
     private = root / ".local/token-policies-v1.json"
     private.parent.mkdir()
@@ -1100,3 +1100,23 @@ def test_local_token_registry_adds_models_without_commands_or_runtime_override(s
     private.write_text(json.dumps(local))
     with pytest.raises(BoundaryError, match="invalid_local_token_registry"):
         service.registry()
+
+
+def test_runtime_port_check_rejects_listener_but_accepts_closed_connections():
+    import os
+    import socket
+
+    with socket.socket() as listener:
+        if os.name != "nt":
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind(("127.0.0.1", 0))
+        port = listener.getsockname()[1]
+        listener.listen()
+        with pytest.raises(BoundaryError, match="runtime_port_already_in_use"):
+            local_models._check_runtime_port(port)
+        if os.name != "nt":
+            with socket.create_connection(("127.0.0.1", port)) as client:
+                connection, _ = listener.accept()
+                connection.close()  # POSIX server TIME_WAIT is reusable by Node
+                assert client.recv(1) == b""
+    local_models._check_runtime_port(port)

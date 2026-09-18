@@ -48,6 +48,20 @@ JSON_LIMIT = 1024 * 1024
 
 
 
+def _check_runtime_port(port: int) -> None:
+    # Match Node's listener semantics: closed connections in TIME_WAIT are not
+    # another Runtime. This still rejects an active listener; never enable REUSEPORT.
+    with socket.socket() as probe:
+        if os.name != "nt":
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        else:
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        try:
+            probe.bind(("127.0.0.1", port))
+        except OSError:
+            raise BoundaryError("local_model", "runtime_port_already_in_use") from None
+
+
 def _loopback(url: str) -> str:
     result = endpoint(url)
     if not result.startswith(("http://127.0.0.1:", "http://localhost:", "http://[::1]:")):
@@ -635,11 +649,7 @@ class LocalModelService:
         manifest_path = _inside(self.root, entry["manifest"])
         manifest = _object_file(manifest_path)
         package = self._runtime_package()
-        with socket.socket() as probe:
-            try:
-                probe.bind(("127.0.0.1", 15527))
-            except OSError:
-                raise BoundaryError("local_model", "runtime_port_already_in_use") from None
+        _check_runtime_port(15527)
         connector = _loopback(self.config.platform_url or "http://127.0.0.1:15526")
         command = [
             "node",

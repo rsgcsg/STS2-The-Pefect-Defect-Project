@@ -175,3 +175,21 @@ obtained by polling. It is not a native causal `S'` certificate. Agent events
 bind decision metadata/scores, Receipt and successor but do not archive every
 pre-decision Snapshot/Read input. Research projections and evaluation protocols
 remain external consumers' responsibility.
+
+## Continuous-operation repair candidate
+
+The source candidate keeps Auto active after a correlated `not_delivered` receipt
+only when `reason_code=stale_snapshot` and the Connector explicitly allows a fresh
+snapshot retry. The controller is released and the next tick reacquires a complete
+bundle, rescores it and creates new decision/request IDs. Three consecutive stale
+submissions return to Human. Other non-delivery, unsupported decisions and all
+unknown delivery retain existing handoff/taint behavior; no old action is replayed.
+
+After delivered input, the default bounded observation wait is 41 samples at a
+250 ms fixed interval (10 seconds of scheduled waiting, plus bounded HTTP time),
+with one observation attempt per sample. This accommodates enemy animations; it
+is not a causal settlement proof. Human/Stop interrupts further polling and never
+submits another action. Exhaustion or identity drift still fails closed. Initial
+settling frames do not terminate Auto; unsupported stable surfaces still hand off.
+These changes require a newly pinned package before live use; rc.4 artifacts remain
+immutable and do not acquire this behavior from a source edit.

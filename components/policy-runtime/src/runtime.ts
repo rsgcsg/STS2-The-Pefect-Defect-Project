@@ -76,6 +76,7 @@ export class PolicyRuntime {
   private environment: RuntimeStatus["environment"] = null;
   private submittedRequestIds = new Set<string>();
   private tickActive = false;
+  private consecutiveStaleSubmissions = 0;
   private operation: Promise<unknown> = Promise.resolve();
   private requestedMode: RuntimeMode | null = null;
   private stopRequested = false;
@@ -97,7 +98,10 @@ export class PolicyRuntime {
     this.runId = options.runId ?? `run-${randomUUID()}`;
     this.now = options.now ?? (() => new Date().toISOString());
     this.staleRefresh = options.staleRefresh ?? { maxAttempts: 3, baseBackoffMs: 25 };
-    this.successorPoll = options.successorPoll ?? { maxAttempts: 5, baseBackoffMs: 25 };
+    this.successorPoll = options.successorPoll ?? { maxAttempts: 41, baseBackoffMs: 250 };
+    if (!Number.isSafeInteger(this.successorPoll.maxAttempts) || this.successorPoll.maxAttempts < 1
+        || !Number.isFinite(this.successorPoll.baseBackoffMs) || this.successorPoll.baseBackoffMs < 0)
+      throw new Error("successorPoll requires positive attempts and finite non-negative interval");
     this.policyTimeoutMs = options.policyTimeoutMs ?? 30_000;
     if (!Number.isSafeInteger(this.policyTimeoutMs) || this.policyTimeoutMs < 1) {
       throw new Error("policyTimeoutMs must be a positive integer");
@@ -173,6 +177,7 @@ export class PolicyRuntime {
         if (mode !== "human") this.checkRecoveryEpoch(expected?.recoveryEpoch);
         if (mode === "shadow" && this.mode !== "shadow") this.lastPolicySnapshotId = null;
         this.mode = mode;
+        if (mode === "auto") this.consecutiveStaleSubmissions = 0;
         if (!(await this.appendEvidence("mode_changed", { mode }))) {
           this.mode = "human";
           await this.releaseController();
@@ -249,7 +254,7 @@ export class PolicyRuntime {
     }
     const admission = admitWholeDecisionBundle(bundle, this.options.manifest);
     if (!admission.admitted) {
-      if (this.mode === "auto") await this.releaseControllerAndReturnHuman();
+      if (this.mode === "auto" && bundle.observation.status !== "settling") await this.releaseControllerAndReturnHuman();
       return { type: "not_admitted", reason: admission.reason, status: this.status() };
     }
     if (this.mode === "shadow" && this.lastPolicySnapshotId === bundle.observation.snapshot_id) {
@@ -329,11 +334,23 @@ export class PolicyRuntime {
     if (receipt.delivery === "unknown") { await this.taint(`unknown_delivery:${receipt.reason_code ?? "unspecified"}`); return { type: "unknown", decision, receipt, error: "Connector returned unknown delivery", status: this.status() }; }
     if (receipt.delivery === "not_delivered") {
       if (this.mode === "one_step") await this.completeOneStep();
-      else if (this.mode === "auto") await this.releaseControllerAndReturnHuman("action_not_delivered");
+      else if (this.mode === "auto") {
+        // Only a correlated, explicitly unapplied stale submission allows a new
+        // decision next tick. Never reuse its scores, action or request identity.
+        const refreshable = receiptRecorded && !this.tainted
+          && receipt.reason_code === "stale_snapshot" && receipt.retry.allowed
+          && receipt.retry.reason === "fresh_snapshot_required";
+        if (!refreshable || ++this.consecutiveStaleSubmissions >= 3)
+          await this.releaseControllerAndReturnHuman("action_not_delivered");
+        else await this.releaseController();
+      }
       return { type: "not_delivered", decision, receipt, status: this.status() };
     }
+    this.consecutiveStaleSubmissions = 0;
     try {
       const successor = await this.stableSuccessor(bundle.observation);
+      if (this.mutationCancellationRequested())
+        return { type: "not_admitted", reason: "recovery_requested_after_delivery", status: this.status() };
       if (!successor) { await this.taint("successor_not_stable"); return { type: "unknown", decision, receipt, error: "delivered action did not yield a stable distinct successor", status: this.status() }; }
       this.lastReceipt = { ...this.lastReceipt!, successor_snapshot_id: successor.snapshot_id };
       if (!(await this.appendEvidence("successor", { decision_id: decision.decision_id, successor }))) await this.taintWithoutEvidence("agent_evidence_write_failed_after_successor");
@@ -374,7 +391,9 @@ export class PolicyRuntime {
   private async appendEvidence(kind: string, payload: Record<string, unknown>): Promise<boolean> { try { await this.options.evidence?.append(kind, payload, this.now()); return true; } catch (error) { const reason = `agent_evidence_write_failed:${message(error)}`; this.errors = [...this.errors, reason].slice(-20); this.invalidations = [...this.invalidations, reason].slice(-20); return false; } }
   private async stableSuccessor(previous: PlayerEnvironmentSnapshot): Promise<PlayerEnvironmentSnapshot | null> {
     for (let attempt = 1; attempt <= this.successorPoll.maxAttempts; attempt += 1) {
-      const next = await refreshWholeDecisionBundle(this.options.connector, [], { ...this.successorPoll, sleep: this.sleep });
+      if (this.mutationCancellationRequested()) return null;
+      // One observation per attempt: do not multiply nested retry budgets.
+      const next = await refreshWholeDecisionBundle(this.options.connector, [], { maxAttempts: 1, baseBackoffMs: 0, sleep: this.sleep });
       if (next) {
         const observed = next.observation;
         if (observed.session.runtime_instance_id !== previous.session.runtime_instance_id
@@ -391,7 +410,7 @@ export class PolicyRuntime {
           return observed;
         }
       }
-      if (attempt < this.successorPoll.maxAttempts && this.successorPoll.baseBackoffMs > 0) await this.sleep(this.successorPoll.baseBackoffMs * (2 ** (attempt - 1)));
+      if (attempt < this.successorPoll.maxAttempts && this.successorPoll.baseBackoffMs > 0) await this.sleep(this.successorPoll.baseBackoffMs);
     }
     return null;
   }

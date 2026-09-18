@@ -207,3 +207,17 @@ schema admission, timeouts, controller acquisition and delivery. The token proce
 checks action-ID order/count and manifest equality, then returns finite scores and an
 index. Unexpected requests fail without a partial decision. Workbench continues to
 load in Human mode and use the existing Recorder handoff and Stop lifecycle.
+
+## Unified workbench target and restart repair
+
+The [root UI specification](../../docs/UI_INTERACTION_SPEC.md) owns the accepted
+unified local/cloud/in-game workbench target: all functions and login accessible
+from the Mod by default, optional external presentations, independent background
+services, and one account/task/data system. The current Mod is not yet this full
+workbench. Cloud-backed tasks remain in the same user workflow.
+
+Runtime port readiness now distinguishes a live listener from closed-connection
+TIME_WAIT using platform-appropriate bind semantics, without REUSEPORT or killing
+unrelated processes. Runtime startup/attestation remains authoritative if another
+process races the check. Operator-local model catalogs must not leak into test
+fixtures; tests read the shipped registry explicitly before adding synthetic entries.

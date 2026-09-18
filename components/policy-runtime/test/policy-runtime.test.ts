@@ -961,3 +961,85 @@ async function eventually(predicate: () => boolean): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
 }
+
+describe("continuous native decision recovery", () => {
+  const policy = (input: {candidate_digest: string; candidate_count: number}) => ({candidate_digest: input.candidate_digest, scores: Array(input.candidate_count).fill(1), selected_index: 0});
+
+  it("rescans and rescores after a known stale non-delivery, with new request and action IDs", async () => {
+    const connector = new FakeConnector(bundle(["old"]), "not_delivered");
+    connector.stale = false;
+    const original = connector.submit.bind(connector);
+    const requests: Parameters<typeof connector.submit>[0][] = [];
+    connector.submit = async input => {
+      requests.push(input);
+      const receipt = await original(input);
+      connector.current = bundle(["fresh"], "snapshot-fresh");
+      return {...receipt, reason_code: "stale_snapshot", retry: {allowed: true, reason: "fresh_snapshot_required"}};
+    };
+    const scorer = vi.fn(policy);
+    const runtime = new PolicyRuntime({manifest: manifest(), connector, mode: "auto", policy: scorer});
+    await runtime.tick();
+    expect(runtime.status().mode).toBe("auto");
+    expect(runtime.status().controller).toBe("released");
+    await runtime.tick();
+    expect(scorer).toHaveBeenCalledTimes(2);
+    expect(requests[1]!.boundActionId).toBe("fresh");
+    expect(requests[1]!.requestId).not.toBe(requests[0]!.requestId);
+    await runtime.tick();
+    expect(runtime.status().mode).toBe("human"); // bounded repeated stale failures
+  });
+
+  it.each(["not_delivered", "unknown"] as const)("never continues %s without explicit stale retry admission", async delivery => {
+    const connector = new FakeConnector(bundle(["a"]), delivery);
+    connector.stale = false;
+    const runtime = new PolicyRuntime({manifest: manifest(), connector, mode: "auto", policy});
+    await runtime.tick(); await runtime.tick();
+    expect(connector.submitCount).toBe(1);
+    expect(runtime.status().mode).toBe("human");
+  });
+
+  it("waits through multi-second enemy animations without another submission", async () => {
+    const connector = new FakeConnector(bundle(["a"])); connector.stale = false;
+    connector.observationQueue = [bundle(["a"]), ...Array.from({length: 24}, (_, i) => ({observation: snapshot([], `animation-${i}`, "settling", i+2), reads: []})), {observation: snapshot(["next"], "next", "interactive", 30), reads: []}];
+    const sleep = vi.fn(async (_ms: number) => {});
+    const runtime = new PolicyRuntime({manifest: manifest(), connector, mode: "auto", policy, sleep});
+    expect((await runtime.tick()).type).toBe("delivered");
+    expect(connector.submitCount).toBe(1);
+    expect(sleep.mock.calls.reduce((total, [ms]) => total+ms, 0)).toBe(6000);
+    expect(runtime.status().tainted).toBe(false);
+  });
+
+  it("hands off on bounded successor exhaustion and never resubmits", async () => {
+    const connector = new FakeConnector(bundle(["a"])); connector.stale = false;
+    connector.observationQueue = [bundle(["a"]), ...Array.from({length: 3}, (_, i) => ({observation: snapshot([], `settling-${i}`, "settling", i+2), reads: []}))];
+    const runtime = new PolicyRuntime({manifest: manifest(), connector, mode: "auto", policy,
+      successorPoll: {maxAttempts: 3, baseBackoffMs: 0}, sleep: async () => {}});
+    expect((await runtime.tick()).type).toBe("unknown");
+    expect(runtime.status().tainted).toBe(true);
+    await runtime.tick();
+    expect(connector.submitCount).toBe(1);
+  });
+
+  it("does not score or exit Auto during a settling frame", async () => {
+    const connector = new FakeConnector({observation: snapshot([], "settling", "settling", 1), reads: []}); connector.stale = false;
+    const scorer = vi.fn(policy);
+    const runtime = new PolicyRuntime({manifest: manifest(), connector, mode: "auto", policy: scorer});
+    expect((await runtime.tick()).type).toBe("not_admitted");
+    expect(runtime.status().mode).toBe("auto");
+    expect(scorer).not.toHaveBeenCalled();
+    expect(connector.submitCount).toBe(0);
+  });
+
+  it("allows Human recovery during animation waiting without sending another action", async () => {
+    const connector = new FakeConnector(bundle(["a"])); connector.stale = false;
+    connector.observationQueue = [bundle(["a"]), {observation: snapshot([], "animation", "settling", 2), reads: []}];
+    let recovery: Promise<unknown> | undefined;
+    const runtime = new PolicyRuntime({manifest: manifest(), connector, mode: "auto", policy, sleep: async () => { recovery = runtime.setMode("human"); }});
+    expect((await runtime.tick()).type).toBe("not_admitted");
+    await recovery;
+    expect(runtime.status().mode).toBe("human");
+    expect(runtime.status().controller).toBe("released");
+    expect(runtime.status().tainted).toBe(false);
+    expect(connector.submitCount).toBe(1);
+  });
+});
