@@ -119,3 +119,18 @@ The first compact-public D-Simple-S pilot has completed training, dev evaluation
 original-snapshot export parity checks; see [the exact evidence record](evidence/STAGE1A_PUBLIC_D_SIMPLE_S_2026-09-18.md).
 Next, D-Simple-PF uses the same allocation/view and update count as an engineering
 configuration comparison. Actual Workbench/Mod execution remains a separate pending gate.
+
+## Compare completed token configurations
+
+`--store STORE compare-tokens --result REFERENCE_RESULT --result OTHER_RESULT`
+produces a JSON analysis projection (repeat `--result` for more configurations).
+It verifies completed-result lineage and payloads, requires exactly the same ModelView,
+and matches every dev row by transition identity. Different tokenizers/backbones are
+allowed; missing/duplicate rows, different views and non-dev rows are rejected.
+It recomputes decision-weighted, run-weighted and multi-candidate metrics, and reports
+paired differences from the first result, explicit config/source identities and each
+recorded worker attempt's elapsed time. It does not access test/Gold labels or launch
+training. Store the output with the experiment's private receipts; it is a rebuildable
+view of existing artifacts, not another database. One attempt's time excludes other
+attempts, input preparation and tuning. Shared data and update counts do not isolate
+pretraining from differences in backbone size, tokenizer or trainable capacity.

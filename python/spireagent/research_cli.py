@@ -49,6 +49,8 @@ def main() -> int:
     tokenize.add_argument("--max-tokens", type=int, default=16384)
     public_view = commands.add_parser("public-view", help="exact Human public-observation BC view")
     public_view.add_argument("--allocation", required=True)
+    compare = commands.add_parser("compare-tokens", help="paired completed token-run dev reports")
+    compare.add_argument("--result", action="append", required=True)
     train = commands.add_parser("train")
     train.add_argument("--features", required=True)
     train.add_argument("--steps", type=int, default=100)
@@ -142,7 +144,11 @@ def main() -> int:
     started = perf_counter()
     with verified_model_views(store) as views:
         result: dict
-        if args.command == "prepare":
+        if args.command == "compare-tokens":
+            from stpd.fullrun.token_comparison import compare_token_results
+
+            result = compare_token_results(store, args.result)
+        elif args.command == "prepare":
             if not args.operations.is_file():
                 raise BoundaryError("stage1", "existing_authoritative_operations_required")
             operations = Operations(args.operations)
