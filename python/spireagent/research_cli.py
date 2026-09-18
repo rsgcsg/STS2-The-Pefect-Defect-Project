@@ -19,12 +19,11 @@ from spireagent.json_boundary import BoundaryError, json_bytes, object_fields
 from spireagent.source import source_identity
 from spireagent.storage.config import open_store
 from spireagent.storage.run_reporter import ObjectStoreRunReporter
-
-from ..workers.contracts import TrainingConfig, prepare_run, prepare_training_input
-from ..workers.worker import execute
-from .decision_training import AllocationSpec, publish_allocation, publish_decision_view
-from .features import compile_features
-from .representation import FullRunSerializer
+from stpd.fullrun.decision_training import AllocationSpec, publish_allocation, publish_decision_view
+from stpd.fullrun.features import compile_features
+from stpd.fullrun.representation import FullRunSerializer
+from stpd.workers.contracts import TrainingConfig, prepare_run, prepare_training_input
+from stpd.workers.worker import execute
 
 
 def main() -> int:
@@ -37,6 +36,7 @@ def main() -> int:
     prepare.add_argument("--isolation", choices=("run", "decision"), default="run")
     prepare.add_argument("--train-limit", type=int, default=100)
     prepare.add_argument("--dev-limit", type=int, default=32)
+    prepare.add_argument("--profile", choices=("lite", "standard", "full"), default="standard")
     encode = commands.add_parser("encode")
     encode.add_argument("--view", required=True)
     encode.add_argument("--snapshot", type=Path, required=True)
@@ -59,9 +59,9 @@ def main() -> int:
     score.add_argument("--backend", choices=("cpu", "mps"), required=True)
     args = parser.parse_args()
     if args.command == "score":
-        from ..policy.decision import DecisionScorer
-        from ..qwen.portable_backend import PortableQwenBackend
-        from .contracts import SemanticAction, SemanticState
+        from stpd.fullrun.contracts import SemanticAction, SemanticState
+        from stpd.policy.decision import DecisionScorer
+        from stpd.qwen.portable_backend import PortableQwenBackend
 
         if args.input.stat().st_size > 16 * 1024**2:
             raise BoundaryError("stage1", "input_size_limit")
@@ -88,7 +88,7 @@ def main() -> int:
     if args.store is None:
         parser.error("--store is required except for standalone score")
     store = open_store(args.store)
-    runtime = source_identity(Path(__file__).resolve().parents[2])
+    runtime = source_identity(Path(__file__).resolve().parents[1])
     started = perf_counter()
     result: dict
     if args.command == "prepare":
@@ -107,14 +107,16 @@ def main() -> int:
             ),
             runtime,
         )
-        view = publish_decision_view(store, allocation.artifact_id, FullRunSerializer(), runtime)
+        view = publish_decision_view(
+            store, allocation.artifact_id, FullRunSerializer(args.profile), runtime
+        )
         result = {
             "allocation_id": allocation.artifact_id,
             "model_view_id": view.artifact_id,
             "counts": allocation.parameters.value()["counts"],
         }
     elif args.command == "encode":
-        from ..qwen.portable_backend import PortableQwenBackend
+        from stpd.qwen.portable_backend import PortableQwenBackend
 
         backend = PortableQwenBackend(args.snapshot, device=args.backend)
         features = compile_features(store, args.view, backend, runtime, batch_size=1)
@@ -140,7 +142,7 @@ def main() -> int:
             )
         )
     elif args.command == "export":
-        from ..policy.decision import export_model
+        from stpd.policy.decision import export_model
 
         result = export_model(store, args.model, args.destination)
     else:

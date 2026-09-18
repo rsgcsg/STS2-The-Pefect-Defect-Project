@@ -22,8 +22,7 @@ from .real_backend import RealQwenBackend, _masked_mean
 def validate_engineering_identity(identity: QwenIdentity) -> None:
     if identity.device.startswith("cuda:"):
         identity.validate_scientific_v0()
-        return
-    if (
+    elif (
         identity.device not in {"cpu", "mps"}
         or identity.dtype != "float32"
         or identity.control != "pretrained"
@@ -33,10 +32,13 @@ def validate_engineering_identity(identity: QwenIdentity) -> None:
     ):
         raise QwenL2Error("unsupported portable engineering encoding identity")
     # Reuse exact pretrained/tokenizer/control checks without asserting CUDA execution.
-    replace(identity, device="cuda:0", dtype="bfloat16").validate_scientific_v0()
+    else:
+        replace(identity, device="cuda:0", dtype="bfloat16").validate_scientific_v0()
     pin = load_l2_pin()
     if (
-        identity.model_revision != pin.repo_revision
+        identity.model_id != pin.model_id
+        or identity.model_revision != pin.repo_revision
+        or identity.tokenizer_revision != pin.repo_revision
         or identity.weights_sha256 != pin.weights_sha256
         or identity.config_sha256 != pin.l1.config_sha256
         or identity.tokenizer_sha256 != pin.l1.tokenizer_bundle_sha256

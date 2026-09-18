@@ -278,8 +278,10 @@ class LocalIdentity:
         ):
             raise BoundaryError("identity", "invalid_console_route")
         values = parse_qs(query, strict_parsing=True, max_num_fields=7)
-        if (set(values) - {"limit", "offset", "device", "q", "from", "to", "selectable"}
+        if (set(values) - {"limit", "offset", "device", "q", "from", "to", "selectable", "archived"}
                 or ("q" in values and path != "datasets")
+                or ("archived" in values
+                    and path not in {"training", "models", "evaluations", "analyses"})
                 or (set(values) & {"from", "to", "selectable"} and path != "collections")
                 or any(len(v) != 1 for v in values.values())):
             raise BoundaryError("identity", "invalid_console_query")

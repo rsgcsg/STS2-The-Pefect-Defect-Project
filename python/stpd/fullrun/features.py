@@ -227,6 +227,13 @@ def compile_features(
     decision_view = view.parameters.value()["schema"] == "stpd/decision-model-view-v1"
     validate_qwen_identity(identity, scope, decision_view=decision_view)
     keys, rows, pairs = feature_index(samples, identity)
+    token_lengths = getattr(backend, "token_lengths", None)
+    if callable(token_lengths):
+        # Validate every full input before spending any encoder compute. Real pinned
+        # backends reject over-limit sequences here; never silently drop/truncate them.
+        for key in keys:
+            state, action = pairs[key]
+            token_lengths([f"{state}\n{action}"])
     arrays: list[NDArray[np.float32]] = []
     for offset in range(0, len(keys), batch_size):
         chunk = [pairs[key] for key in keys[offset : offset + batch_size]]

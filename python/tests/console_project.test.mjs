@@ -1284,3 +1284,20 @@ test("legacy preview refresh creates a new selection instead of incompatible con
   await button.onclick();
   assert.deepEqual(body(post(h.calls)[0]),{name:"old",uploads:[uploadId],rules:{seed:0},preview_id:null});
 });
+
+test("research archives preserve project scope and restore exact artifact identities", async () => {
+  const artifact = id("6");
+  const env = setup({view:"research", handler: url => url.includes("/training?")
+    ? {...emptyList(),items:[{artifact_id:artifact,kind:"training_input"}],total:1}
+    : emptyList()});
+  env.scope("other-pc");
+  let page = await env.render();
+  await action(page,`research-visibility-${artifact}`).onclick();
+  assert.deepEqual(body(post(env.calls)[0]),{ids:[artifact],archived:true});
+  await action(page,"research-archive-view").onclick();
+  page = await env.render();
+  assert.ok(env.calls.some(c => c.url.includes("archived=true") && c.url.includes("device=other-pc")));
+  assert.match(text(page), /恢复显示/);
+  await action(page,`research-visibility-${artifact}`).onclick();
+  assert.deepEqual(body(post(env.calls).at(-1)),{ids:[artifact],archived:false});
+});

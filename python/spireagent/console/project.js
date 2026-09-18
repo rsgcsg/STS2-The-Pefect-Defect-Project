@@ -885,7 +885,7 @@ window.SpireProject = (() => {
       try {
         const data = await request(
           ctx,
-          member(`research/${kind}${archived ? "/archived" : ""}?limit=25&offset=${offset}`),
+          project(`${kind}?limit=25&offset=${offset}${archived ? "&archived=true" : ""}`),
         );
         if (data.availability !== "available")
           section.append(

@@ -118,3 +118,31 @@ def test_decision_worker_export_and_new_input_scoring(tmp_path: Path):
     path.write_bytes(raw)
     with pytest.raises(BoundaryError, match="weights_digest"):
         DecisionScorer(directory, backend)
+
+
+def test_all_lengths_checked_before_any_encoder_work(tmp_path: Path):
+    owner, dataset = prepared(tmp_path)
+    allocation = publish_allocation(owner.store, dataset, AllocationSpec(), owner.producer)
+    view = publish_decision_view(
+        owner.store, allocation.artifact_id, FullRunSerializer(), owner.producer
+    )
+
+    class OverLimit(DeterministicFakeQwenBackend):
+        count = 0
+        encoded = 0
+
+        def token_lengths(self, texts):
+            self.count += 1
+            if self.count == 2:
+                raise ValueError("input hard limit")
+            return [5]
+
+        def encode_joint(self, states, actions):
+            self.encoded += 1
+            return super().encode_joint(states, actions)
+
+    backend = OverLimit(1024)
+    backend.identity = identity()
+    with pytest.raises(ValueError, match="input hard limit"):
+        compile_features(owner.store, view.artifact_id, backend, owner.producer)
+    assert backend.encoded == 0

@@ -36,6 +36,7 @@ def _check_model(model: Manifest) -> tuple[dict[str, Any], FullRunSerializer]:
         or info.get("hidden_size") != 1024
         or info.get("dtype") != "float32"
         or info.get("scope") != "platform_verified"
+        or info.get("qwen", {}).get("control") != "pretrained"
         or [p.role for p in model.payloads] != ["weights"]
         or model.payload("weights").size > MAX_WEIGHTS
     ):

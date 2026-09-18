@@ -50,16 +50,6 @@ class MemberApi:
 
     def read(self, route: str, query: str, principal: ConsolePrincipal) -> dict[str, Any]:
         current = self._principal(principal)
-        research = re.fullmatch(
-            r"research/(training|evaluations|analyses|models)(/archived)?", route
-        )
-        if research:
-            limit, offset, status = pagination(query)
-            if status is not None:
-                raise BoundaryError("member_api", "unexpected_status_filter")
-            return self.service.console_index.artifacts(
-                current, research[1], limit=limit, offset=offset, archived=bool(research[2])
-            )
         quality = re.fullmatch(r"collections/([a-f0-9]{32})/decisions", route)
         if quality:
             limit, offset, status = pagination(query)

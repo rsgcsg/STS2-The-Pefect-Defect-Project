@@ -36,7 +36,7 @@ class MemberClient:
         allowed = (
             r"collection-settings|campaigns(?:/[a-f0-9]{64}/enroll|/enrollments(?:/[a-f0-9]{32})?)?"
             r"|collections/[a-f0-9]{32}/decisions"
-            r"|artifacts/visibility|research/(?:training|evaluations|analyses|models)(?:/archived)?"
+            r"|artifacts/visibility"
             r"|exports(?:/[a-f0-9]{64})?|datasets(?:/archived|/visibility|/[a-f0-9]{32}(?:/(?:retry|cancel))?)?|games"
         )
         if re.fullmatch(allowed, path) is None:

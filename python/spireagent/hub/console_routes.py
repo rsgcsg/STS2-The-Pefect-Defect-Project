@@ -81,6 +81,19 @@ class ConsoleRoutes:
 
     def read(self, resource: str, query: str, principal: ConsolePrincipal) -> dict[str, Any]:
         search = ""
+        archived = False
+        if resource in {"training", "models", "evaluations", "analyses"}:
+            try:
+                pairs = parse_qsl(query, strict_parsing=True, keep_blank_values=True,
+                                  max_num_fields=4)
+                archive_values = [v for k, v in pairs if k == "archived"]
+                if len(archive_values) > 1 or any(v not in {"true", "false"}
+                                                  for v in archive_values):
+                    raise ValueError
+                archived = archive_values == ["true"]
+                query = urlencode([(k, v) for k, v in pairs if k != "archived"])
+            except ValueError:
+                raise BoundaryError("console", "invalid_archive_filter") from None
         source_filters: dict[str, Any] = {}
         if resource == "collections":
             try:
@@ -133,7 +146,8 @@ class ConsoleRoutes:
             kind, artifact_id = resource.split("/")
             return index.artifacts(principal, kind, limit=1, offset=0, artifact_id=artifact_id)
         if resource in {"datasets", "models", "training", "evaluations", "analyses"}:
-            return index.artifacts(principal, resource, limit=limit, offset=offset, search=search)
+            return index.artifacts(principal, resource, limit=limit, offset=offset,
+                                   search=search, archived=archived)
         if resource == "statistics":
             if query:
                 raise BoundaryError("console", "unexpected_query")

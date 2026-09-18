@@ -1,7 +1,7 @@
 # S01 operator workflow
 
 S01 is the first engineering cycle: a pinned frozen Qwen plus a Linear ranking head.
-The public entry point is `uv run --locked python -m stpd.fullrun.stage1_cli` from `python/`.
+The public entry point is `uv run --locked python -m spireagent.research_cli` from `python/`.
 Use the locked ML/L2 extras. Mutating preparation/training commands require clean exact source.
 This interface reuses the existing ArtifactStore and Worker. It does not start cloud compute.
 
@@ -14,6 +14,9 @@ This interface reuses the existing ArtifactStore and Worker. It does not start c
    --dev-limit 16 --isolation run`, with global `--store LOCATION`. This is an owner operation
    beside the authoritative Hub database, not a newly created or copied operations database.
    It checks current held-out restrictions and records training use before publishing inputs.
+   Use `--profile lite|standard|full` to freeze the existing serializer profile; the default
+   is standard. This changes the selected information, so it is recorded in the model identity
+   and is not an equivalent runtime optimization. All inputs are length-checked before encoding.
 3. Keep the returned allocation and model-view IDs. Run isolation groups known duplicates
    across runs; decision isolation is an explicit engineering diagnostic that may share runs.
    This allocation is train/dev, not a final test or Gold evaluation. The fixed member payload
