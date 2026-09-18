@@ -64,3 +64,20 @@ No training store, human choice, successor state or game execution is needed for
 Independent scoring verifies model packaging, not gameplay. The next native adapter must
 use this same serializer/scorer and preserve cancellation, local session identity, complete
 Connector candidates, execution receipts and manual takeover.
+
+## Public game input parity before further model training
+
+The first D-Simple-S pilot passed recovery/export checks, but its recorded semantic input
+contains execution supplements that the online public Snapshot does not expose verbatim.
+Do not register that model as game-ready or silently omit those fields at inference.
+
+`python tools/audit_stage1a_live_inputs.py --store STORE --allocation ALLOCATION --output REPORT`
+verifies the fixed allocation and replays each original public pre-frame through
+`stpd-public-snapshot-lite-v1`. It reports exact catalog-semantic matches, unique human-choice
+mapping and explicit exclusions. It neither changes the source/allocation nor starts training,
+publishes a new dataset, or issues game commands. The output identifies its producing source.
+
+The public projection deliberately has a new identity; reusing the old tokenizer/model does
+not establish input parity. After replay coverage is known, the same projection must feed
+a new verified training view and the decision-only online adapter. Candidate subsets and
+native-to-public verb guesses are forbidden. Insufficient coverage must remain visible.
