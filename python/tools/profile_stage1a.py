@@ -1,4 +1,4 @@
-"""Bounded local synthetic-length profile of the four graphs, using real pinned PF weights.
+"""Historical v1 synthetic-length profile; use profile_packed_b.py for current packed B.
 
 No human dataset, optimizer updates, game actions or cloud calls. A synthetic
 choice index exercises backward only. This measures
@@ -65,7 +65,10 @@ def main() -> None:
     write()
     try:
         # Scratch first, then one shared Qwen load. Every graph gets its own new head.
-        for recipe_id in sorted(RECIPES, key=lambda r: recipe_for(r).backbone == 'pf'):
+        for recipe_id in sorted(
+            (r for r in RECIPES if r.endswith(".v1")),
+            key=lambda r: recipe_for(r).backbone == "pf",
+        ):
             recipe = recipe_for(recipe_id)
             report['active_recipe'] = recipe_id
             write()

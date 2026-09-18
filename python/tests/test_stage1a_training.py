@@ -45,7 +45,7 @@ def test_token_budget_is_explicit_and_old_configs_keep_original_limit():
     assert TokenConfig.decode(legacy).max_tokens == 8192
 
 
-@pytest.mark.parametrize("recipe", ["stage1a.b.s.v1", "stage1a.dsimple.s.v1"])
+@pytest.mark.parametrize("recipe", ["stage1a.b.s.v1", "stage1a.b.s.v2", "stage1a.dsimple.s.v1"])
 def test_engine_resume_keeps_dropout_plan_parameters_and_scores(tmp_path, recipe):
     _, inputs = token_inputs(tmp_path)
     config = tiny_config(recipe)
@@ -75,9 +75,10 @@ def test_fixed_qwen_weights_are_not_saved_in_small_checkpoint_model():
     assert set(model_weights(model, frozen=True)) == {"readout", "head.weight", "head.bias"}
 
 
-def test_worker_new_process_resume_export_and_standalone_score(tmp_path):
+@pytest.mark.parametrize("recipe", ["stage1a.dsimple.s.v1", "stage1a.b.s.v2"])
+def test_worker_new_process_resume_export_and_standalone_score(tmp_path, recipe):
     owner, inputs = token_inputs(tmp_path)
-    config = tiny_config()
+    config = tiny_config(recipe)
     run = prepare_token_run(owner.store, inputs, config, owner.producer)
     reporter = ObjectStoreRunReporter(owner.store, owner.store.blobs)
     paused = execute_tokens(owner.store, reporter, run.artifact_id, owner.producer, stop_after=1)

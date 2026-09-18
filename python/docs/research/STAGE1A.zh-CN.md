@@ -3,6 +3,11 @@
 状态：用户于 2026-09-18 批准，实施中；没有因此获得真实训练或原生运行 PASS。
 基线为 develop `d5785d215087719189a3a6bada9addb34b7d95c5`。
 本文件拥有当前任务范围；模型定义由 [模型总纲](MODEL_DESIGN.zh-CN.md)拥有。
+
+2026-09-18 执行修正：[ADR-0014](../../../docs/adr/0014-packed-bc-readouts.md) 明确 B/C
+必须共享一次观察输入，集中读取全部动作位置。B v2 源码及 40 项相关回归已通过，覆盖
+候选隔离、输出与梯度、一次／两阶段调用计数和 v2 新进程恢复／导出；真实 PF 成本复验
+另行记录。旧 B-PF v1 停在第 3/10 步，不自动恢复，不作为 v2 训练结果。C 仅更新设计。
 [S01 历史验收](evidence/S01_2026-09-18.md)只证明独立评分，不代表真实游戏入口已通过。
 
 ## 阶段与非目标
@@ -17,8 +22,8 @@
 
 | 配置 ID | 结构／骨干 | 可训练部分 |
 |---|---|---|
-| stage1a.b.s.v1 | B 单 Transformer，train-only BPE、小骨干 | embedding、唯一主干、动作读出 query、Linear head |
-| stage1a.b.pf.v1 | B 单 Transformer，固定预训练 Qwen | 动作读出 query、Linear head；Qwen 与原 embedding 冻结 |
+| stage1a.b.s.v2 | B 单 Transformer，train-only BPE、小骨干 | embedding、唯一主干、动作读出 query、Linear head |
+| stage1a.b.pf.v2 | B 单 Transformer，固定预训练 Qwen | 动作读出 query、Linear head；Qwen 与原 embedding 冻结 |
 | stage1a.dsimple.s.v1 | 小编码器＋公共向量＋动作 MLP 更新 | 编码器、更新 MLP、评分 MLP |
 | stage1a.dsimple.pf.v1 | 固定 Qwen＋公共向量＋动作 MLP 更新 | 更新 MLP、评分 MLP；Qwen 冻结 |
 
@@ -28,8 +33,9 @@ B 的 Linear 读出不是被取消的纯线性基线。B/C 不恢复历史 E＋J
 
 Scratch 默认词表目标 8192、宽 384、2 层、6 heads、FFN 1536、Pre-LN、GELU、
 dropout 0.1、final LN、正弦位置；实际词表 artifact 由 train 建立并保留 byte fallback。
-B 使用因果、候选隔离、末尾共享 soft query。先用独立候选分支作为正确性参考；
-未来共享前缀须核对位置、mask、输出及梯度，不能依赖普通整串 causal mask 防止串扰。
+B 只输入一份观察，所有动作及各自 soft query 共同处理，一次取出全部读出位置。
+每层以 block mask 隔离候选，分支位置编号重置；S 一次完整 forward。旧 v1 独立分支仅作
+参考和历史恢复；v2 使用独立身份，尤其不把 scratch 的共享 dropout 当旧训练精确复现。
 D-Simple-S 的状态／动作共用一个两层 encoder，内部双向 attention，masked mean。
 更新为 normalize(w + MLP([w,u]))，宽 384；MLP 768→384→384、评分 384→256→1。
 D-Simple-PF 保留宽 1024 的对应向量结构。两种 D 是明确不同骨干配置，不改义旧 checkpoint。
@@ -38,8 +44,10 @@ PF 固定现有 Qwen3-0.6B-Base pin；B 的 readout 初值取固定 EOS embeddin
 
 B-PF 的骨干参数不更新，但训练 query 必须保留经过骨干的梯度；不能调用 inference_mode
 或把最终 h 当作跨更新固定特征。D-PF 的固定向量可以预计算。S 更新 encoder，不能复用旧激活。
-冻结 B 可将每个分支分成不依赖 query 的固定因果前缀 KV 和保梯度的末尾 query；
-先验证全分支与分解执行的输出和 query 梯度一致。缓存仅在当前候选内使用，不串候选。
+冻结 B 将全部固定观察／动作一次编码，再集中计算所有 query，使用同一个 Qwen；
+这是同一 packed 图的两阶段等价执行，缓存只属于当前决策。没有逐候选 Qwen 调用。
+验证与一次完整 packed forward 及独立分支参考的输出／梯度一致。密集 mask 仍有平方成本，
+共享输入不等于必然低延迟；必须另测真实长度、候选数、前向／反向和内存。
 本机先测真实前向／反向、内存和候选长度，再确定正式 batch/步数；不先保证 PF 速度。
 小样检查先用几十条，随后四格固定共同数百条 train/dev。数据源不足独立局时保留限制，
 不通过放宽准入、拿 Gold 或把同局决策假称独立 test 来补数。

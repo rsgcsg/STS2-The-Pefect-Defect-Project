@@ -13,6 +13,8 @@ from dataclasses import dataclass
 import torch
 from torch import Tensor, nn
 
+from .packed_actions import pack_actions
+
 
 class TokenCore(nn.Module, ABC):
     width: int
@@ -40,6 +42,20 @@ class TokenCore(nn.Module, ABC):
             raise ValueError("invalid query shape or joint input token limit")
         embedded = torch.cat((self.embed_tokens(ids), query.unsqueeze(0)), dim=0)
         return self.contextualize(embedded, causal=True)[-1]
+
+    def read_action_queries(
+        self, state: Tensor, actions: tuple[Tensor, ...], query: Tensor,
+    ) -> Tensor:
+        packed = pack_actions(self.embed_tokens(state),
+                              tuple(self.embed_tokens(a) for a in actions), query)
+        return self.contextualize_packed(
+            packed.embeddings, packed.positions, packed.blocked,
+        )[packed.readouts]
+
+    def contextualize_packed(
+        self, embeddings: Tensor, positions: Tensor, blocked: Tensor,
+    ) -> Tensor:
+        raise NotImplementedError("backbone must implement shared-observation packed execution")
 
     @abstractmethod
     def embed_tokens(self, ids: Tensor) -> Tensor:
@@ -121,3 +137,16 @@ class ScratchTokenCore(TokenCore):
         if causal:
             mask = torch.ones(length, length, device=embeddings.device, dtype=torch.bool).triu(1)
         return self.encoder(inputs.unsqueeze(0), mask=mask, is_causal=causal)[0]  # type: ignore[no-any-return]
+
+    def contextualize_packed(
+        self, embeddings: Tensor, positions: Tensor, blocked: Tensor,
+    ) -> Tensor:
+        frequency = torch.exp(
+            torch.arange(0, self.width, 2, device=embeddings.device, dtype=torch.float32)
+            * (-math.log(10000.0) / self.width)
+        )
+        angles = positions.to(torch.float32)[:, None] * frequency
+        encoding = torch.stack((angles.sin(), angles.cos()), dim=-1).flatten(1)
+        inputs = embeddings + encoding.to(embeddings.dtype)
+        # The custom branch mask is not an ordinary triangular causal mask.
+        return self.encoder(inputs.unsqueeze(0), mask=blocked, is_causal=False)[0]  # type: ignore[no-any-return]

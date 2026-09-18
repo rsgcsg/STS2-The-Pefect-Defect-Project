@@ -28,7 +28,9 @@ For the first scratch D-Simple engineering run:
 ```
 
 Arguments above form one command. CPU is an explicit alternative. Training stays local.
-For B use `stage1a.b.s.v1`. Frozen recipes use the PF input, `.pf.v1` recipe and `--snapshot`.
+For B use `stage1a.b.s.v2` or `stage1a.b.pf.v2`; D-Simple retains `.v1`.
+Frozen recipes use the PF input and `--snapshot`. B v2 packs one observation and all
+action readouts; v1 remains historical and must not silently resume into v2.
 Do not run frozen models at large input/candidate counts without a bounded cost check.
 
 The CLI fixes seed1701, FP32, one complete decision per optimizer step, AdamW lr3e-4,
@@ -134,3 +136,20 @@ training. Store the output with the experiment's private receipts; it is a rebui
 view of existing artifacts, not another database. One attempt's time excludes other
 attempts, input preparation and tuning. Shared data and update counts do not isolate
 pretraining from differences in backbone size, tokenizer or trainable capacity.
+
+## B/C shared observation clarification
+
+[ADR-0014](../../../docs/adr/0014-packed-bc-readouts.md) fixes the execution contract.
+The earlier B-PF v1 run remains operator-paused at step 3/10; do not resume it or
+relabel its checkpoint as v2. New performance checks do no optimizer updates.
+A new v2 training run requires its own identity and an explicit training handoff.
+C1 is the matched B graph with successor objectives when selected; C2 packs K
+readouts per candidate. C is documented, not implemented or trained in Stage 1a.
+
+`tools/profile_packed_b.py --store STORE --inputs PF_INPUT --snapshot SNAPSHOT
+--output NEW_REPORT --device mps` checks a short real-weight full-packed reference
+against the frozen two-phase execution, then measures forward/backward on the first
+three decisions of the original seed1701 plan. It never creates an optimizer, updates
+weights or resumes a checkpoint. It reports fixed/readout pass times and MPS memory
+at phase boundaries (not a sampled peak). Run it durably under the long-job handoff
+rule. Old `profile_stage1a.py` explicitly retains v1 for historical reproduction.

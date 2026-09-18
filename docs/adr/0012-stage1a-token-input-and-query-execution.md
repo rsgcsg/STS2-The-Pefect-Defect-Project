@@ -2,6 +2,10 @@
 
 Status: Accepted for implementation; runtime qualification tracked separately
 
+Execution update: [ADR-0014](0014-packed-bc-readouts.md) supersedes the branch-local
+B default with shared-observation packed v2. The text below retains the v1 history;
+token input/artifact contracts remain in force.
+
 Date: 2026-09-18
 
 ## Grounding and ownership

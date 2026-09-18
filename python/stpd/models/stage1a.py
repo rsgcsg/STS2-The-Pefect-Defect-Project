@@ -30,7 +30,7 @@ class Recipe:
 _FAMILIES: tuple[Literal["b", "dsimple"], ...] = ("b", "dsimple")
 _BACKBONES: tuple[Literal["s", "pf"], ...] = ("s", "pf")
 
-RECIPES = MappingProxyType({
+RECIPES = MappingProxyType({**{
     f"stage1a.{family}.{backbone}.v1": Recipe(
         f"stage1a.{family}.{backbone}.v1",
         "b.single-stream.v1" if family == "b" else "dsimple.vector.v1",
@@ -38,7 +38,11 @@ RECIPES = MappingProxyType({
     )
     for family in _FAMILIES
     for backbone in _BACKBONES
-})
+}, **{
+    f"stage1a.b.{backbone}.v2": Recipe(
+        f"stage1a.b.{backbone}.v2", "b.shared-observation.v2", "b", backbone,
+    ) for backbone in _BACKBONES
+}})
 
 
 def recipe_for(recipe_id: str) -> Recipe:
@@ -59,11 +63,13 @@ def validate_catalog(core: TokenCore, state: Tensor, actions: tuple[Tensor, ...]
 
 
 class BTokenScorer(nn.Module):
-    """Independent causal branches of a single shared Transformer, followed by one head."""
+    """One core and head; v2 packs the shared observation, v1 retains isolated calls."""
 
-    def __init__(self, core: TokenCore, *, readout_initial: Tensor | None = None) -> None:
+    def __init__(self, core: TokenCore, *, readout_initial: Tensor | None = None,
+                 packed: bool = False) -> None:
         super().__init__()
         self.core = core
+        self.packed = packed
         if readout_initial is None:
             if core.frozen:
                 raise ValueError("frozen B requires the pinned EOS readout initializer")
@@ -81,6 +87,9 @@ class BTokenScorer(nn.Module):
         # Preflight every branch before scoring any; never silently drop a long candidate.
         if any(state.numel() + a.numel() + 1 > self.core.max_tokens for a in actions):
             raise ValueError("joint input token limit exceeded; truncation is forbidden")
+        if self.packed:
+            hidden = self.core.read_action_queries(state, actions, self.readout)
+            return self.head(hidden).flatten()  # type: ignore[no-any-return]
         scores = []
         for action in actions:
             tokens = torch.cat((state, action))
@@ -135,7 +144,8 @@ def build_scorer(
     if core.frozen != (recipe.backbone == "pf"):
         raise ValueError("recipe and backbone training scope disagree")
     if recipe.family == "b":
-        return BTokenScorer(core, readout_initial=readout_initial)
+        return BTokenScorer(core, readout_initial=readout_initial,
+                            packed=recipe.graph == "b.shared-observation.v2")
     if readout_initial is not None:
         raise ValueError("D-Simple has no B readout query")
     return DSimpleTokenScorer(core)
