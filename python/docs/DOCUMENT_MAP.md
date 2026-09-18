@@ -127,3 +127,5 @@ records the predecessor incident separately from later candidate qualification.
   decision selection, immutable versions, run/fragment classification and exact compatibility.
 
 - [S01 operator workflow](research/S01_WORKFLOW.md): fixed allocation, portable encoding, resume, export and archival.
+
+- [1a/1b approved execution plan](research/STAGE1A.zh-CN.md): four local configurations, actual game entry, later 10k/Modal training.
