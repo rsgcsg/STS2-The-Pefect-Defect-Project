@@ -97,7 +97,8 @@ def main() -> None:
                 torch.testing.assert_close(actual, expected, atol=1e-4, rtol=1e-4)
                 torch.testing.assert_close(actual_grad, expected_grad, atol=1e-3, rtol=1e-4)
                 report['real_qwen_prefix_parity'] = {
-                    'tokens': 128, 'hidden_max_abs': float((actual - expected).abs().max()),
+                    'tokens': 128,
+                    'hidden_max_abs': float((actual - expected).detach().abs().max()),
                     'query_gradient_max_abs': float((actual_grad - expected_grad).abs().max()),
                     'hidden_atol': 1e-4, 'gradient_atol': 1e-3, 'rtol': 1e-4,
                 }

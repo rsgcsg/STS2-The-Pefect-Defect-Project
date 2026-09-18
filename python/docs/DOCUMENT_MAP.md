@@ -129,4 +129,5 @@ records the predecessor incident separately from later candidate qualification.
 - [S01 operator workflow](research/S01_WORKFLOW.md): fixed allocation, portable encoding, resume, export and archival.
 
 - [1a/1b approved execution plan](research/STAGE1A.zh-CN.md): four local configurations, actual game entry, later 10k/Modal training.
+- [1a local token workflow](research/STAGE1A_WORKFLOW.md): shared inputs, bounded training, checkpoint resume and standalone export/scoring.
 - [Stage 1a token input and query execution ADR](../../docs/adr/0012-stage1a-token-input-and-query-execution.md): train-only tokenization, shared input lineage and frozen-prefix execution.

@@ -1,8 +1,8 @@
-"""S01 engineering workflow using the existing artifact store and training worker.
+"""S01 and Stage 1a engineering workflows using shared storage and worker infrastructure.
 
 Preparation runs beside the authoritative Hub operations database. Copies of a database
 are not a substitute for current Gold reservations. Later commands consume the fixed
-allocation; they never create a second data or training engine.
+allocation; token and pooled execution share lineage, storage, reporting and evaluation owners.
 """
 
 from __future__ import annotations
@@ -52,9 +52,21 @@ def main() -> int:
     train.add_argument("--replicate", default="s01")
     train.add_argument("--stop-after", type=int)
     train.add_argument("--resume")
+    token_train = commands.add_parser("train-tokens", help="bounded local Stage 1a token training")
+    token_train.add_argument("--inputs", required=True)
+    token_train.add_argument("--recipe", required=True)
+    token_train.add_argument("--steps", type=int, default=10)
+    token_train.add_argument("--backend", choices=("cpu", "mps"), required=True)
+    token_train.add_argument("--snapshot", type=Path)
+    token_train.add_argument("--replicate", default="stage1a")
+    token_train.add_argument("--resume")
+    token_train.add_argument("--stop-after", type=int)
     export = commands.add_parser("export")
     export.add_argument("--model", required=True)
     export.add_argument("--destination", type=Path, required=True)
+    token_export = commands.add_parser("export-tokens")
+    token_export.add_argument("--model", required=True)
+    token_export.add_argument("--destination", type=Path, required=True)
     inspect = commands.add_parser("inspect")
     inspect.add_argument("--artifact", required=True)
     score = commands.add_parser("score")
@@ -62,8 +74,12 @@ def main() -> int:
     score.add_argument("--input", type=Path, required=True)
     score.add_argument("--snapshot", type=Path, required=True)
     score.add_argument("--backend", choices=("cpu", "mps"), required=True)
+    token_score = commands.add_parser("score-tokens")
+    token_score.add_argument("--model-directory", type=Path, required=True)
+    token_score.add_argument("--input", type=Path, required=True)
+    token_score.add_argument("--snapshot", type=Path)
     args = parser.parse_args()
-    if args.command == "score":
+    if args.command in {"score", "score-tokens"}:
         from stpd.fullrun.contracts import SemanticAction, SemanticState
         from stpd.policy.decision import DecisionScorer
         from stpd.qwen.portable_backend import PortableQwenBackend
@@ -75,17 +91,28 @@ def main() -> int:
         if not isinstance(value["actions"], list):
             raise BoundaryError("stage1", "actions_array_required")
         actions = tuple(SemanticAction.decode(a) for a in value["actions"])
-        backend = PortableQwenBackend(args.snapshot, device=args.backend)
-        scorer = DecisionScorer(args.model_directory, backend)
+        load_started = perf_counter()
+        if args.command == "score-tokens":
+            from stpd.policy.token_decision import TokenDecisionScorer
+
+            token_scorer = TokenDecisionScorer(args.model_directory, snapshot=args.snapshot)
+            score_function = token_scorer.score
+            model_id = token_scorer.artifact.artifact_id
+        else:
+            backend = PortableQwenBackend(args.snapshot, device=args.backend)
+            scorer = DecisionScorer(args.model_directory, backend)
+            score_function = scorer.score
+            model_id = scorer.model.artifact_id
+        load_seconds = perf_counter() - load_started
         started = perf_counter()
-        scores = scorer.score(state, actions)
+        scores = score_function(state, actions)
         print(
             json_bytes(
                 {
-                    "model_id": scorer.model.artifact_id,
+                    "model_id": model_id,
                     "scores": scores,
                     "inference_seconds": perf_counter() - started,
-                    "load_seconds": backend.load_seconds,
+                    "load_seconds": load_seconds,
                 }
             ).decode()
         )
@@ -138,6 +165,21 @@ def main() -> int:
                 "runtime": backend.runtime_summary(),
                 "rows": features.parameters.value()["rows"],
             }
+        elif args.command == "train-tokens":
+            import torch
+
+            from stpd.fullrun.token_inputs import load_token_inputs
+            from stpd.workers.token_ranking import TokenConfig
+            from stpd.workers.token_worker import execute_tokens, prepare_token_run
+
+            torch.set_num_threads(2)
+            inputs = load_token_inputs(store, args.inputs)
+            token_config = TokenConfig(recipe=args.recipe, steps=args.steps, device=args.backend)
+            run = prepare_token_run(store, inputs, token_config, runtime, replicate=args.replicate)
+            result = asdict(execute_tokens(
+                store, ObjectStoreRunReporter(store, store.blobs), run.artifact_id, runtime,
+                snapshot=args.snapshot, resume=args.resume, stop_after=args.stop_after,
+            ))
         elif args.command == "train":
             config = TrainingConfig(
                 seed=1701, max_steps=args.steps, epochs=5,
@@ -155,6 +197,10 @@ def main() -> int:
                     stop_after=args.stop_after,
                 )
             )
+        elif args.command == "export-tokens":
+            from stpd.policy.token_decision import export_token_model
+
+            result = export_token_model(store, args.model, args.destination)
         elif args.command == "export":
             from stpd.policy.decision import export_model
 

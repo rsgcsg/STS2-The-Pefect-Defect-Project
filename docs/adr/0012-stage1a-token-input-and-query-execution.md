@@ -48,11 +48,37 @@ output/query-gradient parity. Real pinned weights and MPS numerical tolerance re
 separate receipt. Initial performance measurements exposed a long-input B-PF memory issue;
 successful synthetic scores are not real-data throughput or game qualification.
 
-The token input is additive; old pooled workers reject the new schema. This change alone
-does not provide a token training worker, checkpoints, model export or gameplay adapter.
-These must reuse ArtifactStore, Reporter and existing ownership boundaries, with explicit
-new model/checkpoint schemas rather than reinterpret old artifacts. Mutable permissions
+The token input is additive; old pooled workers reject the new schema. Mutable permissions
 and Gold/use authorization are not cached or granted by a downloaded token artifact.
+
+## Local token training and export extension
+
+Add `stpd/stage1a-run-v1`, `stpd/stage1a-checkpoint-v1`, `stpd/stage1a-model-v1`,
+`stpd/stage1a-ranking-evaluation-v1` and `stpd/stage1a-export-v1`. The token engine lives
+beside the pooled engine and reuses ArtifactStore, RunReporter, typed checkpoint codec,
+candidate metrics and grouped dev summaries. It is an additional execution capability,
+not another dataset registry or cloud orchestration system. The old schemas keep their meaning.
+
+The run binds immutable token input, full graph/optimizer/seed/step configuration, source,
+lock, framework, device and CPU thread count. Each completed optimizer update is checkpointed
+in the initial short engineering runner. Step-local CPU/MPS RNG is derived from seed and
+completed updates; scratch dropout therefore resumes without depending on a previous process.
+Checkpoint admission also validates optimizer settings, parameter state shapes and counters.
+Never serialize the frozen Qwen weights; resume reloads the fixed backbone separately.
+
+An unfinished prior attempt requires an explicit checkpoint resume or a new replicate,
+not a silent restart. Failures are durable events and cannot produce a successful completion.
+Dev evaluation reuses existing metrics and train-fitted baselines; it never unlocks test/Gold.
+The new evaluation schema is explicitly engineering-only and is not silently accepted by
+historical scientific consumers. UI-specific projections remain separate follow-up work.
+
+Exports contain only a content-bound model manifest, learned weights and tokenizer. The
+standalone scorer consumes legal state and all supplied candidates, with no dataset store,
+labels, successors or authority to execute. The current runtime must match the exported
+backbone configuration; cross-device qualification and the native adapter are later gates.
+Synthetic tests cover new-process resume, uninterrupted/resumed equality, standalone scoring,
+candidate permutations and altered weight bytes. Real training/game success still requires
+separate receipts.
 
 ## Rollback
 

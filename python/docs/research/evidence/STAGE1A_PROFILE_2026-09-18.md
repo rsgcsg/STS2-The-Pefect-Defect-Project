@@ -30,3 +30,33 @@ Qwen tokens，不能用本次 1024-token 两候选检查推断正式训练预算
 首次进程已完成并保留结果；旧 `launchctl submit` 启动方式随后重复唤起，均被
 “输出已存在”拒绝，没有覆盖结果或重新训练。任务已移除。后续使用显式
 `RunAtLoad=true, KeepAlive=false` 的一次性 job，并分别核对进程退出与报告终态。
+
+## 优化后复验与真实输入准备
+
+源码 `d88c39307bc7aad23e43a75c05d3569aadc20d0f`，同一锁、Qwen pin 与 MPS/FP32。
+任务 `com.spireagent.stage1a.inputs.20260918-172254` 成功退出，总计 38.680 秒；
+输入准备 22.554 秒，四图检查 14.948 秒。没有 optimizer 更新或 Modal 计算。
+
+复用 S01 的固定 lite ModelView
+`90f252d9cd0f2eb78b4e0f04df2c9a7ba671b995c05a617793e5963db0e9ae3a`，
+50 train、16 dev，各侧一个 run 的限制保留。生成后重新加载、重投影，完整候选未删减。
+
+| token 输入 | artifact ID | 实际词表 | 联合长度 p50/p95/max |
+|---|---|---:|---|
+| S | `87bec5319ecd976649ec8216d20fd4388efa9a891cba07d26a2670f61bf6421a` | 2848 | 2890 / 5120 / 5466 |
+| PF | `7dc23e8ce2d4a73722f2c7c2b6c91c9f686aec211d1e91b77475e6c097fecf7a` | 151665 | 3215 / 5451 / 5989 |
+
+S 分词器仅由 train 拟合，digest
+`bbab9dcbdbcf15ddd9c6eec05b9056603b5043e671e84dd5cd0b30e0fd5b8184`；
+PF tokenizer JSON digest
+`c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539`。
+PF 全部输入的 IDs 与固定 Hugging Face fast tokenizer 一致。
+
+固定权重的 128-token 全分支与因果前缀分解对照：隐藏表示最大绝对差
+0.0001449585，query 梯度最大绝对差 0.0005626678；通过预设的
+hidden atol1e-4、gradient atol1e-3、共同 rtol1e-4 联合容差。不是逐字节相等。
+
+1024-token、两个候选的 B-PF forward/backward 分别 1.945 / 1.629 秒，
+反向后 MPS driver 采样 5014142976 字节；D-PF 为 0.746 / 0.001 秒。
+全部 12 个长度／图检查通过，骨干保持冻结。仍是合成长度、单次、无统一预热的工程观察，
+不是实际 5989-token 多候选训练/推理性能。原慢结果和新结果分别保留，不改写旧 receipt。

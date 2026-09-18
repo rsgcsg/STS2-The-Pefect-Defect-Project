@@ -1,0 +1,66 @@
+# Stage 1a local operator workflow
+
+Use `uv run --locked python -m spireagent.research_cli` from `python/`, with ML/L2 extras.
+This page covers local token training and independent model scoring. Native Workbench/Mod
+integration is still a separate acceptance item in [the approved plan](STAGE1A.zh-CN.md).
+
+## Shared input and authorization
+
+Use the existing `prepare` operation next to the authoritative operations database to
+register training use, freeze a decision allocation and publish a ModelView. Follow
+[S01 input preparation](S01_WORKFLOW.md) for purpose, Gold, source transfer and allocation.
+An already authorized immutable view can be reused. Never create a fresh local permission
+ledger for downloaded data. Token inputs do not replace the parent dataset or membership index.
+
+`--store STORE tokenize --view VIEW --backbone s` fits a byte-level tokenizer on train only.
+The actual vocabulary can be smaller than the target 8192. Both scratch graphs consume this
+input ID. `--backbone pf --snapshot SNAPSHOT` uses the pinned Qwen tokenizer; both frozen graphs
+share its second input ID. Both paths preserve every decision/candidate and reject overflow.
+The source allocation, serializer and train/dev members remain identical across the four.
+
+## Bounded training and recovery
+
+For the first scratch D-Simple engineering run:
+
+```text
+--store STORE train-tokens --inputs SCRATCH_INPUT --recipe stage1a.dsimple.s.v1
+  --backend mps --steps 10 --replicate stage1a-dsimple-s-pilot --stop-after 2
+```
+
+Arguments above form one command. CPU is an explicit alternative. Training stays local.
+For B use `stage1a.b.s.v1`. Frozen recipes use the PF input, `.pf.v1` recipe and `--snapshot`.
+Do not run frozen models at large input/candidate counts without a bounded cost check.
+
+The CLI fixes seed1701, FP32, one complete decision per optimizer step, AdamW lr3e-4,
+weight decay0.01 and gradient clip1. The scratch default is the approved 384-wide, two-layer
+encoder; dimensions and full configuration are recorded. This 10-update engineering trial
+is not a full epoch over 50 train rows or a useful-policy claim. No implicit GPU/cloud fallback.
+
+The expected first result is `state=paused` with a run and checkpoint ID. Resume in a new
+process with identical arguments and exact source/lock, remove `--stop-after`, and add
+`--resume CHECKPOINT_ID`. A source/config/input/framework/device/thread change fails admission.
+An unfinished prior run cannot silently restart at step zero. Use an explicit new replicate
+only when a separate rerun is intended. Old receipts and failures remain visible.
+
+Every completed update is saved in this small pilot. Its I/O cost is recorded by the full
+attempt duration and must be revisited before the 1b larger-data runner; step time alone is
+not total training time. Long jobs follow the root handoff procedure and run once, without
+automatic restart after completion or failure.
+
+## Evaluation and export
+
+On completion, the worker publishes learned weights, a dev report and one RunResult through
+the existing Reporter. The report uses the same candidate metrics, n=1/n>1 and run/family
+summaries as the pooled worker, plus uniform-legal and train-fitted action-only baselines.
+Insufficient independent runs remain explicit. No test or Gold labels are used for debugging.
+
+`--store STORE export-tokens --model MODEL_ID --destination DIRECTORY` exports exactly
+`model.json`, `weights.safetensors` and `tokenizer.json`. Frozen Qwen weights and raw recordings
+are not copied. `score-tokens --model-directory DIRECTORY --input INPUT_JSON` performs standalone
+scoring; PF additionally requires its pinned snapshot. Input JSON is exactly the existing typed
+`{"state": SemanticState, "actions": [SemanticAction, ...]}`. All unique action keys are returned.
+No training store, human choice, successor state or game execution is needed for this command.
+
+Independent scoring verifies model packaging, not gameplay. The next native adapter must
+use this same serializer/scorer and preserve cancellation, local session identity, complete
+Connector candidates, execution receipts and manual takeover.
