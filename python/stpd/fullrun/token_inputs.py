@@ -23,6 +23,7 @@ from ..qwen.l1 import load_pin
 from .dataset_policy import training_sources
 from .decision_training import VIEW_SCHEMA
 from .features import ModelSample, load_model_view
+from .public_bc import VIEW_SCHEMA as PUBLIC_BC_SCHEMA
 
 SCHEMA = "stpd/stage1a-token-input-v1"
 FORMAT = "separate-obs-act-text-v1"
@@ -88,7 +89,7 @@ def encode_texts(tokenizer: Any, state: str, actions: tuple[str, ...]) -> TokenR
 def _source(store: ArtifactStore, view_id: str) -> tuple[ModelSample, ...]:
     training_sources(store, view_id)
     view, samples = load_model_view(store, view_id)
-    if view.parameters.value().get("schema") != VIEW_SCHEMA:
+    if view.parameters.value().get("schema") not in {VIEW_SCHEMA, PUBLIC_BC_SCHEMA}:
         raise BoundaryError("tokens", "fixed_decision_allocation_required")
     if {s.split for s in samples} != {"train", "dev"}:
         raise BoundaryError("tokens", "engineering_train_dev_only")

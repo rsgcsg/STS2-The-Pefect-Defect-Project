@@ -20,7 +20,9 @@ from stpd.fullrun.view_session import verified_model_views
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--store", required=True)
-    parser.add_argument("--view", required=True)
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--view")
+    source.add_argument("--public-allocation", help="publish exact public-H BC view first")
     parser.add_argument("--snapshot", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
@@ -42,6 +44,17 @@ def main() -> None:
     started = time.perf_counter()
     write()
     try:
+        if args.public_allocation:
+            from stpd.fullrun.public_bc import publish_public_bc_view
+
+            print("Projecting exact public Human observations from fixed allocation", flush=True)
+            view = publish_public_bc_view(store, args.public_allocation, runtime)
+            args.view = view.artifact_id
+            report["model_view"] = args.view
+            disposition = json.loads(b"".join(store.read_payload(view.payload("dispositions"))))
+            report["public_admission"] = {k: v for k, v in disposition.items() if k != "rows"}
+            write()
+            print(json.dumps(report["public_admission"]), flush=True)
         with verified_model_views(store):
             for backbone in ("s", "pf"):
                 print("Preparing and revalidating " + backbone, flush=True)

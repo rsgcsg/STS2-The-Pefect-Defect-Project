@@ -46,6 +46,8 @@ def main() -> int:
     tokenize.add_argument("--view", required=True)
     tokenize.add_argument("--backbone", choices=("s", "pf"), required=True)
     tokenize.add_argument("--snapshot", type=Path)
+    public_view = commands.add_parser("public-view", help="exact Human public-observation BC view")
+    public_view.add_argument("--allocation", required=True)
     train = commands.add_parser("train")
     train.add_argument("--features", required=True)
     train.add_argument("--steps", type=int, default=100)
@@ -78,7 +80,21 @@ def main() -> int:
     token_score.add_argument("--model-directory", type=Path, required=True)
     token_score.add_argument("--input", type=Path, required=True)
     token_score.add_argument("--snapshot", type=Path)
+    public_score = commands.add_parser("score-snapshot", help="standalone public snapshot scoring")
+    public_score.add_argument("--model-directory", type=Path, required=True)
+    public_score.add_argument("--input", type=Path, required=True)
+    public_score.add_argument("--snapshot", type=Path)
     args = parser.parse_args()
+    if args.command == "score-snapshot":
+        from stpd.policy.token_decision import TokenDecisionScorer
+
+        if args.input.stat().st_size > 16 * 1024**2:
+            raise BoundaryError("stage1", "input_size_limit")
+        observation = json.loads(args.input.read_bytes())
+        scorer_public = TokenDecisionScorer(args.model_directory, snapshot=args.snapshot)
+        print(json_bytes({"model_id": scorer_public.artifact.artifact_id,
+                          "scores": scorer_public.score_snapshot(observation)}).decode())
+        return 0
     if args.command in {"score", "score-tokens"}:
         from stpd.fullrun.contracts import SemanticAction, SemanticState
         from stpd.policy.decision import DecisionScorer
@@ -148,6 +164,11 @@ def main() -> int:
                 "model_view_id": view.artifact_id,
                 "counts": allocation.parameters.value()["counts"],
             }
+        elif args.command == "public-view":
+            from stpd.fullrun.public_bc import publish_public_bc_view
+
+            view = publish_public_bc_view(store, args.allocation, runtime)
+            result = {"view": view.artifact_id, **view.parameters.value()}
         elif args.command == "tokenize":
             from stpd.fullrun.token_inputs import publish_token_inputs
 

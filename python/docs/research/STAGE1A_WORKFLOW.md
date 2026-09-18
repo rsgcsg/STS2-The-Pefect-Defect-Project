@@ -81,3 +81,24 @@ The public projection deliberately has a new identity; reusing the old tokenizer
 not establish input parity. After replay coverage is known, the same projection must feed
 a new verified training view and the decision-only online adapter. Candidate subsets and
 native-to-public verb guesses are forbidden. Insufficient coverage must remain visible.
+
+## Exact Human-observation BC view
+
+The pre-frame audit above intentionally tests execution-state parity. A separately
+versioned view now follows the original proof's **Human observation**, matching the
+recorded public binding exactly. H and execution S stay distinct; this view provides
+BC labels only, with no successor supervision. See [ADR-0013](../../../docs/adr/0013-public-human-observation-bc.md).
+
+Use `--store STORE public-view --allocation ALLOCATION` to publish it. It preserves
+the original train/dev assignments and writes every exclusion to `dispositions`;
+it does not delete or silently replace raw decisions. Use the resulting view with
+the existing token/worker commands. For a combined preparation and pinned tokenizer
+check, run `tools/prepare_stage1a_inputs.py --store STORE --public-allocation ALLOCATION
+--snapshot SNAPSHOT --output NEW_REPORT` (one command). S fits a new train-only BPE;
+both PF graphs reuse the pinned vocabulary but receive a new token input identity.
+
+New public models use `score-snapshot --model-directory DIRECTORY --input SNAPSHOT_JSON`
+(PF additionally `--snapshot`). The input is the public Snapshot object, without Human
+labels, native execution supplements or successors. The semantic `score-tokens` entry
+remains for historical exports and cannot accept these models. This establishes a
+shared scoring contract; it does not yet register/load the model through the game Mod.

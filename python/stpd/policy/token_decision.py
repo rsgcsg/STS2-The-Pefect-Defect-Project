@@ -15,6 +15,8 @@ from spireagent.json_boundary import BoundaryError, json_bytes, object_fields
 from spireagent.storage.store import ArtifactStore
 
 from ..fullrun.contracts import SemanticAction, SemanticState
+from ..fullrun.public_inputs import IDENTITY as PUBLIC_IDENTITY
+from ..fullrun.public_inputs import project_public_snapshot
 from ..fullrun.representation import FullRunSerializer
 from ..fullrun.token_inputs import FORMAT, encode_texts
 from ..models.stage1a import recipe_for
@@ -27,7 +29,7 @@ FILES = {"weights": "weights.safetensors", "tokenizer": "tokenizer.json"}
 LIMITS = {"weights": 128 * 1024**2, "tokenizer": 16 * 1024**2}
 
 
-def check_model(model: Manifest) -> tuple[TokenConfig, FullRunSerializer]:
+def check_model(model: Manifest) -> tuple[TokenConfig, FullRunSerializer | None]:
     info = model.parameters.value()
     if (model.kind != "model" or info.get("schema") != MODEL_SCHEMA
             or info.get("qualification") != "engineering_only" or info.get("dtype") != "float32"
@@ -47,6 +49,8 @@ def check_model(model: Manifest) -> tuple[TokenConfig, FullRunSerializer]:
             raise BoundaryError("token_policy", "qwen_tokenizer_mismatch")
     elif info["vocab_size"] > 8192:
         raise BoundaryError("token_policy", "scratch_vocab_limit")
+    if info.get("serializer") == PUBLIC_IDENTITY:
+        return config, None
     serializer = FullRunSerializer(info.get("serializer", {}).get("profile", ""))
     if info["serializer"] != serializer.identity:
         raise BoundaryError("token_policy", "serializer_mismatch")
@@ -118,8 +122,17 @@ class TokenDecisionScorer:
         return tuple(float(v) for v in values.cpu().tolist())
 
     def score(self, state: SemanticState, actions: tuple[SemanticAction, ...]) -> dict[str, float]:
+        if self.serializer is None:
+            raise BoundaryError("token_policy", "public_snapshot_model_requires_snapshot")
         if not actions or len({a.key for a in actions}) != len(actions):
             raise BoundaryError("token_policy", "unique_nonempty_candidates_required")
         scores = self.score_texts(self.serializer.serialize_state(state),
                                   tuple(self.serializer.serialize_action(a) for a in actions))
         return {a.key: value for a, value in zip(actions, scores, strict=True)}
+
+    def score_snapshot(self, snapshot: dict) -> dict[str, float]:
+        if self.serializer is not None:
+            raise BoundaryError("token_policy", "semantic_model_cannot_score_public_snapshot")
+        public = project_public_snapshot(snapshot)
+        scores = self.score_texts(public.state_text, public.action_texts)
+        return {a.key: value for a, value in zip(public.actions, scores, strict=True)}
