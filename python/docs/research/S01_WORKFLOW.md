@@ -4,6 +4,7 @@ S01 is the first engineering cycle: a pinned frozen Qwen plus a Linear ranking h
 The public entry point is `uv run --locked python -m spireagent.research_cli` from `python/`.
 Use the locked ML/L2 extras. Mutating preparation/training commands require clean exact source.
 This interface reuses the existing ArtifactStore and Worker. It does not start cloud compute.
+The first measured run is documented in [the 2026-09-18 receipt](evidence/S01_2026-09-18.md).
 
 ## Prepare once, reuse exact IDs
 
