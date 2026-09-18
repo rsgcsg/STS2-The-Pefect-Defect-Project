@@ -24,6 +24,7 @@ def main() -> None:
     source.add_argument("--view")
     source.add_argument("--public-allocation", help="publish exact public-H BC view first")
     parser.add_argument("--snapshot", type=Path, required=True)
+    parser.add_argument("--max-tokens", type=int, default=16384)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if args.output.exists():
@@ -61,6 +62,7 @@ def main() -> None:
                 item = publish_token_inputs(
                     store, args.view, backbone, runtime,
                     snapshot=args.snapshot if backbone == "pf" else None,
+                    max_tokens=args.max_tokens,
                 )
                 loaded = load_token_inputs(store, item.artifact_id)
                 if backbone == "pf":

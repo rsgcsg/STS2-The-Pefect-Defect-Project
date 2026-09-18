@@ -87,7 +87,7 @@ def test_public_view_reprojects_sources_and_scores_same_text_after_export(tmp_pa
     view = publish_public_bc_view(owner.store, allocation.artifact_id, owner.producer)
     _, samples = load_model_view(owner.store, view.artifact_id)
     assert len(samples) == 3 and {s.split for s in samples} == {"train", "dev"}
-    assert all("public-snapshot-lite-v1" in s.state_text for s in samples)
+    assert all("public-snapshot-compact-v2" in s.state_text for s in samples)
     report = json.loads(b"".join(owner.store.read_payload(view.payload("dispositions"))))
     assert report["counts"] == {"included": 3}
     assert len(report["rows"]) == 3 and report["successor_supervision"] is False
@@ -115,7 +115,7 @@ def test_public_view_reprojects_sources_and_scores_same_text_after_export(tmp_pa
     scorer = TokenDecisionScorer(destination)
     # Arbitrary new public input uses precisely the offline projection entry point.
     observation = snapshot()
-    public = project_public_snapshot(observation)
+    public = project_public_snapshot(observation, compact=True)
     expected = scorer.score_texts(public.state_text, public.action_texts)
     assert tuple(scorer.score_snapshot(observation).values()) == expected
     observation["bound_actions"]["actions"].reverse()

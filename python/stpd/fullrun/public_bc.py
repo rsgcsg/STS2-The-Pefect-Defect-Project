@@ -20,16 +20,19 @@ from .decision_spool import SpoolSelection
 from .decision_training import load_allocation
 from .features import ModelSample
 from .platform_bundle3 import _extract, _lines, _load
-from .public_inputs import IDENTITY, PublicInput, project_public_snapshot
+from .public_inputs import COMPACT_IDENTITY, IDENTITY, PublicInput, project_public_snapshot
 
-VIEW_SCHEMA = "stpd/public-observation-bc-view-v1"
+LEGACY_VIEW_SCHEMA = "stpd/public-observation-bc-view-v1"
+VIEW_SCHEMA = "stpd/public-observation-bc-view-v2"
 BINDING_BASES = frozenset({
     "reference_equality_to_frozen_host_binding",
     "exact_native_owner_operation_and_frozen_host_binding",
 })
 
 
-def bound_choice(frame: dict, reference: dict, action: dict) -> tuple[PublicInput, int]:
+def bound_choice(
+    frame: dict, reference: dict, action: dict, *, compact: bool = False,
+) -> tuple[PublicInput, int]:
     """Called only with an owner-verified proof; bind its exact H, not execution S."""
     try:
         snapshot = frame["snapshot"]
@@ -45,7 +48,7 @@ def bound_choice(frame: dict, reference: dict, action: dict) -> tuple[PublicInpu
         if (mapping.get("status") != "exact_unique" or type(mapping.get("match_count")) is not int
                 or mapping["match_count"] != 1 or mapping.get("basis") not in BINDING_BASES):
             raise BoundaryError("public_bc", "exact_owner_mapping_required")
-        public = project_public_snapshot(snapshot)
+        public = project_public_snapshot(snapshot, compact=compact)
         candidates = snapshot["bound_actions"]["actions"]
         matches = [i for i, value in enumerate(candidates)
                    if all(value.get(k) == selected.get(k)
@@ -60,7 +63,7 @@ def bound_choice(frame: dict, reference: dict, action: dict) -> tuple[PublicInpu
         raise BoundaryError("public_bc", "incomplete_human_binding") from error
 
 
-def project_allocation(store: ArtifactStore, allocation_id: str) -> tuple:
+def project_allocation(store: ArtifactStore, allocation_id: str, *, compact: bool = True) -> tuple:
     allocation, dataset, members = load_allocation(store, allocation_id)
     selected = {m["occurrence"]: m for m in members["members"]}
     records = ([dataset.records.owner[key] for key in sorted(selected)]
@@ -110,7 +113,7 @@ def project_allocation(store: ArtifactStore, allocation_id: str) -> tuple:
                     # Owner verification has checked the exact object path/hash and
                     # immutable proof/canonical/action linkage before this read.
                     frame = _load(directory / "raw" / reference["object_ref"])
-                    public, index = bound_choice(frame, reference, proof["action"])
+                    public, index = bound_choice(frame, reference, proof["action"], compact=compact)
                     samples.append(ModelSample(
                         record.transition_id, record.run_id, row["split"],
                         frame["snapshot"]["interaction"]["kind"], record.family,
@@ -123,7 +126,8 @@ def project_allocation(store: ArtifactStore, allocation_id: str) -> tuple:
                     row.update(status="excluded", reason=error.code)
                 dispositions.append(row)
     report = {
-        "schema": VIEW_SCHEMA, "allocation_id": allocation_id, "serializer": IDENTITY,
+        "schema": VIEW_SCHEMA if compact else LEGACY_VIEW_SCHEMA, "allocation_id": allocation_id,
+        "serializer": COMPACT_IDENTITY if compact else IDENTITY,
         "label_boundary": "exact_human_observation_bound_action",
         "successor_supervision": False, "rows": dispositions,
         "counts": dict(Counter(row["status"] for row in dispositions)),
@@ -138,7 +142,8 @@ def project_allocation(store: ArtifactStore, allocation_id: str) -> tuple:
 
 
 def _parameters(dataset, samples, report):
-    return {"schema": VIEW_SCHEMA, "serializer": IDENTITY, "scope": "platform_verified",
+    return {"schema": report["schema"], "serializer": report["serializer"],
+            "scope": "platform_verified",
             "samples": len(samples), "dataset_logical_id": dataset.logical_id,
             "purpose": "engineering", "label_boundary": report["label_boundary"],
             "successor_supervision": False, "counts": report["counts"]}
@@ -168,11 +173,14 @@ def publish_public_bc_view(
 
 
 def load_public_bc_view(store: ArtifactStore, manifest: Manifest) -> tuple:
-    if (manifest.kind != "model_view" or manifest.parameters.value().get("schema") != VIEW_SCHEMA
+    schema = manifest.parameters.value().get("schema")
+    if (manifest.kind != "model_view" or schema not in {VIEW_SCHEMA, LEGACY_VIEW_SCHEMA}
             or sorted(p.role for p in manifest.parents) != ["allocation", "dataset"]
             or sorted(p.role for p in manifest.payloads) != ["dispositions", "samples"]):
         raise BoundaryError("public_bc", "unsupported_contract")
-    allocation, dataset, samples, report = project_allocation(store, manifest.parent("allocation"))
+    allocation, dataset, samples, report = project_allocation(
+        store, manifest.parent("allocation"), compact=schema == VIEW_SCHEMA,
+    )
     if (allocation.parent("dataset") != manifest.parent("dataset")
             or manifest.parameters.value() != _parameters(dataset, samples, report)
             or {s.split for s in samples} != {"train", "dev"}):

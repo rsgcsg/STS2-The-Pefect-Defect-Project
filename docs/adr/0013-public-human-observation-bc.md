@@ -54,3 +54,27 @@ model timing and actual Workbench/Mod execution receive separate receipts.
 Disable new public-view production to roll back; retain the canonical source,
 allocation, old models and all admission reports. Do not weaken native/evidence
 verification or replace immutable historical artifacts.
+
+## Same-day compact view and configurable resource budget
+
+The first real public view admitted 65/66 decisions (49 train, 16 dev, including
+40 combat turns). Its expanded representation repeated large objects; one scratch
+input exceeded the original 8192 budget. The failed preparation and v1 view remain
+historical artifacts and the v1 reader retains its original projection.
+
+New production uses `stpd/public-observation-bc-view-v2` with serializer
+`stpd-public-snapshot-compact-v2`. State objects/arrays of at least 256 serialized
+characters that occur more than once are represented once in a deterministic FACTS
+table, with explicit `$stpd_fact` references in STATE. Definitions may refer to smaller
+definitions; the finite original tree cannot introduce cycles. Reserved-key collisions
+are rejected. An inverse verifies exact tree equality, including array order and
+multiplicity. Action texts and complete candidate bindings retain all their content.
+This changes input formatting, so it has a new identity and requires new training.
+
+The user clarified that 8192 is not a fixed research requirement. Token preparation,
+training and standalone inference now carry a configurable token budget; current CLI
+defaults to 16384 via `--max-tokens`. Legacy configs without a field retain 8192. A
+larger budget never causes padding to that size or grants a measured memory guarantee.
+PF additionally checks the actual pinned backbone context capacity. Larger inputs
+can use an explicit larger configuration after a resource check instead of being
+discarded or redesigned solely to meet 8192. No silent truncation is introduced.

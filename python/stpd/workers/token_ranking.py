@@ -45,6 +45,7 @@ class TokenConfig:
     heads: int = 6
     feedforward: int = 1536
     dropout: float = 0.1
+    max_tokens: int = 8192
 
     def __post_init__(self) -> None:
         recipe_for(self.recipe)
@@ -65,10 +66,13 @@ class TokenConfig:
 
     def shape(self, vocab_size: int) -> ScratchShape:
         return ScratchShape(vocab_size, self.width, self.layers, self.heads,
-                            self.feedforward, self.dropout)
+                            self.feedforward, self.dropout, self.max_tokens)
 
     @classmethod
     def decode(cls, value: object) -> TokenConfig:
+        # Original exports omitted this field and retain the original 8192 budget.
+        if isinstance(value, dict) and "max_tokens" not in value:
+            value = {**value, "max_tokens": 8192}
         return cls(**object_fields(value, set(cls.__dataclass_fields__), "token_config"))
 
 
@@ -106,7 +110,7 @@ def construct_model(
             if snapshot is None:
                 raise BoundaryError("token_training", "pinned_snapshot_required")
             backend = PortableQwenBackend(snapshot, device=config.device)
-            core = FrozenQwenTokenCore(backend)
+            core = FrozenQwenTokenCore(backend, max_tokens=config.max_tokens)
             identity = {"kind": "pf", "qwen": backend.identity.__dict__}
         initial = core.readout_initial() if isinstance(core, FrozenQwenTokenCore) else None
         model = build_scorer(config.recipe, core,
@@ -143,6 +147,8 @@ class TokenRankingEngine:
         info = inputs.manifest.parameters.value()
         if info["backbone"] != ("pf" if self.frozen else "s"):
             raise BoundaryError("token_training", "input_backbone_mismatch")
+        if info["joint_lengths"]["max"] > config.max_tokens:
+            raise BoundaryError("token_training", "increase_configured_token_budget")
         self.model, self.backbone = construct_model(config, info["vocab_size"], snapshot)
         self.parameters = [p for p in self.model.parameters() if p.requires_grad]
         self.optimizer = torch.optim.AdamW(self.parameters, lr=config.learning_rate,

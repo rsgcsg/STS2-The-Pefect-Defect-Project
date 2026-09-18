@@ -36,6 +36,15 @@ def tiny_config(recipe="stage1a.dsimple.s.v1"):
                        feedforward=32, dropout=0.2)
 
 
+def test_token_budget_is_explicit_and_old_configs_keep_original_limit():
+    from dataclasses import asdict
+
+    config = replace(tiny_config(), max_tokens=16384)
+    assert TokenConfig.decode(asdict(config)).shape(256).max_tokens == 16384
+    legacy = {k: v for k, v in asdict(config).items() if k != "max_tokens"}
+    assert TokenConfig.decode(legacy).max_tokens == 8192
+
+
 @pytest.mark.parametrize("recipe", ["stage1a.b.s.v1", "stage1a.dsimple.s.v1"])
 def test_engine_resume_keeps_dropout_plan_parameters_and_scores(tmp_path, recipe):
     _, inputs = token_inputs(tmp_path)

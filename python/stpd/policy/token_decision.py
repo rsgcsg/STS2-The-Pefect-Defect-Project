@@ -15,8 +15,8 @@ from spireagent.json_boundary import BoundaryError, json_bytes, object_fields
 from spireagent.storage.store import ArtifactStore
 
 from ..fullrun.contracts import SemanticAction, SemanticState
+from ..fullrun.public_inputs import COMPACT_IDENTITY, project_public_snapshot
 from ..fullrun.public_inputs import IDENTITY as PUBLIC_IDENTITY
-from ..fullrun.public_inputs import project_public_snapshot
 from ..fullrun.representation import FullRunSerializer
 from ..fullrun.token_inputs import FORMAT, encode_texts
 from ..models.stage1a import recipe_for
@@ -49,7 +49,7 @@ def check_model(model: Manifest) -> tuple[TokenConfig, FullRunSerializer | None]
             raise BoundaryError("token_policy", "qwen_tokenizer_mismatch")
     elif info["vocab_size"] > 8192:
         raise BoundaryError("token_policy", "scratch_vocab_limit")
-    if info.get("serializer") == PUBLIC_IDENTITY:
+    if info.get("serializer") in (PUBLIC_IDENTITY, COMPACT_IDENTITY):
         return config, None
     serializer = FullRunSerializer(info.get("serializer", {}).get("profile", ""))
     if info["serializer"] != serializer.identity:
@@ -110,7 +110,7 @@ class TokenDecisionScorer:
         self.model.eval()
 
     def score_texts(self, state: str, actions: tuple[str, ...]) -> tuple[float, ...]:
-        row = encode_texts(self.tokenizer, state, actions)
+        row = encode_texts(self.tokenizer, state, actions, max_tokens=self.config.max_tokens)
         with torch.no_grad():
             values = self.model(
                 torch.tensor(row.state, dtype=torch.long, device=self.config.device),
@@ -133,6 +133,8 @@ class TokenDecisionScorer:
     def score_snapshot(self, snapshot: dict) -> dict[str, float]:
         if self.serializer is not None:
             raise BoundaryError("token_policy", "semantic_model_cannot_score_public_snapshot")
-        public = project_public_snapshot(snapshot)
+        public = project_public_snapshot(
+            snapshot, compact=self.artifact.parameters.value()["serializer"] == COMPACT_IDENTITY,
+        )
         scores = self.score_texts(public.state_text, public.action_texts)
         return {a.key: value for a, value in zip(public.actions, scores, strict=True)}

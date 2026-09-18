@@ -120,10 +120,10 @@ def _load_model_view(
     parameters = manifest.parameters.value()
     from .decision_training import VIEW_SCHEMA as DECISION_VIEW_SCHEMA
     from .decision_training import load_decision_view
+    from .public_bc import LEGACY_VIEW_SCHEMA, load_public_bc_view
     from .public_bc import VIEW_SCHEMA as PUBLIC_BC_SCHEMA
-    from .public_bc import load_public_bc_view
 
-    if parameters.get("schema") == PUBLIC_BC_SCHEMA:
+    if parameters.get("schema") in {PUBLIC_BC_SCHEMA, LEGACY_VIEW_SCHEMA}:
         return load_public_bc_view(store, manifest)
     if parameters.get("schema") == DECISION_VIEW_SCHEMA:
         return load_decision_view(store, manifest)

@@ -23,6 +23,7 @@ from ..qwen.l1 import load_pin
 from .dataset_policy import training_sources
 from .decision_training import VIEW_SCHEMA
 from .features import ModelSample, load_model_view
+from .public_bc import LEGACY_VIEW_SCHEMA
 from .public_bc import VIEW_SCHEMA as PUBLIC_BC_SCHEMA
 
 SCHEMA = "stpd/stage1a-token-input-v1"
@@ -70,7 +71,11 @@ class TokenRow:
         return {"state": list(self.state), "actions": [list(a) for a in self.actions]}
 
 
-def encode_texts(tokenizer: Any, state: str, actions: tuple[str, ...]) -> TokenRow:
+def encode_texts(
+    tokenizer: Any, state: str, actions: tuple[str, ...], *, max_tokens: int = MAX_TOKENS,
+) -> TokenRow:
+    if type(max_tokens) is not int or max_tokens <= 0:
+        raise BoundaryError("tokens", "invalid_token_budget")
     if not actions:
         raise BoundaryError("tokens", "empty_catalog")
     state_text, action_texts = input_texts(state, actions)
@@ -81,7 +86,7 @@ def encode_texts(tokenizer: Any, state: str, actions: tuple[str, ...]) -> TokenR
     if not row.state or any(not a for a in row.actions):
         raise BoundaryError("tokens", "empty_encoding")
     # Common input contract for all four graphs; retain every candidate or fail as a unit.
-    if any(len(row.state) + len(a) + 1 > MAX_TOKENS for a in row.actions):
+    if any(len(row.state) + len(a) + 1 > max_tokens for a in row.actions):
         raise BoundaryError("tokens", "joint_limit_exceeded_no_truncation")
     return row
 
@@ -89,7 +94,8 @@ def encode_texts(tokenizer: Any, state: str, actions: tuple[str, ...]) -> TokenR
 def _source(store: ArtifactStore, view_id: str) -> tuple[ModelSample, ...]:
     training_sources(store, view_id)
     view, samples = load_model_view(store, view_id)
-    if view.parameters.value().get("schema") not in {VIEW_SCHEMA, PUBLIC_BC_SCHEMA}:
+    allowed = {VIEW_SCHEMA, PUBLIC_BC_SCHEMA, LEGACY_VIEW_SCHEMA}
+    if view.parameters.value().get("schema") not in allowed:
         raise BoundaryError("tokens", "fixed_decision_allocation_required")
     if {s.split for s in samples} != {"train", "dev"}:
         raise BoundaryError("tokens", "engineering_train_dev_only")
@@ -97,7 +103,7 @@ def _source(store: ArtifactStore, view_id: str) -> tuple[ModelSample, ...]:
 
 
 def _compile(
-    samples: tuple[ModelSample, ...], raw: bytes, backbone: str,
+    samples: tuple[ModelSample, ...], raw: bytes, backbone: str, max_tokens: int = MAX_TOKENS,
 ) -> tuple[Any, tuple[TokenRow, ...], dict[str, Any]]:
     if backbone not in {"s", "pf"}:
         raise BoundaryError("tokens", "unsupported_backbone")
@@ -109,12 +115,13 @@ def _compile(
     tokenizer = Tokenizer.from_str(raw.decode("utf-8"))
     if tokenizer.truncation is not None or tokenizer.padding is not None:
         raise BoundaryError("tokens", "padding_or_truncation_forbidden")
-    rows = tuple(encode_texts(tokenizer, s.state_text, s.action_texts) for s in samples)
+    rows = tuple(encode_texts(tokenizer, s.state_text, s.action_texts, max_tokens=max_tokens)
+                 for s in samples)
     lengths = sorted(len(row.state) + len(a) + 1 for row in rows for a in row.actions)
     return tokenizer, rows, {
         "schema": SCHEMA, "backbone": backbone, "format": FORMAT,
         "tokenizer_sha256": digest, "vocab_size": tokenizer.get_vocab_size(),
-        "max_tokens": MAX_TOKENS, "samples": len(samples),
+        "max_tokens": max_tokens, "samples": len(samples),
         "counts": {split: sum(s.split == split for s in samples) for split in ("train", "dev")},
         "joint_lengths": {"min": lengths[0], "max": lengths[-1],
                           "p50": lengths[(len(lengths) - 1) // 2],
@@ -133,7 +140,7 @@ class LoadedTokenInputs:
 
 def publish_token_inputs(
     store: ArtifactStore, view_id: str, backbone: str, producer: Producer,
-    *, snapshot: Path | None = None,
+    *, snapshot: Path | None = None, max_tokens: int = MAX_TOKENS,
 ) -> Manifest:
     samples = _source(store, view_id)
     if backbone == "s" and snapshot is None:
@@ -145,7 +152,7 @@ def publish_token_inputs(
         raw = path.read_bytes()
     else:
         raise BoundaryError("tokens", "snapshot_only_for_pf")
-    _, rows, info = _compile(samples, raw, backbone)
+    _, rows, info = _compile(samples, raw, backbone, max_tokens)
     encoded = b"".join(json_bytes(row.to_dict()) for row in rows)
     if len(encoded) > MAX_PAYLOAD:
         raise BoundaryError("tokens", "input_size_limit")
@@ -173,7 +180,8 @@ def load_token_inputs(store: ArtifactStore, identity: str) -> LoadedTokenInputs:
             or manifest.payload("rows").size > MAX_PAYLOAD):
         raise BoundaryError("tokens", "payload_size_limit")
     raw = b"".join(store.read_payload(manifest.payload("tokenizer")))
-    tokenizer, rows, expected = _compile(samples, raw, info.get("backbone", ""))
+    tokenizer, rows, expected = _compile(samples, raw, info.get("backbone", ""),
+                                          info["max_tokens"])
     encoded = b"".join(json_bytes(row.to_dict()) for row in rows)
     if info != expected or b"".join(store.read_payload(manifest.payload("rows"))) != encoded:
         raise BoundaryError("tokens", "input_projection_mismatch")

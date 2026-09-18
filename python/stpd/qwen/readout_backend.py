@@ -18,7 +18,7 @@ from .portable_backend import PortableQwenBackend, validate_engineering_identity
 class FrozenQwenTokenCore(TokenCore):
     supports_bidirectional = False
 
-    def __init__(self, backend: PortableQwenBackend) -> None:
+    def __init__(self, backend: PortableQwenBackend, *, max_tokens: int | None = None) -> None:
         super().__init__()
         validate_engineering_identity(backend.identity)
         self.identity = backend.identity
@@ -26,7 +26,10 @@ class FrozenQwenTokenCore(TokenCore):
         self.model.eval().requires_grad_(False)
         self.width = backend.hidden_size
         self.vocab_size = int(self.model.config.vocab_size)
-        self.max_tokens = backend.pin.l1.hard_limit
+        self.max_tokens = backend.pin.l1.hard_limit if max_tokens is None else max_tokens
+        if (type(self.max_tokens) is not int or self.max_tokens <= 0
+                or self.max_tokens > int(self.model.config.max_position_embeddings)):
+            raise ValueError("token budget must fit the pinned backbone context")
         self.frozen = True
         self.eos_token_id = int(backend._tokenizer.eos_token_id)
 

@@ -46,6 +46,7 @@ def main() -> int:
     tokenize.add_argument("--view", required=True)
     tokenize.add_argument("--backbone", choices=("s", "pf"), required=True)
     tokenize.add_argument("--snapshot", type=Path)
+    tokenize.add_argument("--max-tokens", type=int, default=16384)
     public_view = commands.add_parser("public-view", help="exact Human public-observation BC view")
     public_view.add_argument("--allocation", required=True)
     train = commands.add_parser("train")
@@ -63,6 +64,7 @@ def main() -> int:
     token_train.add_argument("--replicate", default="stage1a")
     token_train.add_argument("--resume")
     token_train.add_argument("--stop-after", type=int)
+    token_train.add_argument("--max-tokens", type=int, default=16384)
     export = commands.add_parser("export")
     export.add_argument("--model", required=True)
     export.add_argument("--destination", type=Path, required=True)
@@ -174,6 +176,7 @@ def main() -> int:
 
             item = publish_token_inputs(
                 store, args.view, args.backbone, runtime, snapshot=args.snapshot,
+                max_tokens=args.max_tokens,
             )
             result = {"training_input_id": item.artifact_id, **item.parameters.value()}
         elif args.command == "encode":
@@ -195,7 +198,8 @@ def main() -> int:
 
             torch.set_num_threads(2)
             inputs = load_token_inputs(store, args.inputs)
-            token_config = TokenConfig(recipe=args.recipe, steps=args.steps, device=args.backend)
+            token_config = TokenConfig(recipe=args.recipe, steps=args.steps, device=args.backend,
+                                       max_tokens=args.max_tokens)
             run = prepare_token_run(store, inputs, token_config, runtime, replicate=args.replicate)
             result = asdict(execute_tokens(
                 store, ObjectStoreRunReporter(store, store.blobs), run.artifact_id, runtime,

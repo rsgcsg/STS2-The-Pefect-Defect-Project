@@ -15,10 +15,14 @@ from spireagent.json_boundary import BoundaryError, FrozenObject
 from ..canonical import canonical_json, semantic_hash
 from .contracts import SemanticAction
 from .platform_bundle3 import _SemanticProjection
+from .public_compaction import compact_public_state
 from .representation import reject_leakage
 
 VERSION = "stpd-public-snapshot-lite-v1"
 IDENTITY = {"version": VERSION, "profile": "public_lite", "status": "provisional"}
+COMPACT_VERSION = "stpd-public-snapshot-compact-v2"
+COMPACT_IDENTITY = {"version": COMPACT_VERSION, "profile": "public_compact",
+                    "status": "provisional"}
 PUBLIC_VERBS = frozenset({
     "activate", "select", "deselect", "confirm", "cancel", "play", "target",
     "use", "end_turn", "skip", "open", "close",
@@ -33,7 +37,7 @@ class PublicInput:
     candidate_digest: str
 
 
-def project_public_snapshot(snapshot: dict[str, Any]) -> PublicInput:
+def project_public_snapshot(snapshot: dict[str, Any], *, compact: bool = False) -> PublicInput:
     """Consume an interactive snapshot; no reads, native catalogs or chosen action.
 
     These are input-integrity preconditions, not a second legality engine. The
@@ -102,10 +106,12 @@ def project_public_snapshot(snapshot: dict[str, Any]) -> PublicInput:
             )
             reject_leakage(action.semantic_dict())
             actions.append(action)
+        version = COMPACT_VERSION if compact else VERSION
+        profile = "public_compact" if compact else "public_lite"
         return PublicInput(
-            f"[STPD_STATE version={VERSION} profile=public_lite]\n"
-            + canonical_json(state) + "\n[/STPD_STATE]",
-            tuple(f"[STPD_ACTION version={VERSION}]\n" + canonical_json(a.semantic_dict())
+            f"[STPD_STATE version={version} profile={profile}]\n"
+            + canonical_json(compact_public_state(state) if compact else state) + "\n[/STPD_STATE]",
+            tuple(f"[STPD_ACTION version={version}]\n" + canonical_json(a.semantic_dict())
                   + "\n[/STPD_ACTION]" for a in actions),
             tuple(actions), semantic_hash(keys),
         )

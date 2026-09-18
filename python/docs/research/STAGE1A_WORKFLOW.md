@@ -102,3 +102,15 @@ New public models use `score-snapshot --model-directory DIRECTORY --input SNAPSH
 labels, native execution supplements or successors. The semantic `score-tokens` entry
 remains for historical exports and cannot accept these models. This establishes a
 shared scoring contract; it does not yet register/load the model through the game Mod.
+
+New `public-view` production uses compact v2; the expanded v1 remains readable.
+The compact format replaces repeated state objects with a lossless FACTS/STATE
+reference table. It changes neither the public facts nor the candidate inventory.
+
+`tokenize`, `train-tokens` and `prepare_stage1a_inputs.py` accept `--max-tokens`, now
+defaulting to 16384 at the CLI. This is a configurable resource budget, not a model
+family definition or a requirement that data stay below 8192. Standalone inference
+uses the exported configuration. Legacy configs without the field mean 8192; when
+reproducing an old command, provide that value explicitly and its original source.
+PF must also fit the pinned model's actual context capacity. Increase the budget when
+appropriate; keep full inputs and monitor real memory/time instead of truncating.

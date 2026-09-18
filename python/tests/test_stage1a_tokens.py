@@ -44,6 +44,13 @@ def test_joint_limits_preserve_catalog_instead_of_truncating():
     tokenizer = Tokenizer.from_str(fit_scratch((sample("train", "x"),)).decode())
     with pytest.raises(BoundaryError, match="no_truncation"):
         encode_texts(tokenizer, "x", ("short", "\U0001f409" * 9000))
+    # The old 8192 setting is a resource budget, not a data/model invariant.
+    actions = ("short", "x " * 9000)
+    row = encode_texts(tokenizer, "x", actions, max_tokens=32768)
+    assert len(row.state) + len(row.actions[1]) + 1 > 8192
+    assert len(row.actions) == 2
+    with pytest.raises(BoundaryError, match="invalid_token_budget"):
+        encode_texts(tokenizer, "x", actions, max_tokens=0)
 
 
 def test_token_artifact_roundtrip_revalidates_membership_and_ids(tmp_path):
