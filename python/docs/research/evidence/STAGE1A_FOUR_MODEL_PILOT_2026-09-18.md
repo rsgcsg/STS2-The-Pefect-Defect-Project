@@ -54,3 +54,35 @@ tsc/dependencies. The dependency/build, consumer and full Python gates will run 
 one durable, separately monitored job. No native game qualification follows from these
 source, export or protocol checks. Local registration with current game identity,
 Workbench/Mod loading and Human/Stop/model-switch controls remain outstanding.
+
+
+### Integration-check environment failures and isolated-fixture repair
+
+The exact source `c69d59c9210b7e8a7dc1eaa8f5e0591127510b0f` passed the real-export
+public Runtime schema check and the Platform portable suite. The first job omitted
+the interpreter bin directory from PATH; its retry fixed this but Python's isolated
+import test correctly found the borrowed s0 environment still installed the old
+worktree. These are retained failed attempts, not successful full-gate receipts.
+
+A dedicated stage1a environment was created from the unchanged lock. Isolated
+imports and the real B-S export/TypeScript consumer check passed. However, exporting
+`UV_PROJECT_ENVIRONMENT` over the entire job redirected the offline cloud-refresh
+fixture's nested `uv sync` into the caller environment. It replaced the caller's
+installed dependencies, causing 110 failures and six setup errors in the remaining
+suite. This was an environment-isolation failure, not 116 independently diagnosed
+model failures. Training artifacts were not an installation target.
+
+The job-wide override is removed. The synthetic refresh fixture now strips that
+override and `VIRTUAL_ENV` from its own subprocess environment. A new offline
+regression injects a foreign target, performs both dependency versions in the
+fixture clone, and verifies that the caller target remains untouched. The cloud
+refresh, isolated import and packed-model regressions passed together (28 tests),
+then isolated imports of the current worktree, Torch 2.13.0 and Transformers 5.15.1
+still passed. The original test assertions remain intact. A complete Python gate
+on the repaired source is still required; prior Platform evidence retains its own
+source identity, and native registration/game qualification remain outstanding.
+
+Private failed attempts: `stage1a-integration-check-20260918-214945`,
+`stage1a-integration-retry-20260918-215115`, and
+`stage1a-python-env-check-20260918-220513`. The last directory retains the successful
+new-environment real-export contract receipt as well as the failed overall status.
