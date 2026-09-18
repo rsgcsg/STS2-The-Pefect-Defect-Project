@@ -194,3 +194,20 @@ Full gates, versioned Runtime/Evidence package pins, live restart and repeat nat
 acceptance remain pending. Existing installed packages and prior failed reports
 are not overwritten by source-only verification. In-game one-click load/takeover
 is the subsequent implementation step, not a delivered feature in this candidate.
+
+### Repair gate: portable typing correction
+
+The `stage1a-live-repair-gate-20260918-225354` job at source
+`9171e830742a645fed51bb510f8589a8dee7af81` passed the Platform portable gate
+in 31.94 seconds, then stopped at Python mypy: POSIX socket stubs do not expose
+Windows-only `SO_EXCLUSIVEADDRUSE` under an `os.name` guard. No Python test result
+is claimed from that failed job. Use the type-checker-recognized `sys.platform ==
+"win32"` guard while preserving the same exclusive Windows bind and reusable
+POSIX bind behavior; do not suppress the check or weaken live-listener rejection.
+
+After this correction, mypy passed all 218 source files, Ruff passed the changed
+module, and all 87 local-model tests passed in 22.31 seconds, including the real
+listener/closed-connection regression. These are local macOS checks, not a Windows
+runtime qualification. Retry the Python component gate separately; Platform source
+has not changed since its passing gate. Package delivery and native acceptance
+remain pending as described above.
