@@ -142,3 +142,25 @@ environment receipt SHA-256
 The browser was opened to the model page; automated visual inspection was unavailable.
 No native model decision has yet been executed. Game UI visibility, one-step delivery,
 pause/recovery and model-switch operation remain pending user-assisted acceptance.
+
+### Owner-triggered Auto attempt: bounded delivery, unresolved integration defects
+
+The owner subsequently reported completion and poor interaction flow. The same
+run's raw log has 22 events: four decisions and four receipts, three `delivered`
+(two card plays and one end-turn) and one `not_delivered` because the exact snapshot
+changed. These are directly inspected producer records, not a passed evidence
+verification or settled causal-transition claim. The log records two Auto entries,
+an `action_not_delivered` handoff, a later `successor_not_stable` taint, Human mode
+and Stop. Do not call this successful continuous control or complete Stage 1a.
+
+The installed Evidence verifier rejects the run with `schema_keys`: "receipt
+successor read contains unknown or missing fields". Preserve its raw bytes; inspect
+the current public Read contract and reader version before any repair. Workbench
+also records a subsequent failed load with `runtime_port_already_in_use`; current
+inspection finds no listener. Inspect stop/restart port lifecycle rather than asking
+the owner to repeatedly reload. No automatic retry or untaint was performed.
+
+Required follow-up is owned by Runtime/Connector lifecycle, Evidence contract
+compatibility and Workbench restart handling respectively. The in-game interaction
+requirements are recorded in the root UI specification. No new training, release,
+UI deployment or full-game support is claimed by this follow-up.
