@@ -220,3 +220,29 @@ pass remains associated with its original source; this Python-only correction
 did not alter Platform component source. Runtime rc.5 and Evidence rc.13 are the
 next immutable repair candidates; version declarations alone do not mean they
 are built, installed or live-qualified. Installed rc.4/rc.12 remain unchanged.
+
+### Versioned repair dependency delivery
+
+The `stage1a-repair-packages-20260918-231916` job at
+`07d0e73da89d9767ebebcc4d886b723e48e9d44c` passed the Platform candidate gate
+in 32.09 seconds and built both packages (34.08 seconds total). Candidate assets
+are published under `candidate/stage1a-live-repair-20260918`, explicitly a
+prerelease, not the default release or a native qualification. Downloaded assets
+match the built bytes:
+
+- Runtime rc.5 archive SHA-256:
+  `028bfd53295142799d342bdb0ad31baf24f2ec4eb32e6242c1f3ee2d54976fed`.
+- Evidence rc.13 wheel SHA-256:
+  `a85504a45c6ad19a9b2811e15330bb1c5efa8fd63fbfb810fad7dd064dff9dad`.
+
+The owning Runtime installer verified rc.5 and its dependency closure in the
+local Workbench's private installation; it did not activate gameplay. The Python
+dependency is pinned to Evidence source
+`17bffb3b69dd8f414e6aec2306c47c63d11cfa39`, with the updated lock and Workbench
+composition. The installed rc.13 verifier passes the original failed Agent-run
+bundle, with all six original file hashes unchanged. This is a new verification
+of old bytes; the prior failed report and recorded taint remain historical facts.
+The 117 focused installer, local-model and token-port tests pass after dependency
+installation. Application integration, reload and continuous-game acceptance
+remain distinct subsequent checks. Existing Mod and collection-tool bytes are
+unchanged; the immutable collection outbox retains its own tool association.

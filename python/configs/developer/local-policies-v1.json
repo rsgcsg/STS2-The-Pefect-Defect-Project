@@ -2,12 +2,12 @@
   "schema": "stpd/local-policy-registry-v1",
   "runtime_package": {
     "package": "@rsgcsg/sts2-policy-runtime",
-    "version": "0.1.0-rc.4",
-    "release_url": "https://github.com/rsgcsg/STS2-The-Perfect-Defect-Project/releases/download/candidate/task-flow-runtime-2026-09-16/rsgcsg-sts2-policy-runtime-0.1.0-rc.4.tgz",
-    "source_revision": "280af4500df298c4b84bfe627472c16ed32388d9",
-    "component_tree_revision": "9250e21b6fdc8e63185d3be0b6225f33e13701d8",
-    "release_asset_sha256": "760f9054aef7dbecedc53f61138c3667e376c742046e81f3bd62cb83163936d6",
-    "package_content_sha256": "3ec9c2421198de8454d0b61ad30d5661a36b682988420f6945521f03b20267f7",
+    "version": "0.1.0-rc.5",
+    "release_url": "https://github.com/rsgcsg/STS2-The-Perfect-Defect-Project/releases/download/candidate/stage1a-live-repair-20260918/rsgcsg-sts2-policy-runtime-0.1.0-rc.5.tgz",
+    "source_revision": "bc98037a10a5c487c5ef7160a16fd59b2d15b518",
+    "component_tree_revision": "ef886a2fcf6cbfe653f45a0a1d8c176e156ae49f",
+    "release_asset_sha256": "028bfd53295142799d342bdb0ad31baf24f2ec4eb32e6242c1f3ee2d54976fed",
+    "package_content_sha256": "91e0026aedca98bed05a966f9aa133ded87e2c5d88d6624eb87ea61080b34d1b",
     "dependency_content_sha256": {
       "zod": "5ef21d43720938cb893b5232d83fb47b5091053fd8ebbffd8cfb24eccb51a617"
     }
@@ -15,7 +15,7 @@
   "policies": [
     {
       "id": "s1-human-combat-v4",
-      "label": "S1 · Defect A0 普通战斗",
+      "label": "S1 \u00b7 Defect A0 \u666e\u901a\u6218\u6597",
       "adapter": "s1-v1",
       "manifest": "policy-manifests/s1-policy-adapter-v6.json",
       "config": "configs/v0/experiments/s1-human-combat-live-v2.json"
