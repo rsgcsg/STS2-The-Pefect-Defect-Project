@@ -54,6 +54,8 @@ ledger.
 
 - [ADR-0010: Dataset curation and continuous per-run recording](0010-dataset-curation-and-continuous-recording.md)
 
+- [ADR-0011: Fixed decision allocation and portable S01](0011-fixed-decision-allocation-and-portable-s01.md)
+
 ## New ADR template
 
 ```markdown

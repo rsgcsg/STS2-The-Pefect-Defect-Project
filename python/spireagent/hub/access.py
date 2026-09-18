@@ -21,7 +21,9 @@ RESULT_KINDS = frozenset(
         "analysis",
     }
 )
-PROJECT_KINDS = RESULT_KINDS | {"dataset", "training_input", "experiment", "run"}
+PROJECT_KINDS = RESULT_KINDS | {
+    "dataset", "protocol", "model_view", "feature_set", "training_input", "experiment", "run"
+}
 POLICY_VERSION = "stpd/project-sharing-v2"
 
 

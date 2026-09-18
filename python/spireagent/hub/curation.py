@@ -31,6 +31,12 @@ class CurationLedger:
             for statement in (
                 "CREATE TABLE IF NOT EXISTS curation_sources("
                 "id TEXT PRIMARY KEY,archive TEXT NOT NULL,complete INTEGER NOT NULL)",
+                "CREATE TABLE IF NOT EXISTS curation_source_decisions("
+                "source TEXT NOT NULL,occurrence TEXT NOT NULL,transition_id TEXT NOT NULL,"
+                "PRIMARY KEY(source,occurrence))",
+                "CREATE INDEX IF NOT EXISTS curation_decision_sources ON "
+                "curation_source_decisions(occurrence,source)",
+                "CREATE TABLE IF NOT EXISTS curation_exact_source_index(source TEXT PRIMARY KEY)",
                 "CREATE TABLE IF NOT EXISTS curation_source_runs("
                 "source TEXT NOT NULL,run TEXT NOT NULL,PRIMARY KEY(source,run))",
                 "CREATE TABLE IF NOT EXISTS curation_fingerprints("
@@ -73,7 +79,9 @@ class CurationLedger:
             ).fetchone()
             if previous and previous[0] != projection.source_sha256:
                 raise BoundaryError("curation", "source_identity_conflict")
-            if previous and previous[1]:
+            if previous and previous[1] and db.execute(
+                "SELECT 1 FROM curation_exact_source_index WHERE source=?", (source,)
+            ).fetchone():
                 return
             db.execute(
                 "INSERT OR IGNORE INTO curation_sources VALUES(?,?,0)",
@@ -82,6 +90,7 @@ class CurationLedger:
         for start in range(0, len(projection.transitions), 64):
             items = []
             details = []
+            locations = []
             for record in projection.transitions[start : start + 64]:
                 if not isinstance(record, ResearchTransitionV2):
                     raise BoundaryError("curation", "typed_occurrence_required")
@@ -93,6 +102,7 @@ class CurationLedger:
                         record.occurrence.value()["decision_id"],
                     )
                 )
+                locations.append((source, _identity(record), record.transition_id))
                 chosen = next(a for a in record.actions if a.key == record.chosen_key)
                 details.append(
                     (
@@ -104,6 +114,9 @@ class CurationLedger:
                     )
                 )
             with self.operations.transaction() as db:
+                db.executemany(
+                    "INSERT OR IGNORE INTO curation_source_decisions VALUES(?,?,?)", locations
+                )
                 db.executemany(
                     "INSERT OR IGNORE INTO curation_occurrence_details VALUES(?,?,?,?,?)", details
                 )
@@ -121,6 +134,7 @@ class CurationLedger:
                     )
         with self.operations.transaction() as db:
             db.execute("UPDATE curation_sources SET complete=1 WHERE id=?", (source,))
+            db.execute("INSERT OR IGNORE INTO curation_exact_source_index VALUES(?)", (source,))
 
     @staticmethod
     def _groups(db: sqlite3.Connection, runs: Iterable[str]) -> set[str]:
@@ -315,6 +329,14 @@ class CurationLedger:
                     "SELECT run FROM curation_source_runs WHERE source=?", (source,)
                 )
             }
+
+    def exact_source_ready(self, source: str) -> bool:
+        """Whole-run membership alone cannot locate a decision in a package."""
+        with self.operations.transaction() as db:
+            return db.execute(
+                "SELECT 1 FROM curation_exact_source_index e JOIN curation_sources s "
+                "ON s.id=e.source WHERE e.source=? AND s.complete=1", (source,)
+            ).fetchone() is not None
 
     def has_gold(self) -> bool:
         with self.operations.transaction() as db:

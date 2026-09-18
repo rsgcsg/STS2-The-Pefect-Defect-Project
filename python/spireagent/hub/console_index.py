@@ -103,6 +103,11 @@ class ConsoleIndex:
                 "ON console_artifacts(kind,indexed_at)"
             )
             db.execute(
+                "CREATE TABLE IF NOT EXISTS console_artifact_visibility("
+                "artifact_id TEXT NOT NULL,owner TEXT NOT NULL,archived INTEGER NOT NULL,"
+                "PRIMARY KEY(artifact_id,owner))"
+            )
+            db.execute(
                 "CREATE INDEX IF NOT EXISTS console_event_subject "
                 "ON events(subject,operation,sequence)"
             )
@@ -534,6 +539,7 @@ class ConsoleIndex:
         offset: int,
         artifact_id: str | None = None,
         search: str = "",
+        archived: bool = False,
     ) -> dict[str, Any]:
         if kind in {"datasets", "training"} and not (
             principal.research or project_member(principal)
@@ -541,14 +547,15 @@ class ConsoleIndex:
             return {**envelope([], 0, limit, offset), "availability": "not_authorized"}
         kinds = {
             "datasets": ("dataset",),
-            "training": ("training_input", "experiment", "run", "run_result", "checkpoint"),
+            "training": ("protocol", "model_view", "feature_set", "training_input", "experiment",
+                         "run", "run_result", "checkpoint"),
             "evaluations": ("offline_evaluation", "live_evaluation", "performance"),
             "analyses": ("analysis",),
             "models": tuple(sorted(RESULT_KINDS)),
         }[kind]
         marks = ",".join("?" for _ in kinds)
         where = "a.kind IN (" + marks + ")"
-        values = kinds
+        values: tuple[Any, ...] = kinds
         if artifact_id:
             where += " AND a.artifact_id=?"
             values += (artifact_id,)
@@ -561,6 +568,10 @@ class ConsoleIndex:
                       "ORDER BY created,id LIMIT 1)") if has_jobs else " FROM console_artifacts a"
             name_sql = "json_extract(j.request,'$.name')" if has_jobs else "NULL"
             result_sql = "j.result" if has_jobs else "NULL"
+            if artifact_id is None:
+                where += (" AND COALESCE((SELECT archived FROM console_artifact_visibility v "
+                          "WHERE v.artifact_id=a.artifact_id AND v.owner=?),0)=?")
+                values += (principal.subject, int(archived))
             if search:
                 where += f" AND (instr(lower(a.artifact_id),lower(?))>0 OR " \
                          f"instr(lower(COALESCE({name_sql},'')),lower(?))>0)"

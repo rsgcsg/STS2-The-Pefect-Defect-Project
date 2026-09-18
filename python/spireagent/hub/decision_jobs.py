@@ -436,6 +436,7 @@ class DecisionJobs:
                 "WHERE u.status='verified' AND COALESCE(s.approved,1)=1 AND NOT EXISTS "
                 "(SELECT 1 FROM decision_jobs j WHERE j.owner='receiver' AND "
                 "json_extract(j.request,'$.uploads[0]')=u.id AND "
+                "json_extract(j.request,'$.decision_index_version')=1 AND "
                 "(json_extract(j.request,'$.profile_schema')='stpd/run-coverage-v1' OR "
                 "json_type(j.result,'$.run_coverage')='array')) ORDER BY u.id LIMIT 1"
             ).fetchone()
@@ -450,6 +451,7 @@ class DecisionJobs:
                     "preview_id": None,
                     "name": "自动对局整理",
                     "profile_schema": "stpd/run-coverage-v1",
+                    "decision_index_version": 1,
                     "expected": None,
                 }
                 db.execute(
