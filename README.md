@@ -28,8 +28,8 @@ Policy Runtime. `apps/game-mod` builds one game Mod; `apps/ingame-ui` is its UI.
 HTML console is retired. The project Workbench is the only user console.
 
 [`workshop/`](workshop/README.md) is the unpublished Steam Workshop release
-projection boundary. It contains listing metadata, not another runtime package;
-generated content, staging and publication are not implemented by this scaffold.
+projection boundary. Its explicit staging command consumes existing approved
+game-mod bytes; it does not build another runtime package or publish to Steam.
 
 ## Developer setup
 
