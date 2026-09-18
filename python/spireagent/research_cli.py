@@ -42,6 +42,10 @@ def main() -> int:
     encode.add_argument("--view", required=True)
     encode.add_argument("--snapshot", type=Path, required=True)
     encode.add_argument("--backend", choices=("cpu", "mps"), required=True)
+    tokenize = commands.add_parser("tokenize", help="prepare fixed Stage 1a B/D token inputs")
+    tokenize.add_argument("--view", required=True)
+    tokenize.add_argument("--backbone", choices=("s", "pf"), required=True)
+    tokenize.add_argument("--snapshot", type=Path)
     train = commands.add_parser("train")
     train.add_argument("--features", required=True)
     train.add_argument("--steps", type=int, default=100)
@@ -117,6 +121,13 @@ def main() -> int:
                 "model_view_id": view.artifact_id,
                 "counts": allocation.parameters.value()["counts"],
             }
+        elif args.command == "tokenize":
+            from stpd.fullrun.token_inputs import publish_token_inputs
+
+            item = publish_token_inputs(
+                store, args.view, args.backbone, runtime, snapshot=args.snapshot,
+            )
+            result = {"training_input_id": item.artifact_id, **item.parameters.value()}
         elif args.command == "encode":
             from stpd.qwen.portable_backend import PortableQwenBackend
 

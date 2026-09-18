@@ -46,6 +46,8 @@ def main() -> None:
         'producer': producer.to_dict(), 'device': args.device, 'status': 'running',
         'rows': [], 'input': 'random_valid_token_ids_not_human_decisions',
         'optimizer_steps': 0, 'seed': 1701,
+        'b_execution': 'frozen-prefix-kv-local-branch-v1',
+        'warmup': 'none_single_measurements_not_latency_distribution',
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
 
@@ -84,6 +86,23 @@ def main() -> None:
                 if isinstance(core, FrozenQwenTokenCore) and recipe.family == 'b' else None
             )
             model = build_scorer(recipe_id, core, readout_initial=initial).to(device).train()
+            if isinstance(core, FrozenQwenTokenCore) and recipe.family == 'b':
+                tokens = torch.arange(128, device=device)
+                query = core.readout_initial().requires_grad_(True)
+                weights = torch.linspace(-1, 1, core.width, device=device)
+                expected = TokenCore.read_last_query(core, tokens, query)
+                expected_grad = torch.autograd.grad(expected @ weights, query)[0]
+                actual = core.read_last_query(tokens, query)
+                actual_grad = torch.autograd.grad(actual @ weights, query)[0]
+                torch.testing.assert_close(actual, expected, atol=1e-4, rtol=1e-4)
+                torch.testing.assert_close(actual_grad, expected_grad, atol=1e-3, rtol=1e-4)
+                report['real_qwen_prefix_parity'] = {
+                    'tokens': 128, 'hidden_max_abs': float((actual - expected).abs().max()),
+                    'query_gradient_max_abs': float((actual_grad - expected_grad).abs().max()),
+                    'hidden_atol': 1e-4, 'gradient_atol': 1e-3, 'rtol': 1e-4,
+                }
+                del expected, expected_grad, actual, actual_grad, query, weights
+                write()
             for length in args.lengths:
                 model.zero_grad(set_to_none=True)
                 state = torch.randint(0, core.vocab_size, (length,), device=device)

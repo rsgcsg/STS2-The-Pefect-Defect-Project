@@ -33,6 +33,14 @@ class TokenCore(nn.Module, ABC):
         if bool((ids < 0).any()) or bool((ids >= self.vocab_size).any()):
             raise ValueError("token ID outside backbone vocabulary")
 
+    def read_last_query(self, ids: Tensor, query: Tensor) -> Tensor:
+        """Reference causal branch. A frozen core may use verified equivalent KV execution."""
+        self.validate_tokens(ids)
+        if ids.numel() + 1 > self.max_tokens or query.shape != (self.width,):
+            raise ValueError("invalid query shape or joint input token limit")
+        embedded = torch.cat((self.embed_tokens(ids), query.unsqueeze(0)), dim=0)
+        return self.contextualize(embedded, causal=True)[-1]
+
     @abstractmethod
     def embed_tokens(self, ids: Tensor) -> Tensor:
         """Return [length,width], preserving gradients for trainable embeddings."""

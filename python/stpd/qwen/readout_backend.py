@@ -38,6 +38,36 @@ class FrozenQwenTokenCore(TokenCore):
         embedding = self.model.get_input_embeddings()
         return embedding.weight[self.eos_token_id].detach().clone()  # type: ignore[no-any-return]
 
+    def read_last_query(self, ids: Tensor, query: Tensor) -> Tensor:
+        """Exact causal decomposition: fixed prefix KV, differentiable final query.
+
+        Only prefix tokens and backbone weights are fixed. No earlier causal position
+        can depend on the appended query, so their KV can be computed without autograd.
+        Cache lifetime is one branch; it never crosses candidates or query updates.
+        Use no_grad, not inference_mode: query backward needs the constant KV tensors.
+        """
+        self.validate_tokens(ids)
+        length = ids.numel()
+        if length + 1 > self.max_tokens or query.shape != (self.width,):
+            raise ValueError("invalid query shape or joint input token limit")
+        if self.model.training or any(p.requires_grad for p in self.model.parameters()):
+            raise ValueError("prefix decomposition requires the frozen eval backbone")
+        with torch.no_grad():
+            prefix = self.model(
+                input_ids=ids[None, :],
+                attention_mask=torch.ones(1, length, device=ids.device, dtype=torch.long),
+                position_ids=torch.arange(length, device=ids.device)[None, :],
+                use_cache=True, return_dict=True,
+            )
+        result = self.model(
+            inputs_embeds=query.reshape(1, 1, self.width),
+            attention_mask=torch.ones(1, length + 1, device=ids.device, dtype=torch.long),
+            position_ids=torch.tensor([[length]], device=ids.device, dtype=torch.long),
+            past_key_values=prefix.past_key_values,
+            use_cache=True, return_dict=True,
+        )
+        return result.last_hidden_state[0, 0]  # type: ignore[no-any-return]
+
     def contextualize(self, embeddings: Tensor, *, causal: bool) -> Tensor:
         if not causal:
             raise ValueError("pinned Qwen requires causal attention")

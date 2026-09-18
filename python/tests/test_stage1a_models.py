@@ -11,7 +11,7 @@ from torch import nn
 
 from stpd.models.losses import listwise_rank_loss
 from stpd.models.stage1a import RECIPES, BTokenScorer, DSimpleTokenScorer, build_scorer
-from stpd.models.token_core import ScratchShape, ScratchTokenCore
+from stpd.models.token_core import ScratchShape, ScratchTokenCore, TokenCore
 from stpd.qwen.portable_backend import PortableQwenBackend
 from stpd.qwen.readout_backend import FrozenQwenTokenCore
 
@@ -122,7 +122,7 @@ def test_scope_and_malformed_inputs_fail_explicitly():
         model.score_vectors(torch.zeros(16), torch.full((2, 16), float("nan")))
 
 
-def test_frozen_qwen_input_gradients_on_tiny_real_architecture_without_download():
+def tiny_qwen_core():
     from transformers import Qwen3Config, Qwen3Model
 
     torch.manual_seed(53)
@@ -140,14 +140,44 @@ def test_frozen_qwen_input_gradients_on_tiny_real_architecture_without_download(
     backend._tokenizer = SimpleNamespace(eos_token_id=1)
     with patch("stpd.qwen.readout_backend.validate_engineering_identity"):
         frozen = FrozenQwenTokenCore(backend)
+    return frozen
+
+
+def test_frozen_qwen_input_gradients_on_tiny_real_architecture_without_download():
+    frozen = tiny_qwen_core()
     model = BTokenScorer(frozen, readout_initial=frozen.readout_initial()).train()
     state, actions = sample()
     listwise_rank_loss(model(state, actions), 1).backward()
     assert model.readout.grad.abs().sum() > 0
-    assert all(p.grad is None for p in tiny.parameters())
-    assert not tiny.training
+    assert all(p.grad is None for p in frozen.parameters())
+    assert not frozen.model.training
     with pytest.raises(ValueError, match="causal"):
         frozen.contextualize(frozen.embed_tokens(state), causal=False)
+
+
+@pytest.mark.parametrize("length", [1, 7, 31])
+def test_frozen_prefix_execution_preserves_full_branch_outputs_and_query_gradients(length):
+    frozen = tiny_qwen_core()
+    tokens = torch.arange(length) % 32
+    for offset in (0.0, 0.1):  # No stale cache or query state across optimizer updates.
+        query = (frozen.readout_initial() + offset).requires_grad_(True)
+        reference = TokenCore.read_last_query(frozen, tokens, query)
+        weights = torch.linspace(-1, 1, frozen.width)
+        expected_grad = torch.autograd.grad(reference @ weights, query)[0]
+        actual = frozen.read_last_query(tokens, query)
+        actual_grad = torch.autograd.grad(actual @ weights, query)[0]
+        torch.testing.assert_close(actual, reference, atol=1e-5, rtol=1e-5)
+        torch.testing.assert_close(actual_grad, expected_grad, atol=1e-5, rtol=1e-5)
+    assert all(p.grad is None for p in frozen.parameters())
+
+
+def test_prefix_execution_refuses_trainable_backbone_and_overlong_query():
+    frozen = tiny_qwen_core()
+    with pytest.raises(ValueError, match="token limit"):
+        frozen.read_last_query(torch.ones(64, dtype=torch.long), frozen.readout_initial())
+    frozen.model.requires_grad_(True)
+    with pytest.raises(ValueError, match="frozen eval"):
+        frozen.read_last_query(torch.ones(1, dtype=torch.long), frozen.readout_initial())
 
 
 def test_same_graph_state_dict_roundtrip():

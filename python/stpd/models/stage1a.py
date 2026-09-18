@@ -84,11 +84,9 @@ class BTokenScorer(nn.Module):
         scores = []
         for action in actions:
             tokens = torch.cat((state, action))
-            embedded = self.core.embed_tokens(tokens)
-            inputs = torch.cat((embedded, self.readout.unsqueeze(0)), dim=0)
             # Frozen parameter weights do NOT remove the gradient path to readout.
-            hidden = self.core.contextualize(inputs, causal=True)
-            scores.append(self.head(hidden[-1]).reshape(()))
+            hidden = self.core.read_last_query(tokens, self.readout)
+            scores.append(self.head(hidden).reshape(()))
         return torch.stack(scores)
 
 

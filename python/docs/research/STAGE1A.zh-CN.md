@@ -38,6 +38,8 @@ PF 固定现有 Qwen3-0.6B-Base pin；B 的 readout 初值取固定 EOS embeddin
 
 B-PF 的骨干参数不更新，但训练 query 必须保留经过骨干的梯度；不能调用 inference_mode
 或把最终 h 当作跨更新固定特征。D-PF 的固定向量可以预计算。S 更新 encoder，不能复用旧激活。
+冻结 B 可将每个分支分成不依赖 query 的固定因果前缀 KV 和保梯度的末尾 query；
+先验证全分支与分解执行的输出和 query 梯度一致。缓存仅在当前候选内使用，不串候选。
 本机先测真实前向／反向、内存和候选长度，再确定正式 batch/步数；不先保证 PF 速度。
 小样检查先用几十条，随后四格固定共同数百条 train/dev。数据源不足独立局时保留限制，
 不通过放宽准入、拿 Gold 或把同局决策假称独立 test 来补数。
@@ -97,3 +99,15 @@ B-PF 的骨干参数不更新，但训练 query 必须保留经过骨干的梯�
   不更新模型，不读取人类数据，不作为训练效果或真实决策延迟报告。输出逐项落盘、终态明确；
   其 MPS 内存值是反向后的驻留值，不是峰值。正式训练预算仍需真实输入分布测量。
 - 后续：tokenizer/数据 runner、检查点/导出、受控本机 profile 与真实训练、适配与界面、原生验收。
+
+### 继续推进记录
+
+- [初始真实权重图检查](evidence/STAGE1A_PROFILE_2026-09-18.md)已完成，发现 B-PF 长输入成本瓶颈。
+- 冻结 B 的前缀分解执行、train-only BPE、共同 token 输入及重载校验已实现；
+  小型 Qwen 输出／梯度等价测试通过，真实固定权重的优化版检查单独执行。
+- 现有 CLI 新增 `tokenize --view ID --backbone s`；PF 另加 `--snapshot PATH`。
+  复用已授权的固定分配，不创建新的用途账；两个 S 共用一份输入，两个 PF 共用另一份。
+  详细合同见 [ADR-0012](../../../docs/adr/0012-stage1a-token-input-and-query-execution.md)。
+- token 输入已实现不等于训练 worker、跨进程恢复、模型导出或游戏适配已实现。
+- 本轮相关回归 33 项通过，覆盖输入身份、train-only 分词、完整候选、query 梯度与旧评分入口；
+  Ruff、所改源码类型检查和 project-system 检查通过。完整组件／托管 CI 尚未执行。

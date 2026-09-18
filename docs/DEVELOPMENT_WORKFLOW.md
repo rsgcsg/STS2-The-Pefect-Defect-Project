@@ -202,3 +202,5 @@ outside Git. New work and incident reports belong in this repository only.
 不自动启动下一批主要训练；阶段预算和原有授权仍有效，不重复索要已授予权限。
 等待期间没有审查、合并或运行成功声明；正常检查、精确身份、Human 与部署 gate 不因交接减少。
 后续 Agent 先核对相同任务的终态，保留失败/取消/unknown，不能以重新启动替代恢复。
+本机一次性任务必须明确禁用退出后自动重启；macOS 使用显式 RunAtLoad/KeepAlive 配置，
+不要把 launchctl submit 当作一次性任务保证。原结果防覆盖仍需保留，但不能用它代替正确的进程生命周期。
