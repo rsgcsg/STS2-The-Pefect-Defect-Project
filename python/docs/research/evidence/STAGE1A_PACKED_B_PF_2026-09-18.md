@@ -49,7 +49,7 @@ root. Logs, exact job/status/result and `comparison-cli.json` stay private. B-S 
 real training, full gates, Workbench registration and actual game execution remain
 unfinished parts of 1a. Source/test and standalone export checks do not qualify gameplay.
 
-## Export verification still pending
+## Initial export verification and follow-up
 
 The first private bounded verifier restored the checkpoint, checked published weights
 and frozen-backbone parameters, then matched the exported scorer exactly on the
@@ -61,3 +61,21 @@ ID-keyed score maps and differences before deciding pass/fail, using the existin
 packed-reference regression tolerance (`atol=2e-5`, `rtol=2e-5`) declared in advance.
 The original failure log is retained. No model parameters or attention masks were
 changed in response to this assertion.
+
+### Numeric diagnostic completed
+
+The independent exported scorer diagnostic completed in 37.918 seconds, on source
+`b49a3434f321aaed94d86bd070c398914142e816`. It loaded only the export and pinned Qwen,
+then scored the same 18-candidate snapshot in original and reversed order. Both
+ID-keyed score maps were persisted before comparison. Maximum absolute difference
+was `8.58306884765625e-06`; every candidate passed the predeclared
+`abs(actual-reference) <= 2e-5 + 2e-5 * abs(reference)` criterion. Top-1 and the full
+ranking were unchanged. This resolves the earlier bitwise assertion for this one
+snapshot; it is not an all-input invariance or gameplay qualification claim.
+
+Private diagnostic: `stage1a-packed-b-export-diagnostic-20260918-212920`.
+Report SHA-256: `a71e5bfc6e08a897020a613a531a33f161be203fe991ed6b16eb964fca40f20d`.
+
+File integrity and action-ID binding remain exact checks. Floating-point score
+comparisons use a declared tolerance; the original failed exact assertion is kept
+as history. No retraining or parameter/mask change was needed for this diagnostic.
