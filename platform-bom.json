@@ -28,15 +28,15 @@
     },
     "evidence": {
       "version": "0.1.0-rc.12",
-      "source_revision": "820c6cb78be06aa053f2e21dbf72680e45a59880",
-      "component_tree_revision": "597bf60537f2dc7610d67a4b0655e1f67fea5f0e",
-      "component_source_digest_sha256": "431f7840c7024f9ca3a73ae9390e13013ed6cb491cf53d03ae04c571d6f39804"
+      "source_revision": "bc98037a10a5c487c5ef7160a16fd59b2d15b518",
+      "component_tree_revision": "453125cf1047cd66b8c54032de61dbc905b38c3a",
+      "component_source_digest_sha256": "26ae7a56ab85a7352bcb396502c4718cdb4ebe61886c6c43686411a84b03f046"
     },
     "policy_runtime": {
-      "version": "0.1.0-rc.4",
-      "source_revision": "820c6cb78be06aa053f2e21dbf72680e45a59880",
-      "component_tree_revision": "7049b46ba140020cc62763a7817a1733d3feedc4",
-      "component_source_digest_sha256": "82dcd50037e79ef27c1aadc00aff794aefa9a3416b0987be16bc310950ef6620"
+      "version": "0.1.0-rc.5",
+      "source_revision": "bc98037a10a5c487c5ef7160a16fd59b2d15b518",
+      "component_tree_revision": "ef886a2fcf6cbfe653f45a0a1d8c176e156ae49f",
+      "component_source_digest_sha256": "9a1be80e8a3222b8de1c5dc851b7176888686d344fef846cbd94309959a3e50c"
     },
     "workbench": {
       "version": "0.1.0-rc.3",
@@ -269,9 +269,9 @@
       "source_revision": "e19b30315015664a5647ab351cdcefb09417f275",
       "source_digest_sha256": "d227321727d07edd2d4c67928edec439c26f156494dd9cfab98d2bac4debf346",
       "version": "0.1.0-rc.1",
-      "current_component_source_revision": "820c6cb78be06aa053f2e21dbf72680e45a59880",
-      "current_component_source_digest_sha256": "82dcd50037e79ef27c1aadc00aff794aefa9a3416b0987be16bc310950ef6620",
-      "current_component_version": "0.1.0-rc.4",
+      "current_component_source_revision": "bc98037a10a5c487c5ef7160a16fd59b2d15b518",
+      "current_component_source_digest_sha256": "9a1be80e8a3222b8de1c5dc851b7176888686d344fef846cbd94309959a3e50c",
+      "current_component_version": "0.1.0-rc.5",
       "source_relation": "historical_runtime_source_precedes_standalone_consumer_package"
     },
     "annotator": {
