@@ -46,6 +46,14 @@ This single small run proves engineering connectivity, not model quality. Test a
 not used to choose parameters or debug S01. Keep engineering sample counts and the later
 10k pilot protocol distinct.
 
+Within one CLI command, the first model-view load performs full semantic reprojection.
+Later preparation/worker/evaluation calls reuse that immutable typed view, after re-reading
+and hashing its complete artifact closure. This bounded process-local session retains one
+view, never a permission or Gold decision, and ends with the command. Corrupt or missing
+source bytes still fail on a hit. The output reports semantic loads and checked reuses;
+cross-process resumes revalidate from scratch. This avoids repeating expensive decoding at
+every internal layer without creating another persistent data database.
+
 ## Export and score without training data
 
 `export --model ID --destination /private/s01-model` writes only `model.json` and

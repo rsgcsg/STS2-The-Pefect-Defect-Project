@@ -108,6 +108,12 @@ def publish_model_view(
 
 
 def load_model_view(store: ArtifactStore, view_id: str) -> tuple[Manifest, tuple[ModelSample, ...]]:
+    from .view_session import load_view
+
+    return load_view(store, view_id, _load_model_view)
+
+
+def _load_model_view(store: ArtifactStore, view_id: str) -> tuple[Manifest, tuple[ModelSample, ...]]:
     manifest = store.get_manifest(view_id)
     parameters = manifest.parameters.value()
     from .decision_training import VIEW_SCHEMA as DECISION_VIEW_SCHEMA

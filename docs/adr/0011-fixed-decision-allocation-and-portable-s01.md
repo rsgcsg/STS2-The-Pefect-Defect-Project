@@ -32,6 +32,12 @@ Reuse ArtifactStore, worker, safetensors checkpoint/model codec, Reporter and de
 Export a small S01 head with its exact backbone/serializer/runtime contract; inference
 accepts state and finite candidates, never a human label or successor.
 
+A CLI command may retain one already-verified immutable model view in a scoped in-memory
+session. Reuse re-reads and hashes the whole manifest/payload closure through ArtifactStore;
+it only avoids repeated semantic decoding. Sessions are store-specific and restored on
+exit, including exceptions. Current permissions, Gold/use checks and feature matrices are
+not cached. No disk projection is accepted as a substitute for the first semantic load.
+
 Index source–occurrence membership directly. Legacy whole-run indexes are not proof of
 package membership; reproject them through the existing background profile worker.
 
