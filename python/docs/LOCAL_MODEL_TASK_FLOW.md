@@ -221,3 +221,14 @@ TIME_WAIT using platform-appropriate bind semantics, without REUSEPORT or killin
 unrelated processes. Runtime startup/attestation remains authoritative if another
 process races the check. Operator-local model catalogs must not leak into test
 fixtures; tests read the shipped registry explicitly before adding synthetic entries.
+
+After an application/package upgrade, explicit **结束测试** can retire an older
+session using its sealed Agent-run evidence even when its model registration or
+Runtime package is no longer current. This requires exact persisted startup
+identity, a successful owning Evidence verification, a terminal `stopped` event,
+and a free Runtime port. The old session is archived by content hash and its
+original taint retained; a new evaluation is separate from prior reports. Missing,
+unsealed, mismatched or tampered evidence and an occupied port cannot use this
+path. It sends no gameplay request, performs no automatic action retry, and does
+not turn port absence into proof of past delivery. Normal live recovery retains
+its exact-runtime checks. Successful retirement permits a new explicit load.

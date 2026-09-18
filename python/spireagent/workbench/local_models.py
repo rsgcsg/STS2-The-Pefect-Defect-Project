@@ -852,6 +852,8 @@ class LocalModelService:
 
     def _recover(self, action: str, intent: int) -> None:
         previous = self.state["previous_session"]
+        if action == "stop" and self._recover_finalized_stop(previous, intent):
+            return
         startup = previous.get("startup")
         entry = self.selection(previous.get("selection_id", ""))
         manifest = _object_file(_inside(self.root, entry["manifest"]))
@@ -905,6 +907,72 @@ class LocalModelService:
             self._evaluation_handoff()
         else:
             self.start_observer()
+
+    def _recover_finalized_stop(self, previous: dict[str, Any], intent: int) -> bool:
+        """Explicit Stop may retire a sealed old run without its old package installed.
+
+        An empty port alone proves nothing about past delivery. Require the owning
+        verifier and a terminal Stop event bound to the persisted startup identity.
+        This does not retry an action or clear the old run's taint.
+        """
+        from sts2_platform_evidence import verify_agent_run_evidence
+
+        startup = previous.get("startup")
+        required = {
+            "run_id", "manifest_id", "policy_manifest_sha256", "policy_artifact_sha256",
+            "runtime_version", "runtime_code_sha256",
+        }
+        if not isinstance(startup, dict) or any(
+            not isinstance(startup.get(key), str) or not startup[key] for key in required
+        ):
+            return False
+        if startup.get("address") != "http://127.0.0.1:15527" or not re.fullmatch(
+            r"run-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+            startup["run_id"],
+        ):
+            return False
+        directory = self.directory / "agent-runs" / startup["run_id"]
+        result = verify_agent_run_evidence(directory, startup)
+        if not result.passed or result.value is None:
+            return False
+        raw = (directory / "events.jsonl").read_bytes()
+        entry = next(item for item in result.value.evidence_manifest["files"]
+                     if item["path"] == "events.jsonl")
+        if hashlib.sha256(raw).hexdigest() != entry["sha256"]:
+            return False
+        lines = raw.splitlines()
+        if not lines or json.loads(lines[-1])["kind"] != "stopped":
+            return False
+        _check_runtime_port(15527)
+        with self.lock:
+            self._require_intent(intent)
+            archived = canonical_json(previous).encode()
+            identity = hashlib.sha256(archived).hexdigest()
+            archive = self.directory / "session-archives" / (identity + ".json")
+            archive.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                with archive.open("xb") as output:
+                    output.write(archived)
+                    output.flush()
+                    os.fsync(output.fileno())
+            except FileExistsError:
+                if archive.is_symlink() or archive.read_bytes() != archived:
+                    raise BoundaryError(
+                        "local_model", "session_archive_identity_collision"
+                    ) from None
+            self.state.update(startup=startup, selection_id=previous.get("selection_id"))
+            self._evaluation_handoff()
+            if self.state["evaluation"]["evidence_verification"] != "pass":
+                raise BoundaryError("local_model", "finalized_stop_evidence_changed")
+            self.state.update(
+                status="stopped", loaded=False, runtime=None, previous_session=None,
+                error_code=None, recovery_evidence={
+                    "kind": "verified_finalized_stop", "run_id": startup["run_id"],
+                    "content_id": result.value.content_id, "session_archive_id": identity,
+                    "tainted": result.value.manifest["tainted"],
+                },
+            )
+        return True
 
     def start_observer(self) -> None:
         """Observe owned runtime termination independently of page reads."""

@@ -246,3 +246,14 @@ The 117 focused installer, local-model and token-port tests pass after dependenc
 installation. Application integration, reload and continuous-game acceptance
 remain distinct subsequent checks. Existing Mod and collection-tool bytes are
 unchanged; the immutable collection outbox retains its own tool association.
+
+The installed-package integration exposed a further reload blocker: the old
+session remained `runtime_exited`/recovery-required despite a sealed terminal Stop.
+Its recovery demanded today's package and model manifest, making it impossible
+following an upgrade. The Workbench now permits an explicit Stop to retire a
+verified finalized old run with a terminal Stop and unoccupied port. It archives
+the previous session and keeps the recorded taint. Seven faithful regressions
+using synthetic finalized Evidence bytes pass, covering old/removed registrations,
+retained taint, missing/tampered/mismatched evidence, absence of terminal Stop and
+occupied port; mypy (218 source files) and changed-file Ruff pass. This does not
+claim recovery from unsealed unknown delivery or native continuous-game acceptance.

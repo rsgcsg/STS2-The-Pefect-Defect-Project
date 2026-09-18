@@ -1120,3 +1120,69 @@ def test_runtime_port_check_rejects_listener_but_accepts_closed_connections():
                 connection.close()  # POSIX server TIME_WAIT is reusable by Node
                 assert client.recv(1) == b""
     local_models._check_runtime_port(port)
+
+
+@pytest.mark.parametrize("tainted", [False, True])
+def test_explicit_stop_recovers_sealed_previous_version_without_replaying(
+    service, monkeypatch, tainted,
+):
+    from agent_evaluation_fixture import evidence
+
+    directory, expected = evidence(service.directory / "agent-runs", tainted=tainted)
+    before = {p.name: p.read_bytes() for p in directory.iterdir()}
+    previous = {"startup": {**expected, "address": "http://127.0.0.1:15527"},
+                "selection_id": "removed-old-model", "status": "runtime_exited"}
+    service.state.update(status="recovery_required", previous_session=previous)
+    probes = []
+    monkeypatch.setattr(local_models, "_check_runtime_port", lambda port: probes.append(port))
+    monkeypatch.setattr(service, "selection", lambda _: pytest.fail("must use sealed identity"))
+    monkeypatch.setattr(service, "_runtime_package", lambda: pytest.fail("old package not needed"))
+    service.command("stop")
+    result = finished(service)
+    assert result["status"] == "stopped" and not result["loaded"]
+    assert result["previous_session"] is None
+    assert result["recovery_evidence"]["tainted"] is tainted
+    assert result["evaluation"]["evidence_verification"] == "pass"
+    assert probes == [15527] and service.client is None
+    archive = service.directory / "session-archives" / (
+        result["recovery_evidence"]["session_archive_id"] + ".json"
+    )
+    assert json.loads(archive.read_bytes()) == previous
+    assert {p.name: p.read_bytes() for p in directory.iterdir()} == before
+    assert LocalModelService(service.config).state["status"] == "idle"
+
+
+@pytest.mark.parametrize("fault", ["missing", "tampered", "identity", "no_stop", "occupied"])
+def test_finalized_stop_recovery_requires_exact_evidence_and_free_port(
+    service, monkeypatch, fault,
+):
+    from agent_evaluation_fixture import evidence
+
+    directory, expected = evidence(
+        service.directory / "agent-runs",
+        terminal_event="mode_changed" if fault == "no_stop" else "stopped",
+    )
+    previous = {"startup": {**expected, "address": "http://127.0.0.1:15527"},
+                "selection_id": "old-model", "status": "command_unknown"}
+    if fault == "missing":
+        (directory / "checksums.sha256").unlink()
+    elif fault == "tampered":
+        (directory / "events.jsonl").write_text("{}\n")
+    elif fault == "identity":
+        previous["startup"]["runtime_code_sha256"] = "f" * 64
+    service.state.update(status="recovery_required", previous_session=previous)
+
+    def probe(_):
+        if fault == "occupied":
+            raise BoundaryError("local_model", "runtime_port_already_in_use")
+        pytest.fail("unverified evidence must not reach port probe")
+
+    monkeypatch.setattr(local_models, "_check_runtime_port", probe)
+    if fault == "occupied":
+        with pytest.raises(BoundaryError, match="runtime_port_already_in_use"):
+            service._recover_finalized_stop(previous, service.intent_generation)
+    else:
+        assert not service._recover_finalized_stop(previous, service.intent_generation)
+    assert service.state["previous_session"] == previous
+    assert service.state["status"] == "recovery_required"
+    assert not (service.directory / "session-archives").exists()
