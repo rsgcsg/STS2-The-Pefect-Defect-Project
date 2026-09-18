@@ -112,3 +112,33 @@ Game Mod lifecycle is needed for explicit exact-source execution admission. Do
 not weaken compatibility checks or rebuild an unchanged Mod to hide this state.
 The running released Workbench has not yet been switched to Stage 1a source;
 pinned Runtime installation/readiness, Workbench load and game controls are next.
+
+### Cold load and B-S Workbench load
+
+After the owner closed STS2, the retained exact Mod's lifecycle launcher cold-started
+the game without replacing its installed bytes. `verify-loaded` passed; Connector
+reported `canary_exact` and `execution_available=true`, runtime instance
+`343a26af3a704d028e520edff2dd78ef`. This is process-local exact-source canary
+admission, not new general artifact qualification.
+
+Workbench was gracefully restarted from source
+`07d82eb9b5c49096d196e9c32028d5c63e203edf`, using the same project configuration,
+account state and delivery queue. The pinned Runtime rc.4 installation passed all
+four registration readiness checks. An initial B-S load in Human mode was stopped
+before any decision; the cold process's changed observed Modset fingerprint was
+bound in new manifest files, preserving the prior files. The second B-S load passed
+the actual Workbench prepare/load and adapter attestation path:
+
+- Runtime run: `run-4595d3c0-3298-431a-b412-221007898cbb`.
+- Manifest: `stage1a-b-s-live-pilot-20260918-36df5154`.
+- Runtime code: `0a436e79dab4833223a6fb9b3ccd9ba600111f44cd5b9d119b32ebe46aa071ec`.
+- State: loaded, Human mode, controller released, untainted, no Runtime errors.
+- `/v2/environment` confirmed the same game instance and recovery epoch 0.
+
+Private evidence: `stage1a-live-load-20260918-222647`; loaded-status SHA-256
+`3b52b8617c937b271dda2c7e8bbee92c845679ff345565dce38892162550a8d1`,
+environment receipt SHA-256
+`7cd59d07b40bbd188e28333a0fe4413add8c23ea7f26ab169dea14ba974e522e`.
+The browser was opened to the model page; automated visual inspection was unavailable.
+No native model decision has yet been executed. Game UI visibility, one-step delivery,
+pause/recovery and model-switch operation remain pending user-assisted acceptance.
