@@ -70,6 +70,9 @@ window.SpireProject = (() => {
     game_version: "游戏版本",
     evidence: "证据",
     dataset: "数据集",
+    protocol: "固定分配 / 协议",
+    model_view: "模型输入",
+    feature_set: "冻结特征",
     training_input: "训练输入",
     experiment: "实验配置",
     run: "训练运行",
@@ -851,6 +854,12 @@ window.SpireProject = (() => {
   }
   async function research(ctx) {
     const box = el("div", null, "project-page");
+    const archived = drafts.get("research-archived") === true;
+    box.append(command(ctx, "research-archive-view", archived ? "返回当前记录" : "查看已归档", async () => {
+      drafts.set("research-archived", !archived);
+      for (const kind of ["training", "evaluations", "analyses"]) offsets.set(kind, 0);
+      await reload(ctx);
+    }));
     box.append(
       el(
         "p",
@@ -862,7 +871,7 @@ window.SpireProject = (() => {
       [
         "training",
         "训练记录",
-        "训练输入、实验、运行、结果和检查点。任务实时进度在“作业”中。",
+        "固定分配、模型输入、特征、实验、运行和检查点。归档只收起记录，保留来源和使用关系。",
       ],
       [
         "evaluations",
@@ -876,7 +885,7 @@ window.SpireProject = (() => {
       try {
         const data = await request(
           ctx,
-          project(`${kind}?limit=25&offset=${offset}`),
+          project(`${kind}?limit=25&offset=${offset}${archived ? "&archived=true" : ""}`),
         );
         if (data.availability !== "available")
           section.append(
@@ -904,6 +913,10 @@ window.SpireProject = (() => {
             );
             if (hex(item.artifact_id))
               record.append(
+                command(ctx, `research-visibility-${item.artifact_id}`, archived ? "恢复显示" : "归档", async () => {
+                  await request(ctx, member("artifacts/visibility"), {ids:[item.artifact_id], archived:!archived});
+                  await reload(ctx);
+                }),
                 command(
                   ctx,
                   `research-export-${item.artifact_id}`,

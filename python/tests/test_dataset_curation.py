@@ -234,7 +234,11 @@ def test_selection_receipt_never_exports_source_context_or_quality_comments(tmp_
     body = b"".join(owner.store.read_payload(manifest.payload("selection")))
     receipt = json.loads(body)
     assert set(receipt) == {
-        "schema", "logical_id", "report_sha256", "annotations", "paired_training"
+        "schema",
+        "logical_id",
+        "report_sha256",
+        "annotations",
+        "paired_training",
     }
     assert b"private reason" not in body
     assert "context" not in receipt and "report" not in receipt
@@ -250,8 +254,12 @@ def test_quality_revision_and_gold_reservation_are_one_transaction(tmp_path: Pat
     before = ledger.annotations(selected.records)
     ledger.annotate(_identity(selected.records[0]), MEMBER.subject, "exclude", "changed")
     with pytest.raises(BoundaryError, match="quality_annotations_changed"):
-        ledger.claim("stale", "training", (r.run_id for r in selected.records),
-                     annotation_revision=before["revision"])
+        ledger.claim(
+            "stale",
+            "training",
+            (r.run_id for r in selected.records),
+            annotation_revision=before["revision"],
+        )
     with owner.operations.transaction() as db:
         assert db.execute("SELECT 1 FROM curation_claims WHERE id='stale'").fetchone() is None
 
@@ -268,8 +276,9 @@ def test_receiver_can_index_sources_after_gold_without_public_access_bypass(tmp_
     assert pending
     jobs.run(pending)
     with owner.operations.transaction() as db:
-        row = db.execute("SELECT owner,state,result,error FROM decision_jobs WHERE id=?",
-                         (pending,)).fetchone()
+        row = db.execute(
+            "SELECT owner,state,result,error FROM decision_jobs WHERE id=?", (pending,)
+        ).fetchone()
         assert row["owner"] == "receiver" and row["state"] == "completed", dict(row)
         assert json.loads(row["result"])["selected"] == 6
     assert CurationLedger(owner.operations).source_runs(source.artifact_id)
@@ -286,12 +295,20 @@ def test_legacy_report_cannot_export_unselected_gold_context(tmp_path: Path) -> 
     # A legacy manifest's selected set can be disjoint while its report retains
     # unselected source context. Exercise the download guard with that registry state.
     with owner.operations.transaction() as db:
-        db.execute("INSERT INTO curation_sources VALUES(?,?,1)",
-                   (source.artifact_id, source.payload("archive").sha256))
-        db.executemany("INSERT INTO curation_source_runs VALUES(?,?)",
-                       [(source.artifact_id, "training-run"), (source.artifact_id, "gold-run")])
-    legacy = Manifest("dataset", owner.producer, (Parent("source", source.artifact_id),),
-                      parameters=FrozenObject.of({"schema": "stpd/decision-dataset-v1"}))
+        db.execute(
+            "INSERT INTO curation_sources VALUES(?,?,1)",
+            (source.artifact_id, source.payload("archive").sha256),
+        )
+        db.executemany(
+            "INSERT INTO curation_source_runs VALUES(?,?)",
+            [(source.artifact_id, "training-run"), (source.artifact_id, "gold-run")],
+        )
+    legacy = Manifest(
+        "dataset",
+        owner.producer,
+        (Parent("source", source.artifact_id),),
+        parameters=FrozenObject.of({"schema": "stpd/decision-dataset-v1"}),
+    )
     owner.store.publish(legacy)
     ledger.claim("old-selection", "training", {"training-run"})
     ledger.bind("old-selection", legacy.artifact_id)
@@ -303,8 +320,88 @@ def test_legacy_report_cannot_export_unselected_gold_context(tmp_path: Path) -> 
 def test_test_merge_cannot_be_relabelled_training(tmp_path: Path) -> None:
     _, upload, _, jobs = setup(tmp_path)
     test = build(jobs, upload, "test")["result"]["artifact_id"]
-    first = jobs.create(MEMBER, {"name": "invalid training merge", "datasets": [test],
-        "rules": SelectionRules().to_dict(), "preview_id": None,
-        "curation": {"purpose": "training", "paired_training": None}})
+    first = jobs.create(
+        MEMBER,
+        {
+            "name": "invalid training merge",
+            "datasets": [test],
+            "rules": SelectionRules().to_dict(),
+            "preview_id": None,
+            "curation": {"purpose": "training", "paired_training": None},
+        },
+    )
     jobs.run(first["id"])
     assert jobs.read(MEMBER, first["id"])["error"] == "test_merge_requires_only_test"
+
+
+def test_quality_source_membership_is_not_inferred_from_shared_run(tmp_path: Path) -> None:
+    from spireagent.hub.quality import QualityAnnotations
+
+    owner, upload, source, jobs = setup(tmp_path)
+    build(jobs, upload)
+    quality = QualityAnnotations(owner)
+    initial = quality.read(MEMBER, upload, 25, 0)
+    with owner.operations.transaction() as db:
+        first = db.execute("SELECT * FROM curation_occurrences LIMIT 1").fetchone()
+        # Another package can contain a later decision of exactly the same native run.
+        db.execute(
+            "INSERT INTO curation_occurrences VALUES(?,?,?)",
+            ("f" * 64, first["run"], "other-package-decision"),
+        )
+        db.execute(
+            "INSERT INTO curation_occurrence_details VALUES(?,999,'combat','combat','{}')",
+            ("f" * 64,),
+        )
+        db.execute(
+            "INSERT INTO curation_source_decisions VALUES(?,?,?)", ("e" * 64, "f" * 64, "d" * 64)
+        )
+    assert quality.read(MEMBER, upload, 25, 0) == initial
+    with pytest.raises(BoundaryError, match="occurrence_not_found"):
+        quality.write(
+            MEMBER,
+            {
+                "upload_id": upload,
+                "occurrence": "f" * 64,
+                "action": "exclude",
+                "reason": "wrong source",
+            },
+        )
+    with owner.operations.transaction() as db:
+        assert (
+            db.execute(
+                "SELECT count(*) FROM curation_source_decisions WHERE source=?",
+                (source.artifact_id,),
+            ).fetchone()[0]
+            == initial["total"]
+        )
+
+
+def test_legacy_source_index_is_rebuilt_by_background_profile(tmp_path: Path) -> None:
+    from spireagent.hub.quality import QualityAnnotations
+
+    owner, upload, source, jobs = setup(tmp_path)
+    jobs.run(jobs.pending())
+    quality = QualityAnnotations(owner)
+    with owner.operations.transaction() as db:
+        db.execute("DELETE FROM curation_exact_source_index")
+        db.execute("DELETE FROM curation_source_decisions")
+        db.execute(
+            "UPDATE decision_jobs SET request=json_remove(request,'$.decision_index_version')"
+        )
+    assert quality.read(MEMBER, upload, 25, 0)["availability"] == "index_pending"
+    with pytest.raises(BoundaryError, match="source_index_pending"):
+        quality.write(
+            MEMBER,
+            {
+                "upload_id": upload,
+                "occurrence": "f" * 64,
+                "action": "flag",
+                "reason": "wait for accurate index",
+            },
+        )
+    task = jobs.pending()
+    assert task is not None
+    jobs.run(task)
+    assert CurationLedger(owner.operations).exact_source_ready(source.artifact_id)
+    assert quality.read(MEMBER, upload, 25, 0)["total"] == 6
+    assert jobs.pending() is None

@@ -1,5 +1,10 @@
 # Full-Run Research Contracts
 
+> 下一阶段的实施范围见 [S0 第一阶段](research/S0_STAGE1.zh-CN.md)：数据与公共合同，
+> 然后用 S01 完成真实小样训练、恢复、评测、导出和 目标机器新输入评分。
+> [完整模型设计](research/MODEL_DESIGN.zh-CN.md)与[数据管理设计](research/DATA_MANAGEMENT.zh-CN.md)
+> 是目标方案；不表示当前 runner、可调整隔离或 目标机器后端已经实现。
+
 The new research contract is versioned separately from historical combat-v0. The latter's
 corpora, serializers, checkpoints and scientific protocol remain reproducible and are not
 silently relabelled Full-Run.

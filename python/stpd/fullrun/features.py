@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 
 VIEW_SCHEMA = "stpd/fullrun-model-view-v1"
 FEATURE_SCHEMA = "stpd/fullrun-feature-set-v1"
+DECISION_FEATURE_SCHEMA = "stpd/decision-feature-set-v1"
 
 
 @dataclass(frozen=True)
@@ -107,8 +108,21 @@ def publish_model_view(
 
 
 def load_model_view(store: ArtifactStore, view_id: str) -> tuple[Manifest, tuple[ModelSample, ...]]:
+    from .view_session import load_view
+
+    return load_view(store, view_id, _load_model_view)
+
+
+def _load_model_view(
+    store: ArtifactStore, view_id: str
+) -> tuple[Manifest, tuple[ModelSample, ...]]:
     manifest = store.get_manifest(view_id)
     parameters = manifest.parameters.value()
+    from .decision_training import VIEW_SCHEMA as DECISION_VIEW_SCHEMA
+    from .decision_training import load_decision_view
+
+    if parameters.get("schema") == DECISION_VIEW_SCHEMA:
+        return load_decision_view(store, manifest)
     if manifest.kind != "model_view" or parameters.get("schema") != VIEW_SCHEMA:
         raise BoundaryError("model_view", "unsupported_contract")
     if len(manifest.parents) != 1 or {p.role for p in manifest.payloads} != {"samples"}:
@@ -139,7 +153,9 @@ def load_model_view(store: ArtifactStore, view_id: str) -> tuple[Manifest, tuple
     return manifest, expected
 
 
-def validate_qwen_identity(identity: FrozenObject, scope: str) -> None:
+def validate_qwen_identity(
+    identity: FrozenObject, scope: str, *, decision_view: bool = False
+) -> None:
     from ..contracts import QwenIdentity
     from ..qwen.l2 import load_l2_pin
 
@@ -150,7 +166,12 @@ def validate_qwen_identity(identity: FrozenObject, scope: str) -> None:
             if scope != "engineering":
                 raise BoundaryError("features", "fake_qwen_is_engineering_only")
             return
-        value.validate_scientific_v0()
+        if decision_view:
+            from ..qwen.portable_backend import validate_engineering_identity
+
+            validate_engineering_identity(value)
+        else:
+            value.validate_scientific_v0()
         pin = load_l2_pin()
         if (
             value.model_revision != pin.repo_revision
@@ -211,8 +232,16 @@ def compile_features(
         raise BoundaryError("features", "invalid_backend_identity")
     identity = FrozenObject.of(identity_value)
     scope = view.parameters.value()["scope"]
-    validate_qwen_identity(identity, scope)
+    decision_view = view.parameters.value()["schema"] == "stpd/decision-model-view-v1"
+    validate_qwen_identity(identity, scope, decision_view=decision_view)
     keys, rows, pairs = feature_index(samples, identity)
+    token_lengths = getattr(backend, "token_lengths", None)
+    if callable(token_lengths):
+        # Validate every full input before spending any encoder compute. Real pinned
+        # backends reject over-limit sequences here; never silently drop/truncate them.
+        for key in keys:
+            state, action = pairs[key]
+            token_lengths([f"{state}\n{action}"])
     arrays: list[NDArray[np.float32]] = []
     for offset in range(0, len(keys), batch_size):
         chunk = [pairs[key] for key in keys[offset : offset + batch_size]]
@@ -255,7 +284,7 @@ def compile_features(
         payloads=(features, index_payload),
         parameters=FrozenObject.of(
             {
-                "schema": FEATURE_SCHEMA,
+                "schema": DECISION_FEATURE_SCHEMA if decision_view else FEATURE_SCHEMA,
                 "scope": scope,
                 "qwen": identity.value(),
                 "rows": len(keys),
@@ -282,14 +311,20 @@ class LoadedFeatures:
 def load_features(store: ArtifactStore, feature_id: str) -> LoadedFeatures:
     manifest = store.get_manifest(feature_id)
     parameters = manifest.parameters.value()
-    if manifest.kind != "feature_set" or parameters.get("schema") != FEATURE_SCHEMA:
+    if manifest.kind != "feature_set" or parameters.get("schema") not in {
+        FEATURE_SCHEMA,
+        DECISION_FEATURE_SCHEMA,
+    }:
         raise BoundaryError("features", "unsupported_contract")
     if len(manifest.parents) != 1 or {p.role for p in manifest.payloads} != {"features", "index"}:
         raise BoundaryError("features", "payload_inventory_mismatch")
     view, samples = load_model_view(store, manifest.parent("model_view"))
     identity = FrozenObject.of(parameters.get("qwen", {}))
     scope = view.parameters.value()["scope"]
-    validate_qwen_identity(identity, scope)
+    decision_view = view.parameters.value()["schema"] == "stpd/decision-model-view-v1"
+    if (parameters.get("schema") == DECISION_FEATURE_SCHEMA) != decision_view:
+        raise BoundaryError("features", "view_schema_mismatch")
+    validate_qwen_identity(identity, scope, decision_view=decision_view)
     keys, expected_rows, _ = feature_index(samples, identity)
     if manifest.payload("index").size > 64 * 1024 * 1024:
         raise BoundaryError("features", "index_size_limit")

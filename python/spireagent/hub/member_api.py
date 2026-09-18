@@ -95,6 +95,9 @@ class MemberApi:
 
     def write(self, route: str, body: object, principal: ConsolePrincipal) -> dict[str, Any]:
         current = self._principal(principal)
+        if route == "artifacts/visibility":
+            from spireagent.hub.artifact_visibility import ArtifactVisibility
+            return ArtifactVisibility(self.service).write(current, body)
         if route == "quality-annotations":
             return self.quality.write(current, body)
         enrollment = re.fullmatch(r"campaigns/([a-f0-9]{64})/enroll", route)

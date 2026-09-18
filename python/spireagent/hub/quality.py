@@ -27,11 +27,12 @@ class QualityAnnotations:
         self.collections.require_member(principal)
         source = self.collections.collection(upload)
         guarded_runs(self.service.operations, self.service.store, source)
-        if self.ledger.source_runs(source.artifact_id) is None:
+        if not self.ledger.exact_source_ready(source.artifact_id):
             return {"items": [], "total": 0, "availability": "index_pending", "next_offset": None}
         with self.service.operations.transaction() as db:
             joined = (
-                " FROM curation_occurrences o JOIN curation_source_runs s ON s.run=o.run "
+                " FROM curation_occurrences o JOIN curation_source_decisions s "
+                "ON s.occurrence=o.id "
                 "JOIN curation_occurrence_details d ON d.id=o.id WHERE s.source=?"
             )
             total = db.execute("SELECT count(*)" + joined, (source.artifact_id,)).fetchone()[0]
@@ -64,10 +65,12 @@ class QualityAnnotations:
         key = digest(obj["occurrence"], "quality.occurrence")
         source = self.collections.collection(obj["upload_id"])
         guarded_runs(self.service.operations, self.service.store, source)
+        if not self.ledger.exact_source_ready(source.artifact_id):
+            raise BoundaryError("quality", "source_index_pending")
         with self.service.operations.transaction() as db:
             found = db.execute(
                 "SELECT 1 FROM curation_occurrences o "
-                "JOIN curation_source_runs s ON s.run=o.run "
+                "JOIN curation_source_decisions s ON s.occurrence=o.id "
                 "WHERE o.id=? AND s.source=?",
                 (key, source.artifact_id),
             ).fetchone()
