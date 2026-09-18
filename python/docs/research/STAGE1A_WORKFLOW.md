@@ -114,3 +114,8 @@ uses the exported configuration. Legacy configs without the field mean 8192; whe
 reproducing an old command, provide that value explicitly and its original source.
 PF must also fit the pinned model's actual context capacity. Increase the budget when
 appropriate; keep full inputs and monitor real memory/time instead of truncating.
+
+The first compact-public D-Simple-S pilot has completed training, dev evaluation and
+original-snapshot export parity checks; see [the exact evidence record](evidence/STAGE1A_PUBLIC_D_SIMPLE_S_2026-09-18.md).
+Next, D-Simple-PF uses the same allocation/view and update count as an engineering
+configuration comparison. Actual Workbench/Mod execution remains a separate pending gate.
