@@ -1069,3 +1069,34 @@ def test_only_recognized_owner_precondition_rejection_is_known_not_dispatched(
     with pytest.raises(BoundaryError, match=expected):
         client.request("/mode", {"mode": "auto"}, binding=RuntimeControlBinding("game-1", 0))
     assert len(calls) == 1
+
+
+def test_local_token_registry_adds_models_without_commands_or_runtime_override(service, tmp_path):
+    root = tmp_path / "registered"
+    registry = root / "configs/developer/local-policies-v1.json"
+    registry.parent.mkdir(parents=True)
+    shipped = service.registry()
+    registry.write_text(json.dumps(shipped))
+    private = root / ".local/token-policies-v1.json"
+    private.parent.mkdir()
+    entry = {"id": "stage1a-b-s", "label": "B-S", "adapter": "token-v1",
+             "config": ".local/b-s/config.json", "manifest": ".local/b-s/manifest.json"}
+    local = {"schema": "stpd/local-token-policies-v1", "policies": [entry]}
+    private.write_text(json.dumps(local))
+    service.root = root
+    assert service.selection("stage1a-b-s") == entry
+    assert service.registry()["runtime_package"] == shipped["runtime_package"]
+    local["policies"][0]["command"] = "sh"
+    private.write_text(json.dumps(local))
+    with pytest.raises(BoundaryError):
+        service.registry()
+    del entry["command"]
+    entry["id"] = shipped["policies"][0]["id"]
+    private.write_text(json.dumps(local))
+    with pytest.raises(BoundaryError, match="duplicate"):
+        service.registry()
+    entry["id"] = "stage1a-b-s"
+    entry["adapter"] = "downloaded-code"
+    private.write_text(json.dumps(local))
+    with pytest.raises(BoundaryError, match="invalid_local_token_registry"):
+        service.registry()

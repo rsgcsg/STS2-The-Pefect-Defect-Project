@@ -241,6 +241,18 @@ class LocalModelService:
             value["policies"], list
         ):
             raise BoundaryError("local_model", "unsupported_registry")
+        # Operator-created local registrations complement the shipped catalog.
+        # They can select only the token adapter, never a command or Runtime package.
+        local_path = self.root / ".local/token-policies-v1.json"
+        if local_path.exists():
+            local = _object_file(local_path)
+            object_fields(local, {"schema", "policies"}, "local_model.local_registry")
+            if (local["schema"] != "stpd/local-token-policies-v1"
+                    or not isinstance(local["policies"], list)
+                    or any(not isinstance(entry, dict) or entry.get("adapter") != "token-v1"
+                           for entry in local["policies"])):
+                raise BoundaryError("local_model", "invalid_local_token_registry")
+            value["policies"] = [*value["policies"], *local["policies"]]
         seen = set()
         for entry in value["policies"]:
             object_fields(
