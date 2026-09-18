@@ -211,3 +211,12 @@ listener/closed-connection regression. These are local macOS checks, not a Windo
 runtime qualification. Retry the Python component gate separately; Platform source
 has not changed since its passing gate. Package delivery and native acceptance
 remain pending as described above.
+
+The Python-only retry `stage1a-live-repair-python-20260918-230957` at
+`67fb8bc472cfed1893f0ec06f13eda236f04ddad` completed in 124.56 seconds:
+1123 tests passed, 3 skipped, 21 subtests passed, plus the component's lint/type,
+Connector SDK, CPU E2E, worker smoke, build and patch checks. The prior Platform
+pass remains associated with its original source; this Python-only correction
+did not alter Platform component source. Runtime rc.5 and Evidence rc.13 are the
+next immutable repair candidates; version declarations alone do not mean they
+are built, installed or live-qualified. Installed rc.4/rc.12 remain unchanged.
