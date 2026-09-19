@@ -1,11 +1,11 @@
-# Workshop release projection — Layers 1–2 and Layer 3 Phase A
+# Workshop release projection — Layers 1–3
 
 This directory is the Steam Workshop **release workspace**, not an npm workspace,
 runtime component, installer or second Platform implementation. It holds metadata,
 an original project preview and generated candidates from explicit approved inputs.
-Staging does not build, install or upload. Preparation currently implements only
-build/proposal (Phase A); approval/finalization (Phase B) and publication are not
-implemented. A proposed or staged candidate is not an approved Steam release.
+Staging does not build, install or upload. Preparation separates build/proposal
+(Phase A) from explicit approval/finalization (Phase B). Publication is not
+implemented. A proposed or prepared candidate is not an approved Steam release.
 
 ## External format authority
 
@@ -166,21 +166,54 @@ or an incomplete JSON proposal. Neither is success/approval. Verify no prepare
 process is active before removing a stale lock; restart Phase A. Never accept a
 file merely because it exists. Changes after proposal always require revalidation.
 
-### Deferred Phase B contract (not implemented or executed)
+### Phase B: explicit approval, no rebuild
 
-Future explicit approval must match the actual provenance SHA and must not rebuild.
-It must revalidate the exact source, all build bytes, runtime manifest and metadata
-against Phase A, call existing Layer 2 staging, validate its receipt and the entire
-private Workshop workspace, and bind metadata/image/staged hashes into a local
-prepared receipt. Drift fails closed and requires a new Phase A. Phase A alone
-cannot produce `PREPARED_CANDIDATE` or authorize Layer 4. The CLI rejects approval
-arguments until that separately authorized phase is implemented.
+After separately reviewing and approving the Phase A provenance SHA:
+
+```sh
+npm run workshop:prepare -- --approve-provenance-sha256 APPROVED_64_HEX_SHA
+```
+
+This requires the original unchanged `build-proposal.json` and retained build
+directory. It never runs a build. The explicit pin must match proposal and actual
+provenance bytes. It revalidates every build file (including excluded sidecars),
+the exact compiled source identity, runtime manifest, private listing and preview,
+then invokes the existing `workshop:stage` command with that pin. It compares the
+entire returned receipt contract, rehashes the output and checks byte equality.
+
+The specifically authorized Phase B tooling evolution may advance workspace HEAD
+without rebuilding the approved artifact. A Git ancestor/path gate permits only
+the enumerated Workshop prepare/finalize tooling, their tests, boundary test and
+README paths. Other source/lock/metadata changes reject. All component identities
+and digests must still equal Phase A exactly. The original producer/workspace SHA
+is never rewritten; `prepare_workspace_revision` separately identifies the tool
+HEAD. This is not a general approval-transfer policy for arbitrary new commits.
+
+Only listing/preview and the exact two-file content directory are candidate upload
+inputs. README, ignore policy, proposal, staging/prepared receipts and the active
+prepare lock are explicit local support files, not payload. Any other workspace
+entry or extra payload fails closed (including mod_id.txt, logs, Steam state,
+credentials, provenance, game files and source). No recursive upload is authorized.
+
+The ignored `prepare-receipt.json` records `PREPARED_CANDIDATE`, producer and tool
+HEADs, permitted changed paths, proposal SHA, approved provenance SHA, DLL SHA/MVID,
+runtime manifest and metadata/preview hashes, exact payload inventory, game/build
+identity and Layer 2 staging-receipt schema/hash. It is local release logistics,
+not runtime authority or Steam payload. Same unchanged inputs/tool HEAD produce
+the same receipt. An ordinary failure removes old prepared success; it preserves
+the original proposal and build. New Phase A also invalidates old prepared success.
+Interrupted lock/output is not proof; verify no process is active before recovery.
+
+Any non-permitted source, build or metadata drift requires a new Phase A and new
+approval, never a rewritten proposal/hash. Phase A alone cannot produce prepared
+success. Neither phase authorizes uploader execution or implies installed, loaded,
+Workshop subscription or Human qualification.
 
 ## Later inputs
 
 - Explicit approved game-mod output and its exact provenance/compatibility tuple.
-- Phase B composes this staging command with separate explicit approval and
-  complete workspace verification. It must not build a second Mod.
+- The exact prepared receipt and unchanged candidate form the input to a separately
+  authorized publication layer; retain producer/tool identities and explicit approval.
 - Supported Workshop discovery, duplicate-local-install handling and persistent
   config/raw/queue locations outside updateable Workshop content.
 - Fixed Collection Tool compatibility and update/rollback policy.

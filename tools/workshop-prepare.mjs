@@ -8,15 +8,16 @@ import { sourceSetIdentity } from "../apps/game-mod/source-identity.mjs";
 import { loadHostRuntimeWorkstationApi, resolveWorkstationInstallation }
   from "../components/annotator/tools/workstation-platform.mjs";
 import { PAYLOAD, inspectWorkshopBuild, regularFile, safePath, sha256 } from "./workshop-stage.mjs";
+import { finalizeWorkshop } from "./workshop-finalize.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const CHECKS = Object.freeze(["check:repository", "game-mod:check"]);
 
-export function runOwner(script, repo) {
+export function runOwner(script, repo, args = []) {
   // npm supplies its actual CLI path on both Windows and POSIX. No shell quoting,
   // npm.cmd execution, command interpolation, or independent build command.
   assert.ok(process.env.npm_execpath, "invoke_via_npm_run_workshop_prepare");
-  const result = spawnSync(process.execPath, [process.env.npm_execpath, "run", script], {
+  const result = spawnSync(process.execPath, [process.env.npm_execpath, "run", script, ...args], {
     cwd: repo, stdio: "inherit", windowsHide: true
   });
   if (result.error || result.status !== 0) throw new Error(`owner_failed:${script}:${result.error?.message ?? result.status}`);
@@ -48,6 +49,8 @@ export async function proposeWorkshopBuild({ repositoryRoot = root, run = runOwn
   const lockPath = safePath(path.join(workspace, ".prepare.lock"));
   const lock = fs.openSync(lockPath, "wx");
   try {
+    const prepared = safePath(path.join(workspace, "prepare-receipt.json"));
+    if (fs.existsSync(prepared)) { regularFile(prepared); fs.unlinkSync(prepared); }
     // Invalidate only this owner's previous proposal, never staging/raw evidence.
     if (fs.existsSync(proposalPath)) { regularFile(proposalPath); fs.unlinkSync(proposalPath); }
     const source = readSource(repo);
@@ -100,9 +103,12 @@ export async function proposeWorkshopBuild({ repositoryRoot = root, run = runOwn
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const { values } = parseArgs({ options: { build: { type: "boolean" } }, strict: true, allowPositionals: false });
-    assert.equal(values.build, true, "Phase_A_requires_build; Phase_B_not_implemented_or_authorized");
-    console.log(JSON.stringify(await proposeWorkshopBuild(), null, 2));
+    const { values } = parseArgs({ options: { build: { type: "boolean" },
+      "approve-provenance-sha256": { type: "string" } }, strict: true, allowPositionals: false });
+    assert.ok(Boolean(values.build) !== Boolean(values["approve-provenance-sha256"]), "select_exactly_one_phase");
+    const result = values.build ? await proposeWorkshopBuild()
+      : await finalizeWorkshop({ repositoryRoot: root, approvedProvenanceSha256: values["approve-provenance-sha256"], run: runOwner });
+    console.log(JSON.stringify(result, null, 2));
   } catch (error) {
     console.error(`Workshop proposal failed: ${error.message}`);
     process.exitCode = 1;

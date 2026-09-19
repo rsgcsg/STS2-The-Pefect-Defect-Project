@@ -47,7 +47,7 @@ test("real Git ignore policy excludes generated/private/state paths but admits m
   fs.copyFileSync(path.join(root, "workshop/.gitignore"), path.join(fixture, "workshop/.gitignore"));
   const denied = [
     "content/STS2_PLATFORM.dll", "content/STS2_PLATFORM.json", "content/.gitkeep",
-    "build-proposal.json", "staging-receipt.json", ".prepare.lock", ".stage.lock",
+    "build-proposal.json", "staging-receipt.json", "prepare-receipt.json", ".prepare.lock", ".stage.lock",
     "mod_id.txt", "mod-uploader.log", "logs/upload.txt", ".env", ".env.production",
     "credentials.json", "secrets/token", "config/login.json", "steam_appid.txt",
     "steam/ssfn123", "config/loginusers.vdf", "game/sts2.dll", "sts2.pck",

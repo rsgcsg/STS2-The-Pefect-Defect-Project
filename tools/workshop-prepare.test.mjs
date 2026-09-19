@@ -3,9 +3,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { spawnSync } from "node:child_process";
+import { spawnSync, execFileSync } from "node:child_process";
 import { proposeWorkshopBuild, CHECKS } from "./workshop-prepare.mjs";
-import { inspectWorkshopBuild, sha256 } from "./workshop-stage.mjs";
+import { inspectWorkshopBuild, sha256, stageWorkshop } from "./workshop-stage.mjs";
+import { finalizeWorkshop, verifyToolEvolution } from "./workshop-finalize.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 function fixture(t) {
@@ -35,7 +36,7 @@ function fixture(t) {
   const options = { repositoryRoot: repo, readSource: () => structuredClone(source),
     preflight: async () => { calls.push("preflight"); }, run: async (script) => { calls.push(script); },
     inspect: (args) => inspectWorkshopBuild({ ...args, readIdentity: () => identity }) };
-  return { repo, output, source, provenance, seal, calls, options,
+  return { repo, output, source, provenance, identity, seal, calls, options,
     proposal: path.join(repo, "workshop/build-proposal.json") };
 }
 
@@ -108,10 +109,97 @@ test("native/forward slash paths with spaces produce identical proposal", async 
   assert.deepEqual(next, first);
 });
 
-test("production CLI rejects implicit build, Phase B approval and fixture bypass flags", () => {
-  for (const args of [[], ["--approve-provenance-sha256", "a".repeat(64)], ["--build", "--fixture"]]) {
+test("production CLI rejects implicit/both phases and fixture bypass flags", () => {
+  for (const args of [[], ["--build", "--approve-provenance-sha256", "a".repeat(64)], ["--build", "--fixture"]]) {
     const result = spawnSync(process.execPath, [path.join(root, "tools/workshop-prepare.mjs"), ...args], { encoding: "utf8" });
     assert.equal(result.status, 1);
     assert.match(result.stderr, /Workshop proposal failed/);
   }
+});
+
+async function approvedFixture(t) {
+  const f = fixture(t);
+  const proposal = await proposeWorkshopBuild(f.options);
+  f.calls.length = 0;
+  const stage = () => stageWorkshop({ repositoryRoot: f.repo, sourceDirectory: f.output,
+    approvedProvenanceSha256: proposal.provenance_sha256,
+    readSource: f.options.readSource, readIdentity: () => f.identity });
+  const options = { repositoryRoot: f.repo, approvedProvenanceSha256: proposal.provenance_sha256,
+    readSource: f.options.readSource, inspect: f.options.inspect, verifyEvolution: () => [],
+    run: async (script, repo, args) => {
+      f.calls.push(script);
+      assert.equal(script, "workshop:stage");
+      assert.equal(repo, f.repo);
+      assert.deepEqual(args, ["--", "--source", f.output, "--provenance-sha256", proposal.provenance_sha256]);
+      stage();
+    } };
+  return { ...f, proposalData: proposal, finalizeOptions: options, stage,
+    prepared: path.join(f.repo, "workshop/prepare-receipt.json") };
+}
+
+test("Phase B invokes only existing staging, binds receipt and never changes proposal/build", async (t) => {
+  const f = await approvedFixture(t);
+  const proposalBytes = fs.readFileSync(f.proposal);
+  const result = await finalizeWorkshop(f.finalizeOptions);
+  assert.equal(result.result, "PREPARED_CANDIDATE");
+  assert.deepEqual(f.calls, ["workshop:stage"]);
+  assert.deepEqual(fs.readFileSync(f.proposal), proposalBytes);
+  assert.equal(result.proposal_sha256, sha256(proposalBytes));
+  assert.equal(result.staging_receipt_sha256, sha256(fs.readFileSync(path.join(f.repo, "workshop/staging-receipt.json"))));
+  assert.deepEqual(result.inventory, f.proposalData.proposed_payload);
+  assert.deepEqual(JSON.parse(fs.readFileSync(f.prepared)), result);
+  assert.deepEqual(await finalizeWorkshop(f.finalizeOptions), result);
+});
+
+for (const fault of ["pin", "dirty", "source", "dll", "provenance", "sidecar", "metadata", "image",
+  "extra-workspace", "extra-payload", "stage-failure", "receipt", "staged-bytes", "proposal-during-stage"]) {
+  test(`Phase B ${fault} cannot emit success or rebuild`, async (t) => {
+    const f = await approvedFixture(t);
+    fs.writeFileSync(f.prepared, "old success");
+    if (fault === "pin") f.finalizeOptions.approvedProvenanceSha256 = "0".repeat(64);
+    if (fault === "dirty") f.source.platform.workspace_worktree_status = "dirty";
+    if (fault === "source") f.source.components.fixture.source_revision = "f".repeat(40);
+    if (fault === "dll") fs.appendFileSync(path.join(f.output, "STS2_PLATFORM.dll"), "tamper");
+    if (fault === "provenance") fs.appendFileSync(path.join(f.output, "build-provenance.json"), " ");
+    if (fault === "sidecar") fs.writeFileSync(path.join(f.output, "STS2_PLATFORM.pdb"), "new sidecar");
+    if (fault === "metadata") fs.appendFileSync(path.join(f.repo, "workshop/workshop.json"), " ");
+    if (fault === "image") fs.appendFileSync(path.join(f.repo, "workshop/image.png"), "tamper");
+    if (fault === "extra-workspace") fs.writeFileSync(path.join(f.repo, "workshop/mod_id.txt"), "forbidden");
+    f.finalizeOptions.run = async (script) => {
+      assert.equal(script, "workshop:stage");
+      if (fault === "stage-failure") throw new Error("stage failed");
+      f.stage();
+      if (fault === "extra-payload") fs.writeFileSync(path.join(f.repo, "workshop/content/build-provenance.json"), "forbidden");
+      if (fault === "receipt") fs.writeFileSync(path.join(f.repo, "workshop/staging-receipt.json"), "{}");
+      if (fault === "staged-bytes") fs.appendFileSync(path.join(f.repo, "workshop/content/STS2_PLATFORM.dll"), "tamper");
+      if (fault === "proposal-during-stage") fs.appendFileSync(f.proposal, " ");
+    };
+    await assert.rejects(finalizeWorkshop(f.finalizeOptions));
+    assert.ok(!fs.existsSync(f.prepared));
+    assert.ok(!fs.existsSync(path.join(f.repo, "workshop/.prepare.lock")));
+  });
+}
+
+test("Phase B records authorized orchestration HEAD separately from unchanged producer", async (t) => {
+  const f = await approvedFixture(t);
+  f.source.platform.workspace_revision = "d".repeat(40);
+  f.finalizeOptions.verifyEvolution = () => ["tools/workshop-finalize.mjs"];
+  const result = await finalizeWorkshop(f.finalizeOptions);
+  assert.equal(result.producer_workspace_revision, "c".repeat(40));
+  assert.equal(result.prepare_workspace_revision, "d".repeat(40));
+});
+
+test("real Git evolution allows only authorized tools/docs, rejecting unrelated changes", (t) => {
+  const f = fixture(t);
+  const git = (args) => execFileSync("git", args, { cwd: f.repo, encoding: "utf8" });
+  git(["init", "--quiet"]);
+  git(["config", "user.name", "Fixture"]); git(["config", "user.email", "fixture@example.invalid"]);
+  git(["add", "."]); git(["commit", "-qm", "base"]);
+  const base = git(["rev-parse", "HEAD"]).trim();
+  fs.writeFileSync(path.join(f.repo, "README.md"), "tool docs");
+  git(["add", "README.md"]); git(["commit", "-qm", "docs"]);
+  assert.deepEqual(verifyToolEvolution(f.repo, base, git(["rev-parse", "HEAD"]).trim()), ["README.md"]);
+  fs.writeFileSync(path.join(f.repo, "package.json"), "{}");
+  git(["add", "package.json"]); git(["commit", "-qm", "unapproved source"]);
+  assert.throws(() => verifyToolEvolution(f.repo, base, git(["rev-parse", "HEAD"]).trim()), /non_orchestration_source_drift/);
 });
