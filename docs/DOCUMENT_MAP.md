@@ -42,11 +42,11 @@ Use the smallest route that answers the task.
 - Canonical H/S/A(S)/A/S' calibration and bounded architecture decision:
   [Recorder canonical causality decision](evidence/RECORDER_CANONICAL_CAUSALITY_DECISION_2026-08-29.md)
   and [ADR 0003](adr/0003-serialize-human-input-for-canonical-one-step-evidence.md).
-- Current native-semantic discriminator source and native restore/twin decision:
+- Current native-semantic discriminator source and bounded Human result:
   [source closeout](evidence/NATIVE_SEMANTIC_RUNTIME_DISCRIMINATOR_SOURCE_CLOSEOUT_2026-08-30.md)
   and [Human closeout](evidence/NATIVE_SEMANTIC_RUNTIME_DISCRIMINATOR_HUMAN_CLOSEOUT_2026-08-30.md).
-- [Historical serialized-input candidate](evidence/SCHEMA3_HUMAN_DATA_LIFECYCLE_CLOSEOUT_2026-08-29.md).
-- [Runtime candidate](evidence/RUNTIME_SEAL_CANDIDATE_2026-08-24.md).
+- [audit,
+repair and bounded canary](evidence/PR25_DEFERRED_POTION_INGRESS_REPAIR_2026-09-11.md).
 - Current Human Root/Native Commit/Successor Boundary authority and source gate:
   [ADR 0005](adr/0005-human-root-commit-successor-evidence.md) and
   [causal evidence source closeout](evidence/NATIVE_FOUNDATION_COMPLETION_LINEAGE_SOURCE_CLOSEOUT_2026-09-01.md).
@@ -66,7 +66,7 @@ Use the smallest route that answers the task.
 - Current bounded pre-Full-Run hardening source/build/load gate:
   [hardening source closeout](evidence/PLATFORM_PREFULLRUN_HARDENING_SOURCE_CLOSEOUT_2026-09-01.md).
 - Current Recorder hot-path performance source gate and Human OFF/ON canary:
-  [Recorder hot-path performance closeout](evidence/PLATFORM_RECORDING_HOTPATH_PERFORMANCE_SOURCE_CLOSEOUT_2026-09-01.md).
+  [Recorder hot-path performance closeout](evidence/PLATFORM_RECORDING_HOTPATH_PERFORMANCE_CLOSEOUT_2026-09-01.md).
 - Ownership matrix: [Components](COMPONENTS.md).
 - Portable/runtime evidence meanings: [Testing and Evidence](TESTING.md).
 - Component and composition identity: [Versioning](VERSIONING.md) and `platform-bom.json`.
