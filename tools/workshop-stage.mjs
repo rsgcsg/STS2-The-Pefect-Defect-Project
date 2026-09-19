@@ -19,7 +19,7 @@ const json = (bytes) => JSON.parse(bytes.toString("utf8").replace(/^\uFEFF/u, ""
 
 // No caller-supplied recursive deletion target. Check every existing ancestor,
 // including Windows junctions; filenames from provenance never become paths.
-function safePath(target) {
+export function safePath(target) {
   const absolute = path.resolve(target);
   let current = path.parse(absolute).root;
   for (const part of absolute.slice(current.length).split(path.sep).filter(Boolean)) {
@@ -30,7 +30,7 @@ function safePath(target) {
   return absolute;
 }
 
-function regularFile(file) {
+export function regularFile(file) {
   safePath(file);
   const stat = fs.lstatSync(file);
   assert.ok(stat.isFile() && stat.nlink === 1, `regular_unlinked_file_required: ${file}`);
@@ -97,6 +97,34 @@ function validateProvenance(provenance, current, manifest, actual, dll) {
   assert.ok(Number.isFinite(Date.parse(provenance.built_at)), "missing_build_time");
 }
 
+// Shared read-only inspection: computing the digest is NOT approval or staging.
+export function inspectWorkshopBuild({ repositoryRoot = root, sourceDirectory, identityTool,
+  readIdentity = assemblyIdentity, readSource = sourceSetIdentity }) {
+  const repo = safePath(repositoryRoot);
+  const source = safePath(sourceDirectory);
+  assert.ok(fs.statSync(source).isDirectory(), "source_directory_required");
+  const entries = fs.readdirSync(source).sort();
+  const expected = [...PAYLOAD, PROVENANCE];
+  for (const name of entries) {
+    assert.ok([...expected, ...SIDECARS].includes(name), `unexpected_build_file: ${name}`);
+    regularFile(path.join(source, name));
+  }
+  for (const name of expected) assert.ok(entries.includes(name), `missing_build_file: ${name}`);
+  const provenanceBytes = regularFile(path.join(source, PROVENANCE));
+  const provenance = json(provenanceBytes);
+  const manifestBytes = regularFile(path.join(repo, "apps/game-mod/mod_manifest.json"));
+  const manifest = json(manifestBytes);
+  const bytes = Object.fromEntries(PAYLOAD.map((name) => [name, regularFile(path.join(source, name))]));
+  assert.ok(bytes[PAYLOAD[1]].equals(manifestBytes), "runtime_manifest_bytes_mismatch");
+  assert.equal(manifest.id, "STS2_PLATFORM");
+  assert.equal(manifest.has_dll, true);
+  assert.equal(manifest.has_pck, false);
+  const current = readSource(repo);
+  const actual = readIdentity(identityTool, path.join(source, PAYLOAD[0]));
+  validateProvenance(provenance, current, manifest, actual, bytes[PAYLOAD[0]]);
+  return { entries, provenanceBytes, provenance, manifestBytes, manifest, bytes, current, actual };
+}
+
 // The injected readers support portable mechanics fixtures only. The CLI always
 // uses the current game-mod source owner and the existing .NET PE identity owner.
 export function stageWorkshop({ repositoryRoot = root, sourceDirectory, approvedProvenanceSha256,
@@ -120,27 +148,14 @@ export function stageWorkshop({ repositoryRoot = root, sourceDirectory, approved
     if (fs.existsSync(receiptPath)) regularFile(receiptPath);
     fs.rmSync(receiptPath, { force: true });
     fs.rmSync(content, { recursive: true, force: true });
-    assert.ok(fs.statSync(source).isDirectory(), "source_directory_required");
-    const entries = fs.readdirSync(source).sort();
-    const expected = [...PAYLOAD, PROVENANCE];
-    for (const name of entries) {
-      assert.ok([...expected, ...SIDECARS].includes(name), `unexpected_build_file: ${name}`);
-      regularFile(path.join(source, name));
+    // Approval remains mandatory before inspecting/executing the PE reader.
+    if (fs.existsSync(path.join(source, PROVENANCE))) {
+      assert.equal(sha256(regularFile(path.join(source, PROVENANCE))), approvedProvenanceSha256,
+        "approved_provenance_hash_mismatch");
     }
-    for (const name of expected) assert.ok(entries.includes(name), `missing_build_file: ${name}`);
-    const provenanceBytes = regularFile(path.join(source, PROVENANCE));
+    const { entries, provenanceBytes, provenance, manifestBytes, manifest, bytes, current, actual }
+      = inspectWorkshopBuild({ repositoryRoot: repo, sourceDirectory: source, identityTool, readIdentity, readSource });
     assert.equal(sha256(provenanceBytes), approvedProvenanceSha256, "approved_provenance_hash_mismatch");
-    const provenance = json(provenanceBytes);
-    const manifestBytes = regularFile(path.join(repo, "apps/game-mod/mod_manifest.json"));
-    const manifest = json(manifestBytes);
-    const bytes = Object.fromEntries(PAYLOAD.map((name) => [name, regularFile(path.join(source, name))]));
-    assert.ok(bytes[PAYLOAD[1]].equals(manifestBytes), "runtime_manifest_bytes_mismatch");
-    assert.equal(manifest.id, "STS2_PLATFORM");
-    assert.equal(manifest.has_dll, true);
-    assert.equal(manifest.has_pck, false);
-    const current = readSource(repo);
-    const actual = readIdentity(identityTool, path.join(source, PAYLOAD[0]));
-    validateProvenance(provenance, current, manifest, actual, bytes[PAYLOAD[0]]);
     temporary = fs.mkdtempSync(path.join(workspace, ".stage-"));
     const inventory = PAYLOAD.map((name) => {
       const destination = path.join(temporary, name);

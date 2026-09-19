@@ -1,10 +1,11 @@
-# Workshop release projection — Layers 1–2
+# Workshop release projection — Layers 1–2 and Layer 3 Phase A
 
 This directory is the Steam Workshop **release workspace**, not an npm workspace,
 runtime component, installer or second Platform implementation. It holds metadata,
 an original project preview and generated candidates from explicit approved inputs.
-Staging does not build, install or upload. There is no release orchestration or
-publication command. A staged candidate is not an approved Steam release.
+Staging does not build, install or upload. Preparation currently implements only
+build/proposal (Phase A); approval/finalization (Phase B) and publication are not
+implemented. A proposed or staged candidate is not an approved Steam release.
 
 ## External format authority
 
@@ -133,11 +134,53 @@ Root governance, identity/BOM checks and `project:closeout` remain required.
 This scaffold changes no runtime/install behavior and proves no upload, Workshop
 subscription, installation, loading, Human recording or cloud delivery.
 
-## Layer 3 and later inputs (not implemented here)
+## Layer 3 Phase A: checked build proposal
+
+From a clean committed checkout with the normal locked developer dependencies:
+
+```sh
+npm run workshop:prepare -- --build
+```
+
+This calls the existing Host workstation discovery and strict process enumeration,
+stops if STS2 is running (never kills it), runs `check:repository` and
+`game-mod:check`, rechecks source/process state, and invokes `game-mod:build`.
+The authoritative build owns exact compilation and provenance. Shared read-only
+Layer 2 inspection validates output allowlist, runtime manifest, source closure
+and the existing Tool's SHA/MVID result without staging. No second build or
+identity implementation is introduced.
+
+The ignored `build-proposal.json` and console result bind exact workspace and
+component source, game release/assembly, platform/architecture, Mod version,
+DLL SHA/MVID, manifest/provenance SHA, all build file hashes, proposed payload
+inventory, and Workshop metadata/image hashes. The result is explicitly
+`AWAITING_APPROVAL`, `approved: false`, `checked_build_proposal_only`.
+Calculating provenance SHA is not approval. No `content/` or staging receipt is
+created or changed by Phase A; any prior staged candidate remains unrelated.
+No prepared success is emitted. Output contains private local paths: do not
+commit or paste the full proposal publicly.
+
+A failed attempt removes its previous proposal. An exclusive `.prepare.lock`
+blocks concurrent attempts; an abruptly terminated attempt may leave that lock
+or an incomplete JSON proposal. Neither is success/approval. Verify no prepare
+process is active before removing a stale lock; restart Phase A. Never accept a
+file merely because it exists. Changes after proposal always require revalidation.
+
+### Deferred Phase B contract (not implemented or executed)
+
+Future explicit approval must match the actual provenance SHA and must not rebuild.
+It must revalidate the exact source, all build bytes, runtime manifest and metadata
+against Phase A, call existing Layer 2 staging, validate its receipt and the entire
+private Workshop workspace, and bind metadata/image/staged hashes into a local
+prepared receipt. Drift fails closed and requires a new Phase A. Phase A alone
+cannot produce `PREPARED_CANDIDATE` or authorize Layer 4. The CLI rejects approval
+arguments until that separately authorized phase is implemented.
+
+## Later inputs
 
 - Explicit approved game-mod output and its exact provenance/compatibility tuple.
-- Layer 3 composes existing checks/build and this staging command, with explicit
-  approval-pin selection and exact identities. It must not build a second Mod.
+- Phase B composes this staging command with separate explicit approval and
+  complete workspace verification. It must not build a second Mod.
 - Supported Workshop discovery, duplicate-local-install handling and persistent
   config/raw/queue locations outside updateable Workshop content.
 - Fixed Collection Tool compatibility and update/rollback policy.
@@ -147,6 +190,6 @@ subscription, installation, loading, Human recording or cloud delivery.
 
 Rollback is a source revert and discarding the generated candidate after checking
 its path. Re-stage a retained approved build only from its compatible exact source.
-No installed or cloud bytes change. This Layer 2 branch is stacked on Layer 1
-PR #24 head `0ffb3cf7870e9b07fa5bce15363dc40b7623ca81`; do not integrate the
-Layer 1–4 stack into develop until the separately authorized final integration.
+No installed or cloud bytes change. Layer 3 is stacked on the exact Layer 2
+parent, retaining Layers 1–2 unchanged; do not integrate the Layer 1–4 stack into
+develop until the separately authorized final integration.
