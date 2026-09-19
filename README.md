@@ -30,6 +30,9 @@ HTML console is retired. The project Workbench is the only user console.
 [`workshop/`](workshop/README.md) is the unpublished Steam Workshop release
 projection boundary. Its explicit staging command consumes existing approved
 game-mod bytes; it does not build another runtime package or publish to Steam.
+`npm run workshop:prepare -- --build` orchestrates existing checks/build into an
+unapproved proposal; its separate explicit approval phase verifies and stages the
+retained bytes without rebuilding. Neither phase publishes to Steam.
 
 ## Developer setup
 
