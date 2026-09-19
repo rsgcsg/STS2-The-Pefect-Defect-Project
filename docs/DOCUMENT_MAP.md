@@ -5,6 +5,7 @@ Use the smallest route that answers the task.
 ## New here
 
 - [README](../README.md): zero-context product boundary and next steps.
+- [Current Stage 1a product mainline](STAGE1A_PRODUCT_DELIVERY.zh-CN.md): full-scene local models, unified in-game workbench, user journeys and the Stage 1b gate.
 - [Complete member and Agent handoff (中文)](NEW_MEMBER_HANDOFF.zh-CN.md): accounts,
   first installation, daily collection, development, operations and incident reporting.
 - [New Engineer Guide](NEW_ENGINEER_GUIDE.md): first-day setup and first PR.
@@ -13,6 +14,8 @@ Use the smallest route that answers the task.
 ## Working on the repository
 
 - [Root agent guide](../AGENTS.md): hard shell and change loop.
+- [AI collaboration and long-task handoff](AI_COLLABORATION.md): architect/Luna/human responsibilities, narrow packets, actual dispatch and waits over five minutes.
+- [Stage 1a narrow task plan](plans/STAGE1A_TASKS.zh-CN.md): dependencies, first read-only Luna packet and implementation/acceptance boundaries.
 - [Engineering Governance](ENGINEERING_GOVERNANCE.md): fact ownership,
   architecture and abstraction review, change classes, test selection,
   Human/Agent collaboration, external dependencies, and cloud evolution.
@@ -39,13 +42,14 @@ Use the smallest route that answers the task.
 - Canonical H/S/A(S)/A/S' calibration and bounded architecture decision:
   [Recorder canonical causality decision](evidence/RECORDER_CANONICAL_CAUSALITY_DECISION_2026-08-29.md)
   and [ADR 0003](adr/0003-serialize-human-input-for-canonical-one-step-evidence.md).
-- Current native-semantic discriminator source and bounded Human result:
+- Current native-semantic discriminator source and native restore/twin decision:
   [source closeout](evidence/NATIVE_SEMANTIC_RUNTIME_DISCRIMINATOR_SOURCE_CLOSEOUT_2026-08-30.md)
   and [Human closeout](evidence/NATIVE_SEMANTIC_RUNTIME_DISCRIMINATOR_HUMAN_CLOSEOUT_2026-08-30.md).
-- Historical serialized-input candidate and native restore/twin decision:
-  [source closeout](evidence/SERIALIZED_HUMAN_INPUT_SOURCE_CLOSEOUT_2026-08-30.md)
-  [runtime candidate](evidence/SERIALIZED_HUMAN_INPUT_RUNTIME_CANDIDATE_2026-08-30.md),
-  and [native restore audit](evidence/NATIVE_RESTORE_AND_TWIN_RUNTIME_AUDIT_2026-08-30.md).
+- [Historical serialized-input candidate](evidence/SCHEMA3_HUMAN_DATA_LIFECYCLE_CLOSEOUT_2026-08-29.md).
+- [Runtime candidate](evidence/RUNTIME_SEAL_CANDIDATE_2026-08-24.md).
+- Current Human Root/Native Commit/Successor Boundary authority and source gate:
+  [ADR 0005](adr/0005-human-root-commit-successor-evidence.md) and
+  [causal evidence source closeout](evidence/NATIVE_FOUNDATION_COMPLETION_LINEAGE_SOURCE_CLOSEOUT_2026-09-01.md).
 - Bounded active context and next gate: [Current Context](memory/CURRENT.md).
 - Product boundary and dependency direction: [Architecture](ARCHITECTURE.md).
 - Shared game-side semantics, seam matrix, and migration:
@@ -57,15 +61,12 @@ Use the smallest route that answers the task.
   [Native Foundation Full-Run source closeout](evidence/NATIVE_FOUNDATION_FULL_RUN_SOURCE_CLOSEOUT_2026-08-31.md).
 - Current Treasure adapter source evidence:
   [Native Foundation Treasure source closeout](evidence/NATIVE_FOUNDATION_TREASURE_SOURCE_CLOSEOUT_2026-08-31.md).
-- Current Human Root/Native Commit/Successor Boundary authority and source gate:
-  [ADR 0005](adr/0005-human-root-commit-successor-evidence.md) and
-  [causal evidence source closeout](evidence/NATIVE_FOUNDATION_COMPLETION_LINEAGE_SOURCE_CLOSEOUT_2026-09-01.md).
 - PR #6's exact Combat successor-owner repair:
   [owner-ready source closeout](evidence/PR6_SUCCESSOR_OWNER_READY_SOURCE_CLOSEOUT_2026-09-01.md).
 - Current bounded pre-Full-Run hardening source/build/load gate:
   [hardening source closeout](evidence/PLATFORM_PREFULLRUN_HARDENING_SOURCE_CLOSEOUT_2026-09-01.md).
 - Current Recorder hot-path performance source gate and Human OFF/ON canary:
-  [recording hot-path performance closeout](evidence/PLATFORM_RECORDING_HOTPATH_PERFORMANCE_SOURCE_CLOSEOUT_2026-09-01.md).
+  [Recorder hot-path performance closeout](evidence/PLATFORM_RECORDING_HOTPATH_PERFORMANCE_SOURCE_CLOSEOUT_2026-09-01.md).
 - Ownership matrix: [Components](COMPONENTS.md).
 - Portable/runtime evidence meanings: [Testing and Evidence](TESTING.md).
 - Component and composition identity: [Versioning](VERSIONING.md) and `platform-bom.json`.
